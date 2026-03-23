@@ -22,7 +22,7 @@ struct CompositionResult {
 // MARK: - 조합 상태 추적기
 
 /// 키 입력을 가로채서 직접 한글 조합을 수행하는 상태 머신.
-/// CorelDRAW가 macOS IME 조합을 지원하지 않으므로,
+/// macOS IME 조합을 지원하지 않는 앱을 위해,
 /// 우리가 직접 자모를 조합하여 완성된 유니코드 문자를 보낸다.
 class HangulCompositionTracker {
 

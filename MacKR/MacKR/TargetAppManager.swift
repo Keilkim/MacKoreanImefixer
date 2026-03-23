@@ -19,9 +19,9 @@ class TargetAppManager: ObservableObject {
 
     init() {
         load()
-        // 첫 실행이면 CorelDRAW 자동 추가
+        // 첫 실행이면 알려진 문제 앱 자동 추가
         if targetApps.isEmpty {
-            autoDetectCorelDRAW()
+            autoDetectKnownApps()
         }
     }
 
@@ -86,12 +86,12 @@ class TargetAppManager: ObservableObject {
         }
     }
 
-    // MARK: - CorelDRAW 자동 감지
+    // MARK: - 알려진 문제 앱 자동 감지
 
-    private func autoDetectCorelDRAW() {
+    private func autoDetectKnownApps() {
         // /Applications에서 재귀 탐색
         let searchPaths = ["/Applications", NSHomeDirectory() + "/Applications"]
-        let keywords = ["coreldraw"]
+        let keywords = ["coreldraw", "intellij"]
 
         for searchPath in searchPaths {
             findApps(in: URL(fileURLWithPath: searchPath), depth: 0, maxDepth: 4, keywords: keywords)
@@ -118,7 +118,7 @@ class TargetAppManager: ObservableObject {
                     let folderName = item.lastPathComponent.lowercased()
                     let isRelevant = keywords.contains(where: { folderName.contains($0) })
                         || folderName.allSatisfy({ $0.isNumber || $0 == "." })
-                        || folderName.contains("corel")
+                        || folderName.contains("corel") || folderName.contains("jetbrains")
                     if isRelevant {
                         findApps(in: item, depth: depth + 1, maxDepth: maxDepth, keywords: keywords)
                     }

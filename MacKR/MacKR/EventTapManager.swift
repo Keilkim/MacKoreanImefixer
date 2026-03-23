@@ -3,7 +3,7 @@ import CoreGraphics
 import Carbon.HIToolbox
 
 /// 키보드 이벤트를 가로채서 한글 조합을 직접 수행하고,
-/// 완성된 유니코드 문자를 CorelDRAW에 전달하는 핵심 매니저.
+/// 완성된 유니코드 문자를 대상 앱에 전달하는 핵심 매니저.
 ///
 /// 동작 원리:
 /// 1. 한글 자모 키 입력을 가로챔 (원래 이벤트는 차단)
@@ -156,7 +156,7 @@ class EventTapManager {
         // 백스페이스 전송
         for _ in 0..<result.deleteCount {
             sendKeyEvent(keycode: EventTapManager.backspaceKeycode, shift: false)
-            usleep(3000)  // 3ms — CorelDRAW가 처리할 시간
+            usleep(3000)  // 3ms — 대상 앱이 처리할 시간
         }
 
         // 유니코드 문자 전송

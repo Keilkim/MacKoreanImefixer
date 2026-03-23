@@ -1,49 +1,30 @@
 import AppKit
 import Carbon.HIToolbox
 
-/// Monitors the frontmost application and current input source to determine
-/// whether the Hangul fix should be active (CorelDRAW is frontmost + Korean IME is active).
+/// 현재 활성 앱과 입력 소스를 감시하여
+/// 한글 보정이 필요한 상태인지 판단합니다.
 class AppMonitor: ObservableObject {
 
-    /// Whether the fix is currently active
+    /// 한글 보정이 현재 작동 중인지
     @Published var isActive: Bool = false
 
-    /// Whether CorelDRAW is the frontmost app
-    @Published var isCorelDRAWFront: Bool = false
+    /// 대상 앱이 현재 포커스 중인지
+    @Published var isTargetAppFront: Bool = false
 
-    /// Whether Korean IME is the current input source
+    /// 한글 IME가 활성 상태인지
     @Published var isKoreanIME: Bool = false
 
-    /// User-configurable: enable/disable the fix
+    /// 활성화/비활성화 토글
     @Published var isEnabled: Bool = true {
         didSet { updateActiveState() }
     }
 
-    /// Detected CorelDRAW bundle ID (auto-discovered)
-    @Published var detectedBundleID: String?
-
-    /// Display name of detected CorelDRAW app
-    @Published var detectedAppName: String?
-
-    /// All discovered CorelDRAW-like bundle IDs on the system
-    @Published var discoveredBundleIDs: [String] = []
-
-    /// Detected CorelDRAW version (e.g. "26.1.0.143")
-    @Published var detectedVersion: String?
-
     /// 대상 앱 매니저 (외부에서 주입)
     var targetAppManager: TargetAppManager?
-
-    /// Known keywords to identify CorelDRAW in bundle IDs or app names
-    private let corelKeywords = ["coreldraw", "corel draw", "corel-draw"]
-
-    /// Keywords for folder-level Corel detection (suite folders)
-    private let corelFolderKeywords = ["coreldraw", "corel"]
 
     private var workspaceObservers: [NSObjectProtocol] = []
 
     init() {
-        discoverCorelDRAW()
         setupObservers()
         checkFrontmostApp()
         checkInputSource()
@@ -56,169 +37,30 @@ class AppMonitor: ObservableObject {
         DistributedNotificationCenter.default().removeObserver(self)
     }
 
-    // MARK: - Auto-Discovery
-
-    /// Searches the system for CorelDRAW installations and records their bundle IDs
-    private func discoverCorelDRAW() {
-        var found: [(bundleID: String, name: String)] = []
-
-        // Method 1: Check currently running apps
-        for app in NSWorkspace.shared.runningApplications {
-            if isCorelDRAWApp(bundleID: app.bundleIdentifier, appName: app.localizedName) {
-                if let bid = app.bundleIdentifier {
-                    found.append((bid, app.localizedName ?? bid))
-                }
-            }
-        }
-
-        // Method 2: Recursively search /Applications for CorelDRAW
-        // CorelDRAW installs in deep paths like:
-        //   /Applications/CorelDRAW Graphics Suite .../26/CorelDRAW 2025.app
-        let searchPaths = [
-            "/Applications",
-            NSHomeDirectory() + "/Applications",
-        ]
-
-        for searchPath in searchPaths {
-            let url = URL(fileURLWithPath: searchPath)
-            findCorelApps(in: url, depth: 0, maxDepth: 4, found: &found)
-        }
-
-        // Method 3: Use Spotlight to find CorelDRAW
-        discoverViaSpotlight()
-
-        discoveredBundleIDs = found.map { $0.bundleID }
-
-        if let first = found.first {
-            detectedBundleID = first.bundleID
-            detectedAppName = first.name
-
-            // Extract version from bundle
-            if let appPath = findAppPath(bundleID: first.bundleID),
-               let bundle = Bundle(url: appPath) {
-                detectedVersion = bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
-            }
-
-            print("[MacKR] Auto-detected: \(first.name) (\(first.bundleID)) v\(detectedVersion ?? "?")")
-        }
-
-        if found.isEmpty {
-            print("[MacKR] CorelDRAW not found. Will detect by app name at runtime.")
-        }
-    }
-
-    /// Recursively search a directory for CorelDRAW .app bundles
-    /// maxDepth of 4 handles paths like: /Applications/CorelDRAW Graphics Suite .../26/CorelDRAW 2025.app
-    private func findCorelApps(in directory: URL, depth: Int, maxDepth: Int, found: inout [(bundleID: String, name: String)]) {
-        guard depth <= maxDepth else { return }
-
-        guard let contents = try? FileManager.default.contentsOfDirectory(
-            at: directory,
-            includingPropertiesForKeys: nil,
-            options: [.skipsHiddenFiles]
-        ) else { return }
-
-        for itemURL in contents {
-            if itemURL.pathExtension == "app" {
-                let appName = itemURL.deletingPathExtension().lastPathComponent
-                if corelKeywords.contains(where: { appName.localizedCaseInsensitiveContains($0) }) {
-                    if let bundle = Bundle(url: itemURL), let bid = bundle.bundleIdentifier {
-                        if !found.contains(where: { $0.bundleID == bid }) {
-                            found.append((bid, appName))
-                        }
-                    }
-                }
-            } else {
-                // Recurse into directories that look Corel-related or are version number folders
-                var isDir: ObjCBool = false
-                if FileManager.default.fileExists(atPath: itemURL.path, isDirectory: &isDir), isDir.boolValue {
-                    let folderName = itemURL.lastPathComponent.lowercased()
-                    let isCorelFolder = corelFolderKeywords.contains(where: { folderName.contains($0) })
-                    let isVersionFolder = folderName.allSatisfy { $0.isNumber || $0 == "." }
-                    if isCorelFolder || isVersionFolder {
-                        findCorelApps(in: itemURL, depth: depth + 1, maxDepth: maxDepth, found: &found)
-                    }
-                }
-            }
-        }
-    }
-
-    /// Find installed app path by bundle ID (for extracting version info)
-    private func findAppPath(bundleID: String) -> URL? {
-        if let urls = LSCopyApplicationURLsForBundleIdentifier(bundleID as CFString, nil)?.takeRetainedValue() as? [URL] {
-            return urls.first
-        }
-        return nil
-    }
-
-    /// Asynchronously search via Spotlight (mdfind)
-    private func discoverViaSpotlight() {
-        DispatchQueue.global(qos: .background).async { [weak self] in
-            guard let self = self else { return }
-
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/mdfind")
-            process.arguments = ["kMDItemKind == 'Application' && kMDItemDisplayName == '*CorelDRAW*'"]
-
-            let pipe = Pipe()
-            process.standardOutput = pipe
-            process.standardError = FileHandle.nullDevice
-
-            do {
-                try process.run()
-                process.waitUntilExit()
-
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                if let output = String(data: data, encoding: .utf8) {
-                    let paths = output.components(separatedBy: "\n").filter { !$0.isEmpty }
-                    for path in paths {
-                        let url = URL(fileURLWithPath: path)
-                        if let bundle = Bundle(url: url), let bid = bundle.bundleIdentifier {
-                            DispatchQueue.main.async {
-                                if !self.discoveredBundleIDs.contains(bid) {
-                                    self.discoveredBundleIDs.append(bid)
-                                    let name = url.deletingPathExtension().lastPathComponent
-                                    print("[MacKR] Spotlight discovered: \(name) (\(bid))")
-
-                                    if self.detectedBundleID == nil {
-                                        self.detectedBundleID = bid
-                                        self.detectedAppName = name
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            } catch {
-                // Spotlight search failed, not critical
-            }
-        }
-    }
-
-    // MARK: - Setup
+    // MARK: - 옵저버 설정
 
     private func setupObservers() {
-        // Watch for frontmost app changes
+        // 활성 앱 변경 감시
         let activateObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification,
             object: nil,
             queue: .main
-        ) { [weak self] notification in
-            self?.handleAppActivation(notification)
+        ) { [weak self] _ in
+            self?.checkFrontmostApp()
         }
         workspaceObservers.append(activateObserver)
 
-        // Watch for app launches (to discover CorelDRAW if launched after us)
+        // 앱 실행 감시
         let launchObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didLaunchApplicationNotification,
             object: nil,
             queue: .main
-        ) { [weak self] notification in
-            self?.handleAppLaunch(notification)
+        ) { [weak self] _ in
+            self?.checkFrontmostApp()
         }
         workspaceObservers.append(launchObserver)
 
-        // Watch for input source changes
+        // 입력 소스 변경 감시
         DistributedNotificationCenter.default().addObserver(
             self,
             selector: #selector(inputSourceChanged),
@@ -227,81 +69,26 @@ class AppMonitor: ObservableObject {
         )
     }
 
-    // MARK: - App Detection
-
-    private func handleAppActivation(_ notification: Notification) {
-        checkFrontmostApp()
-    }
-
-    /// When a new app launches, check if it's CorelDRAW and auto-register its bundle ID
-    private func handleAppLaunch(_ notification: Notification) {
-        guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
-
-        if isCorelDRAWApp(bundleID: app.bundleIdentifier, appName: app.localizedName) {
-            if let bid = app.bundleIdentifier, !discoveredBundleIDs.contains(bid) {
-                discoveredBundleIDs.append(bid)
-                detectedBundleID = bid
-                detectedAppName = app.localizedName ?? bid
-                print("[MacKR] Runtime discovered CorelDRAW: \(detectedAppName ?? "") (\(bid))")
-            }
-        }
-        // Also re-check frontmost in case CorelDRAW just became frontmost
-        checkFrontmostApp()
-    }
+    // MARK: - 앱 감지
 
     private func checkFrontmostApp() {
         guard let frontApp = NSWorkspace.shared.frontmostApplication else {
-            isCorelDRAWFront = false
+            isTargetAppFront = false
             updateActiveState()
             return
         }
 
-        if isCorelDRAWApp(bundleID: frontApp.bundleIdentifier, appName: frontApp.localizedName) {
-            // Auto-register this bundle ID if we haven't seen it
-            if let bid = frontApp.bundleIdentifier, !discoveredBundleIDs.contains(bid) {
-                discoveredBundleIDs.append(bid)
-                detectedBundleID = bid
-                detectedAppName = frontApp.localizedName ?? bid
-                print("[MacKR] Frontmost app discovered as CorelDRAW: \(detectedAppName ?? "") (\(bid))")
-            }
-            isCorelDRAWFront = true
-        } else {
-            isCorelDRAWFront = false
-        }
+        isTargetAppFront = isTargetApp(bundleID: frontApp.bundleIdentifier, appName: frontApp.localizedName)
         updateActiveState()
     }
 
-    /// Determines if an app is a target app (CorelDRAW or user-added apps)
-    private func isCorelDRAWApp(bundleID: String?, appName: String?) -> Bool {
-        // 1. TargetAppManager에 등록된 앱인지 확인
-        if let manager = targetAppManager, manager.isTargetApp(bundleID: bundleID, appName: appName) {
-            return true
-        }
-
-        // 2. 자동 감지된 bundle ID 확인
-        if let bid = bundleID, discoveredBundleIDs.contains(bid) {
-            return true
-        }
-
-        // 3. 키워드 기반 확인 (CorelDRAW fallback)
-        if let bid = bundleID {
-            let lower = bid.lowercased()
-            if corelKeywords.contains(where: { lower.contains($0.replacingOccurrences(of: " ", with: "")) }) {
-                return true
-            }
-        }
-
-        if let name = appName {
-            let lower = name.lowercased()
-            if corelKeywords.contains(where: { lower.contains($0) }) {
-                return true
-            }
-        }
-
-        return false
+    /// 대상 앱인지 확인 (TargetAppManager에 등록된 앱만)
+    private func isTargetApp(bundleID: String?, appName: String?) -> Bool {
+        guard let manager = targetAppManager else { return false }
+        return manager.isTargetApp(bundleID: bundleID, appName: appName)
     }
 
-    // MARK: - Input Source Detection
+    // MARK: - 입력 소스 감지
 
     @objc private func inputSourceChanged() {
         DispatchQueue.main.async { [weak self] in
@@ -326,10 +113,10 @@ class AppMonitor: ObservableObject {
         updateActiveState()
     }
 
-    // MARK: - State Update
+    // MARK: - 상태 업데이트
 
     private func updateActiveState() {
-        let newActive = isEnabled && isCorelDRAWFront && isKoreanIME
+        let newActive = isEnabled && isTargetAppFront && isKoreanIME
         if isActive != newActive {
             isActive = newActive
         }

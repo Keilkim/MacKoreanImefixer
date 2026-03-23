@@ -169,7 +169,7 @@ struct MenuContent: View {
         // 상태 표시
         if coordinator.isActive {
             Text("✓ 한글 보정 작동 중")
-        } else if coordinator.appMonitor.isCorelDRAWFront {
+        } else if coordinator.appMonitor.isTargetAppFront {
             Text("✓ 대상 앱 활성 중")
         } else {
             Text("– 대상 앱 비활성")
