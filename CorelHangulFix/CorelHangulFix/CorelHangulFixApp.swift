@@ -26,6 +26,35 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         coordinator.setup()
+
+        // 권한 없으면 첫 실행 시 바로 안내 팝업 + 설정 열기
+        if !coordinator.hasAccessibility {
+            showPermissionAlert()
+        }
+    }
+
+    private func showPermissionAlert() {
+        let alert = NSAlert()
+        alert.messageText = "손쉬운 사용 권한이 필요합니다"
+        alert.informativeText = """
+        CorelDRAW 한글 입력 보정을 위해 키보드 접근 권한이 필요합니다.
+
+        다음 화면에서:
+        1. 왼쪽 아래 ＋ 버튼 클릭
+        2. CorelHangulFix 선택
+        3. 토글 켜기
+
+        이미 목록에 있으면 토글만 켜주세요.
+        """
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "설정 열기")
+        alert.addButton(withTitle: "나중에")
+
+        if alert.runModal() == .alertFirstButtonReturn {
+            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+                NSWorkspace.shared.open(url)
+            }
+        }
     }
 }
 
