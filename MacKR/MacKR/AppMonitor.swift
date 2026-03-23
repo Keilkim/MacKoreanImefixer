@@ -99,11 +99,11 @@ class AppMonitor: ObservableObject {
                 detectedVersion = bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
             }
 
-            print("[CorelHangulFix] Auto-detected: \(first.name) (\(first.bundleID)) v\(detectedVersion ?? "?")")
+            print("[MacKR] Auto-detected: \(first.name) (\(first.bundleID)) v\(detectedVersion ?? "?")")
         }
 
         if found.isEmpty {
-            print("[CorelHangulFix] CorelDRAW not found. Will detect by app name at runtime.")
+            print("[MacKR] CorelDRAW not found. Will detect by app name at runtime.")
         }
     }
 
@@ -178,7 +178,7 @@ class AppMonitor: ObservableObject {
                                 if !self.discoveredBundleIDs.contains(bid) {
                                     self.discoveredBundleIDs.append(bid)
                                     let name = url.deletingPathExtension().lastPathComponent
-                                    print("[CorelHangulFix] Spotlight discovered: \(name) (\(bid))")
+                                    print("[MacKR] Spotlight discovered: \(name) (\(bid))")
 
                                     if self.detectedBundleID == nil {
                                         self.detectedBundleID = bid
@@ -242,7 +242,7 @@ class AppMonitor: ObservableObject {
                 discoveredBundleIDs.append(bid)
                 detectedBundleID = bid
                 detectedAppName = app.localizedName ?? bid
-                print("[CorelHangulFix] Runtime discovered CorelDRAW: \(detectedAppName ?? "") (\(bid))")
+                print("[MacKR] Runtime discovered CorelDRAW: \(detectedAppName ?? "") (\(bid))")
             }
         }
         // Also re-check frontmost in case CorelDRAW just became frontmost
@@ -262,7 +262,7 @@ class AppMonitor: ObservableObject {
                 discoveredBundleIDs.append(bid)
                 detectedBundleID = bid
                 detectedAppName = frontApp.localizedName ?? bid
-                print("[CorelHangulFix] Frontmost app discovered as CorelDRAW: \(detectedAppName ?? "") (\(bid))")
+                print("[MacKR] Frontmost app discovered as CorelDRAW: \(detectedAppName ?? "") (\(bid))")
             }
             isCorelDRAWFront = true
         } else {

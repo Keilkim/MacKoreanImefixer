@@ -5,9 +5,9 @@
     <key>LSUIElement</key>
     <true/>
     <key>CFBundleName</key>
-    <string>CorelHangulFix</string>
+    <string>MacKR</string>
     <key>CFBundleDisplayName</key>
-    <string>CorelDRAW 한글 입력 보정</string>
+    <string>MacKR - 한글 입력 보정</string>
     <key>CFBundleIdentifier</key>
     <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
     <key>CFBundleVersion</key>

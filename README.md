@@ -18,7 +18,7 @@
 
 ### 1단계: 다운로드
 
-[📦 여기서 다운로드](../../releases/latest) → **CorelHangulFix_Installer.pkg** 클릭
+[📦 여기서 다운로드](../../releases/latest) → **MacKR_Installer.pkg** 클릭
 
 ### 2단계: 설치
 
@@ -37,10 +37,10 @@
 1. 메뉴바(화면 맨 위, 시계 옆)에서 **"한"** 클릭
 2. **"권한 설정 열기"** 클릭
 3. `시스템 설정` → `개인정보 보호 및 보안` → `손쉬운 사용` 이 열림
-4. 목록에 **CorelHangulFix**가 없으면:
+4. 목록에 **MacKR**가 없으면:
    - 아래 **＋ 버튼** 클릭
-   - `/Applications/CorelHangulFix.app` 선택
-5. **CorelHangulFix** 토글 **켜기**
+   - `/Applications/MacKR.app` 선택
+5. **MacKR** 토글 **켜기**
 
 > 💡 터미널에서 직접 실행하는 경우 **터미널**도 같은 방법으로 추가해야 합니다:
 > - **＋ 버튼** 클릭 → `/Applications/유틸리티/터미널.app` 선택 → 토글 켜기
@@ -66,10 +66,10 @@
 터미널에서 한 줄씩 입력:
 
 ```
-killall CorelHangulFix
+killall MacKR
 ```
 ```
-sudo rm -rf /Applications/CorelHangulFix.app
+sudo rm -rf /Applications/MacKR.app
 ```
 ```
 sudo pkgutil --forget com.corelhangulfix.app

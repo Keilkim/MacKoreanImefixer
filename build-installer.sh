@@ -1,16 +1,16 @@
 #!/bin/bash
 
-# CorelHangulFix — 유니버설 바이너리 빌드 + PKG/DMG 인스톨러 생성
+# MacKR — 유니버설 바이너리 빌드 + PKG/DMG 인스톨러 생성
 # Intel Mac + Apple Silicon Mac 모두 지원
 
 set -e
 
-APP_NAME="CorelHangulFix"
-DISPLAY_NAME="CorelDRAW 한글 입력 보정"
-VERSION="1.0"
-IDENTIFIER="com.corelhangulfix.app"
+APP_NAME="MacKR"
+DISPLAY_NAME="MacKR - 한글 입력 보정"
+VERSION="1.1"
+IDENTIFIER="com.mackr.app"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_DIR="$SCRIPT_DIR/CorelHangulFix"
+PROJECT_DIR="$SCRIPT_DIR/MacKR"
 DIST_DIR="$SCRIPT_DIR/dist"
 BUILD_DIR="$PROJECT_DIR/build"
 
@@ -87,7 +87,7 @@ cat > "$SCRIPTS_DIR/postinstall" << 'POSTINSTALL'
 #!/bin/bash
 # 설치 완료 후 앱 자동 실행
 sleep 1
-open "/Applications/CorelHangulFix.app"
+open "/Applications/MacKR.app"
 exit 0
 POSTINSTALL
 chmod +x "$SCRIPTS_DIR/postinstall"
@@ -148,10 +148,10 @@ productbuild \
     --distribution "$BUILD_DIR/distribution.xml" \
     --resources "$RESOURCES_DIR" \
     --package-path "$BUILD_DIR" \
-    "$DIST_DIR/${APP_NAME}_Installer.pkg" \
+    "$DIST_DIR/MacKR_Installer.pkg" \
     > /dev/null 2>&1
 
-echo "  PKG: $DIST_DIR/${APP_NAME}_Installer.pkg"
+echo "  PKG: $DIST_DIR/MacKR_Installer.pkg"
 
 # ─────────────────────────────────────
 # 3. DMG도 생성 (드래그 앤 드롭 방식)
@@ -169,10 +169,10 @@ hdiutil create \
     -srcfolder "$DMG_TEMP" \
     -ov \
     -format UDZO \
-    "$DIST_DIR/${APP_NAME}.dmg" \
+    "$DIST_DIR/MacKR.dmg" \
     > /dev/null 2>&1
 
-echo "  DMG: $DIST_DIR/${APP_NAME}.dmg"
+echo "  DMG: $DIST_DIR/MacKR.dmg"
 
 # 정리
 rm -rf "$BUILD_DIR"
@@ -182,8 +182,8 @@ echo "========================================="
 echo "  완료! 배포 파일:"
 echo "========================================="
 echo ""
-echo "  1. ${APP_NAME}_Installer.pkg  (더블클릭 → 자동 설치)"
-echo "  2. ${APP_NAME}.dmg            (드래그 앤 드롭 설치)"
+echo "  1. MacKR_Installer.pkg  (더블클릭 → 자동 설치)"
+echo "  2. MacKR.dmg            (드래그 앤 드롭 설치)"
 echo ""
 echo "  위치: $DIST_DIR/"
 echo ""

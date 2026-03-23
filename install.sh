@@ -1,14 +1,14 @@
 #!/bin/bash
 
-# CorelHangulFix 빌드 및 설치 스크립트
+# MacKR 빌드 및 설치 스크립트
 # 사용법: ./install.sh
 
 set -e
 
-APP_NAME="CorelHangulFix"
+APP_NAME="MacKR"
 INSTALL_DIR="/Applications"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_DIR="$SCRIPT_DIR/CorelHangulFix"
+PROJECT_DIR="$SCRIPT_DIR/MacKR"
 
 echo ""
 echo "========================================="

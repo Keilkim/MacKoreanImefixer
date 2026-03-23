@@ -7,26 +7,28 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		A1000001 /* CorelHangulFixApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000001; };
+		A1000001 /* MacKRApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000001; };
 		A1000002 /* EventTapManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000002; };
 		A1000003 /* HangulCompositionTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000003; };
 		A1000004 /* KeycodeToJamoMap.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000004; };
 		A1000005 /* AppMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000005; };
 		A1000006 /* HangulUnicode.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000008; };
 		A1000007 /* TargetAppManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000009; };
+		A1000008 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A200000A; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		A2000001 /* CorelHangulFixApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CorelHangulFixApp.swift; sourceTree = "<group>"; };
+		A2000001 /* MacKRApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacKRApp.swift; sourceTree = "<group>"; };
 		A2000002 /* EventTapManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventTapManager.swift; sourceTree = "<group>"; };
 		A2000003 /* HangulCompositionTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HangulCompositionTracker.swift; sourceTree = "<group>"; };
 		A2000004 /* KeycodeToJamoMap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeycodeToJamoMap.swift; sourceTree = "<group>"; };
 		A2000005 /* AppMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppMonitor.swift; sourceTree = "<group>"; };
 		A2000006 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		A2000007 /* CorelHangulFix.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CorelHangulFix.entitlements; sourceTree = "<group>"; };
+		A2000007 /* MacKR.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MacKR.entitlements; sourceTree = "<group>"; };
 		A2000008 /* HangulUnicode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HangulUnicode.swift; sourceTree = "<group>"; };
 		A2000009 /* TargetAppManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TargetAppManager.swift; sourceTree = "<group>"; };
-		A2000010 /* CorelHangulFix.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CorelHangulFix.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A200000A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		A2000010 /* MacKR.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MacKR.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -39,35 +41,47 @@
 		};
 /* End PBXFrameworksBuildPhase section */
 
+/* Begin PBXResourcesBuildPhase section */
+		A3000002 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A1000008 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
 /* Begin PBXGroup section */
 		A4000001 = {
 			isa = PBXGroup;
 			children = (
-				A4000002 /* CorelHangulFix */,
+				A4000002 /* MacKR */,
 				A4000003 /* Products */,
 			);
 			sourceTree = "<group>";
 		};
-		A4000002 /* CorelHangulFix */ = {
+		A4000002 /* MacKR */ = {
 			isa = PBXGroup;
 			children = (
-				A2000001 /* CorelHangulFixApp.swift */,
+				A2000001 /* MacKRApp.swift */,
 				A2000002 /* EventTapManager.swift */,
 				A2000003 /* HangulCompositionTracker.swift */,
 				A2000004 /* KeycodeToJamoMap.swift */,
 				A2000005 /* AppMonitor.swift */,
 				A2000008 /* HangulUnicode.swift */,
 				A2000009 /* TargetAppManager.swift */,
+				A200000A /* Assets.xcassets */,
 				A2000006 /* Info.plist */,
-				A2000007 /* CorelHangulFix.entitlements */,
+				A2000007 /* MacKR.entitlements */,
 			);
-			path = CorelHangulFix;
+			path = MacKR;
 			sourceTree = "<group>";
 		};
 		A4000003 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				A2000010 /* CorelHangulFix.app */,
+				A2000010 /* MacKR.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -75,20 +89,21 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		A5000001 /* CorelHangulFix */ = {
+		A5000001 /* MacKR */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = A7000003 /* Build configuration list for PBXNativeTarget "CorelHangulFix" */;
+			buildConfigurationList = A7000003 /* Build configuration list for PBXNativeTarget "MacKR" */;
 			buildPhases = (
 				A6000001 /* Sources */,
 				A3000001 /* Frameworks */,
+				A3000002 /* Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 			);
-			name = CorelHangulFix;
-			productName = CorelHangulFix;
-			productReference = A2000010 /* CorelHangulFix.app */;
+			name = MacKR;
+			productName = MacKR;
+			productReference = A2000010 /* MacKR.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -101,7 +116,7 @@
 				LastSwiftUpdateCheck = 1500;
 				LastUpgradeCheck = 1500;
 			};
-			buildConfigurationList = A7000001 /* Build configuration list for PBXProject "CorelHangulFix" */;
+			buildConfigurationList = A7000001 /* Build configuration list for PBXProject "MacKR" */;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = ko;
 			hasScannedForEncodings = 0;
@@ -115,7 +130,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				A5000001 /* CorelHangulFix */,
+				A5000001 /* MacKR */,
 			);
 		};
 /* End PBXProject section */
@@ -125,7 +140,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A1000001 /* CorelHangulFixApp.swift in Sources */,
+				A1000001 /* MacKRApp.swift in Sources */,
 				A1000002 /* EventTapManager.swift in Sources */,
 				A1000003 /* HangulCompositionTracker.swift in Sources */,
 				A1000004 /* KeycodeToJamoMap.swift in Sources */,
@@ -192,14 +207,14 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_ENTITLEMENTS = CorelHangulFix/CorelHangulFix.entitlements;
+				CODE_SIGN_ENTITLEMENTS = MacKR/MacKR.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = CorelHangulFix/Info.plist;
+				INFOPLIST_FILE = MacKR/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -207,7 +222,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.corelhangulfix.app;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mackr.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -218,14 +233,14 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_ENTITLEMENTS = CorelHangulFix/CorelHangulFix.entitlements;
+				CODE_SIGN_ENTITLEMENTS = MacKR/MacKR.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = CorelHangulFix/Info.plist;
+				INFOPLIST_FILE = MacKR/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -233,7 +248,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.corelhangulfix.app;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mackr.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -243,7 +258,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		A7000001 /* Build configuration list for PBXProject "CorelHangulFix" */ = {
+		A7000001 /* Build configuration list for PBXProject "MacKR" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				A9000001 /* Debug */,
@@ -252,7 +267,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		A7000003 /* Build configuration list for PBXNativeTarget "CorelHangulFix" */ = {
+		A7000003 /* Build configuration list for PBXNativeTarget "MacKR" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				A9000003 /* Debug */,

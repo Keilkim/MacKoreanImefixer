@@ -3,7 +3,7 @@ import Combine
 import ServiceManagement
 
 @main
-struct CorelHangulFixApp: App {
+struct MacKRApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {
@@ -27,33 +27,47 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         coordinator.setup()
 
+        // 첫 실행: 로그인 시 자동 실행 등록
+        if !UserDefaults.standard.bool(forKey: "loginItemRegistered") {
+            if #available(macOS 13.0, *) {
+                try? SMAppService.mainApp.register()
+            }
+            UserDefaults.standard.set(true, forKey: "loginItemRegistered")
+        }
+
         if !coordinator.hasAccessibility {
             showPermissionAlert()
         }
     }
 
     private func showPermissionAlert() {
+        AppDelegate.showUsageGuide()
+    }
+
+    static func showUsageGuide() {
         let alert = NSAlert()
-        alert.messageText = "손쉬운 사용 권한이 필요합니다"
+        alert.messageText = "MacKR 사용법"
         alert.informativeText = """
-        한글 입력 보정을 위해 키보드 접근 권한이 필요합니다.
+        macOS에서 한글 IME를 제대로 지원하지 않는 앱의 한글 입력을 보정합니다.
 
-        다음 화면에서:
-        1. 왼쪽 아래 ＋ 버튼 클릭
-        2. MacKoreanImefixer (CorelHangulFix) 선택
-        3. 토글 켜기
+        [설정 방법]
+        1. 손쉬운 사용 권한 허용
+           시스템 설정 → 개인정보 보호 및 보안 → 손쉬운 사용
+           → ＋ 버튼 → MacKR 선택 → 토글 켜기
 
-        이미 목록에 있으면 토글만 켜주세요.
+        2. 대상 앱 등록
+           메뉴바 "한" 클릭 → ＋ 앱 추가
+           또는 해당 앱을 열고 → ＋ 현재 앱 추가
+
+        3. 대상 앱에서 한글 입력하면 자동 보정!
+
+        [참고]
+        - 대상 앱이 아닌 곳에서는 개입하지 않습니다
+        - 메뉴바에서 활성화/비활성화 가능
         """
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "설정 열기")
-        alert.addButton(withTitle: "나중에")
-
-        if alert.runModal() == .alertFirstButtonReturn {
-            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
-                NSWorkspace.shared.open(url)
-            }
-        }
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "확인")
+        alert.runModal()
     }
 }
 
@@ -68,8 +82,10 @@ class AppCoordinator: ObservableObject {
     @Published var isActive: Bool = false
     @Published var hasAccessibility: Bool = false
 
+    /// 현재 포커스된 앱의 번들 ID
+    @Published var frontAppBundleID: String?
+
     func setup() {
-        // AppMonitor에 TargetAppManager 연결
         appMonitor.targetAppManager = targetAppManager
 
         let started = eventTapManager.start()
@@ -88,6 +104,16 @@ class AppCoordinator: ObservableObject {
                 self?.isActive = active
             }
             .store(in: &cancellables)
+
+        // 포커스 앱 추적
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.frontAppBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        }
+        frontAppBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
 
         if !hasAccessibility {
             Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] timer in
@@ -121,6 +147,11 @@ class AppCoordinator: ObservableObject {
 
 struct MenuContent: View {
     @ObservedObject var coordinator: AppCoordinator
+
+    private let appVersion = "1.1"
+    private let buildDate = "2026-03-24"
+    private let developer = "CO., Ltd. SEDG"
+    private let developerDetail = "Kimseunghun / AX Leader"
 
     var body: some View {
         // 권한 경고
@@ -158,12 +189,26 @@ struct MenuContent: View {
             Text("  (없음)").foregroundColor(.secondary)
         } else {
             ForEach(coordinator.targetAppManager.targetApps) { app in
-                HStack {
-                    Text("  \(app.name)")
-                    Spacer()
-                    Button("✕") {
-                        coordinator.targetAppManager.removeApp(bundleID: app.bundleID)
+                let isFocused = coordinator.frontAppBundleID == app.bundleID
+
+                Button {
+                    // 앱 이름 클릭은 아무 동작 없음
+                } label: {
+                    HStack {
+                        if isFocused {
+                            Text("● \(app.name)")
+                                .foregroundColor(.blue)
+                        } else {
+                            Text("  \(app.name)")
+                        }
+                        Spacer()
+                        Text("삭제")
+                            .foregroundColor(.red)
+                            .font(.caption)
                     }
+                }
+                .onTapGesture {
+                    coordinator.targetAppManager.removeApp(bundleID: app.bundleID)
                 }
             }
         }
@@ -192,11 +237,26 @@ struct MenuContent: View {
 
         Divider()
 
+        Button("사용법 보기") {
+            AppDelegate.showUsageGuide()
+        }
+
         Button("로그인 시 자동 실행 설정") {
             if #available(macOS 13.0, *) {
                 SMAppService.openSystemSettingsLoginItems()
             }
         }
+
+        Button("앱 삭제 (Uninstall)") {
+            showUninstallConfirm()
+        }
+
+        Divider()
+
+        // 개발 정보
+        Text("MacKR v\(appVersion) (\(buildDate))").font(.caption).foregroundColor(.secondary)
+        Text(developer).font(.caption2).foregroundColor(.secondary)
+        Text(developerDetail).font(.caption2).foregroundColor(.secondary)
 
         Divider()
 
@@ -204,5 +264,26 @@ struct MenuContent: View {
             NSApplication.shared.terminate(nil)
         }
         .keyboardShortcut("q", modifiers: .command)
+    }
+
+    private func showUninstallConfirm() {
+        let alert = NSAlert()
+        alert.messageText = "MacKR을 삭제하시겠습니까?"
+        alert.informativeText = "앱이 종료되고 /Applications에서 삭제됩니다."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "삭제")
+        alert.addButton(withTitle: "취소")
+
+        if alert.runModal() == .alertFirstButtonReturn {
+            // 삭제 스크립트 실행
+            let script = """
+            do shell script "rm -rf /Applications/MacKR.app && pkgutil --forget com.mackr.app 2>/dev/null" with administrator privileges
+            """
+            if let appleScript = NSAppleScript(source: script) {
+                var error: NSDictionary?
+                appleScript.executeAndReturnError(&error)
+            }
+            NSApplication.shared.terminate(nil)
+        }
     }
 }

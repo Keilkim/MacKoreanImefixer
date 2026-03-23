@@ -60,7 +60,7 @@ class EventTapManager {
             callback: eventTapCallback,
             userInfo: userInfo
         ) else {
-            print("[CorelHangulFix] Event tap 생성 실패. 손쉬운 사용 권한을 확인하세요.")
+            print("[MacKR] Event tap 생성 실패. 손쉬운 사용 권한을 확인하세요.")
             return false
         }
 
@@ -70,7 +70,7 @@ class EventTapManager {
             CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         }
         CGEvent.tapEnable(tap: tap, enable: true)
-        print("[CorelHangulFix] Event tap 시작됨.")
+        print("[MacKR] Event tap 시작됨.")
         return true
     }
 
@@ -84,7 +84,7 @@ class EventTapManager {
         eventTap = nil
         runLoopSource = nil
         tracker.reset()
-        print("[CorelHangulFix] Event tap 중지됨.")
+        print("[MacKR] Event tap 중지됨.")
     }
 
     // MARK: - 이벤트 처리
