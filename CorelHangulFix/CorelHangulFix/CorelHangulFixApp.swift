@@ -27,7 +27,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         coordinator.setup()
 
-        // 권한 없으면 첫 실행 시 바로 안내 팝업 + 설정 열기
         if !coordinator.hasAccessibility {
             showPermissionAlert()
         }
@@ -37,11 +36,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let alert = NSAlert()
         alert.messageText = "손쉬운 사용 권한이 필요합니다"
         alert.informativeText = """
-        CorelDRAW 한글 입력 보정을 위해 키보드 접근 권한이 필요합니다.
+        한글 입력 보정을 위해 키보드 접근 권한이 필요합니다.
 
         다음 화면에서:
         1. 왼쪽 아래 ＋ 버튼 클릭
-        2. CorelHangulFix 선택
+        2. MacKoreanImefixer (CorelHangulFix) 선택
         3. 토글 켜기
 
         이미 목록에 있으면 토글만 켜주세요.
@@ -60,9 +59,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
 // MARK: - App Coordinator
 
-/// Coordinates AppMonitor and EventTapManager
 class AppCoordinator: ObservableObject {
     let appMonitor = AppMonitor()
+    let targetAppManager = TargetAppManager()
     private let eventTapManager = EventTapManager()
     private var cancellables = Set<AnyCancellable>()
 
@@ -70,19 +69,19 @@ class AppCoordinator: ObservableObject {
     @Published var hasAccessibility: Bool = false
 
     func setup() {
-        // 권한 체크와 무관하게 event tap 시도 — 성공하면 권한 있는 것
+        // AppMonitor에 TargetAppManager 연결
+        appMonitor.targetAppManager = targetAppManager
+
         let started = eventTapManager.start()
         hasAccessibility = started
 
         if !started {
-            // 권한 없으면 프롬프트 표시
             hasAccessibility = EventTapManager.checkAccessibilityPermission()
             if hasAccessibility {
                 _ = eventTapManager.start()
             }
         }
 
-        // Sync AppMonitor.isActive → EventTapManager.isActive
         appMonitor.$isActive
             .sink { [weak self] active in
                 self?.eventTapManager.isActive = active
@@ -90,16 +89,12 @@ class AppCoordinator: ObservableObject {
             }
             .store(in: &cancellables)
 
-        // 주기적으로 권한 재확인 (5초마다, 권한 없을 때만)
         if !hasAccessibility {
             Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] timer in
                 guard let self = self else { timer.invalidate(); return }
                 if self.eventTapManager.eventTap == nil {
-                    let started = self.eventTapManager.start()
-                    if started {
-                        DispatchQueue.main.async {
-                            self.hasAccessibility = true
-                        }
+                    if self.eventTapManager.start() {
+                        DispatchQueue.main.async { self.hasAccessibility = true }
                         timer.invalidate()
                     }
                 } else {
@@ -110,13 +105,11 @@ class AppCoordinator: ObservableObject {
     }
 
     func requestPermission() {
-        // 먼저 직접 시도
         if eventTapManager.eventTap == nil {
             let started = eventTapManager.start()
             hasAccessibility = started
             if started { return }
         }
-        // 안 되면 프롬프트
         hasAccessibility = EventTapManager.checkAccessibilityPermission()
         if hasAccessibility && eventTapManager.eventTap == nil {
             _ = eventTapManager.start()
@@ -124,12 +117,13 @@ class AppCoordinator: ObservableObject {
     }
 }
 
-// MARK: - Menu Content
+// MARK: - 메뉴 콘텐츠
 
 struct MenuContent: View {
     @ObservedObject var coordinator: AppCoordinator
 
     var body: some View {
+        // 권한 경고
         if !coordinator.hasAccessibility {
             Text("⚠ 손쉬운 사용 권한 필요")
             Button("권한 설정 열기") {
@@ -141,23 +135,52 @@ struct MenuContent: View {
             Divider()
         }
 
-        if coordinator.appMonitor.isCorelDRAWFront {
-            if let name = coordinator.appMonitor.detectedAppName {
-                Text("✓ \(name) 활성 중")
-            } else {
-                Text("✓ CorelDRAW 활성 중")
-            }
-        } else if let name = coordinator.appMonitor.detectedAppName {
-            let version = coordinator.appMonitor.detectedVersion ?? ""
-            Text("CorelDRAW 발견: \(name) \(version)")
+        // 상태 표시
+        if coordinator.isActive {
+            Text("✓ 한글 보정 작동 중")
+        } else if coordinator.appMonitor.isCorelDRAWFront {
+            Text("✓ 대상 앱 활성 중")
         } else {
-            Text("– CorelDRAW 미감지")
+            Text("– 대상 앱 비활성")
         }
 
         if coordinator.appMonitor.isKoreanIME {
             Text("✓ 한글 입력 활성")
         } else {
             Text("– 한글 입력 비활성")
+        }
+
+        Divider()
+
+        // 대상 앱 목록
+        Text("대상 앱:").font(.caption)
+        if coordinator.targetAppManager.targetApps.isEmpty {
+            Text("  (없음)").foregroundColor(.secondary)
+        } else {
+            ForEach(coordinator.targetAppManager.targetApps) { app in
+                HStack {
+                    Text("  \(app.name)")
+                    Spacer()
+                    Button("✕") {
+                        coordinator.targetAppManager.removeApp(bundleID: app.bundleID)
+                    }
+                }
+            }
+        }
+
+        Button("＋ 앱 추가...") {
+            coordinator.targetAppManager.showAppPicker()
+        }
+
+        // 현재 활성 앱 바로 추가
+        if let frontApp = NSWorkspace.shared.frontmostApplication,
+           let bid = frontApp.bundleIdentifier,
+           let name = frontApp.localizedName,
+           !coordinator.targetAppManager.isTargetApp(bundleID: bid, appName: name),
+           bid != Bundle.main.bundleIdentifier {
+            Button("＋ 현재 앱 추가 (\(name))") {
+                coordinator.targetAppManager.addApp(bundleID: bid, name: name)
+            }
         }
 
         Divider()

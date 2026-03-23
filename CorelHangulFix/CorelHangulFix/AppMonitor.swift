@@ -31,6 +31,9 @@ class AppMonitor: ObservableObject {
     /// Detected CorelDRAW version (e.g. "26.1.0.143")
     @Published var detectedVersion: String?
 
+    /// 대상 앱 매니저 (외부에서 주입)
+    var targetAppManager: TargetAppManager?
+
     /// Known keywords to identify CorelDRAW in bundle IDs or app names
     private let corelKeywords = ["coreldraw", "corel draw", "corel-draw"]
 
@@ -268,14 +271,19 @@ class AppMonitor: ObservableObject {
         updateActiveState()
     }
 
-    /// Determines if an app is CorelDRAW by checking bundle ID and app name
+    /// Determines if an app is a target app (CorelDRAW or user-added apps)
     private func isCorelDRAWApp(bundleID: String?, appName: String?) -> Bool {
-        // Check against discovered bundle IDs first
+        // 1. TargetAppManager에 등록된 앱인지 확인
+        if let manager = targetAppManager, manager.isTargetApp(bundleID: bundleID, appName: appName) {
+            return true
+        }
+
+        // 2. 자동 감지된 bundle ID 확인
         if let bid = bundleID, discoveredBundleIDs.contains(bid) {
             return true
         }
 
-        // Check bundle ID against keywords
+        // 3. 키워드 기반 확인 (CorelDRAW fallback)
         if let bid = bundleID {
             let lower = bid.lowercased()
             if corelKeywords.contains(where: { lower.contains($0.replacingOccurrences(of: " ", with: "")) }) {
@@ -283,7 +291,6 @@ class AppMonitor: ObservableObject {
             }
         }
 
-        // Check app name against keywords
         if let name = appName {
             let lower = name.lowercased()
             if corelKeywords.contains(where: { lower.contains($0) }) {

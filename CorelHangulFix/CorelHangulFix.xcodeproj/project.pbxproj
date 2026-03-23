@@ -13,6 +13,7 @@
 		A1000004 /* KeycodeToJamoMap.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000004; };
 		A1000005 /* AppMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000005; };
 		A1000006 /* HangulUnicode.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000008; };
+		A1000007 /* TargetAppManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000009; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -24,6 +25,7 @@
 		A2000006 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A2000007 /* CorelHangulFix.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CorelHangulFix.entitlements; sourceTree = "<group>"; };
 		A2000008 /* HangulUnicode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HangulUnicode.swift; sourceTree = "<group>"; };
+		A2000009 /* TargetAppManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TargetAppManager.swift; sourceTree = "<group>"; };
 		A2000010 /* CorelHangulFix.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CorelHangulFix.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -55,6 +57,7 @@
 				A2000004 /* KeycodeToJamoMap.swift */,
 				A2000005 /* AppMonitor.swift */,
 				A2000008 /* HangulUnicode.swift */,
+				A2000009 /* TargetAppManager.swift */,
 				A2000006 /* Info.plist */,
 				A2000007 /* CorelHangulFix.entitlements */,
 			);
@@ -128,6 +131,7 @@
 				A1000004 /* KeycodeToJamoMap.swift in Sources */,
 				A1000005 /* AppMonitor.swift in Sources */,
 				A1000006 /* HangulUnicode.swift in Sources */,
+				A1000007 /* TargetAppManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
