@@ -137,19 +137,49 @@ LOCAL_SIGN_IDENTITY="${LOCAL_SIGN_IDENTITY:-$(
 
 if [ -n "$LOCAL_SIGN_IDENTITY" ]; then
     echo "  Developer ID로 재서명 중: $LOCAL_SIGN_IDENTITY"
-    # Sparkle의 중첩 XPC·Updater부터 안쪽에서 바깥쪽 순서로 서명해야
-    # 상위 번들 서명이 유효해집니다.
-    while IFS= read -r -d '' nested; do
+    resign_failed=0
+
+    # validate_local_app_graph가 검사하는 것과 **같은 기준**으로 서명합니다.
+    # 검증기는 Contents 아래의 모든 Mach-O 파일을 훑어 Team ID 일치를 요구하므로,
+    # 번들 확장자(.app/.xpc/.framework)만 서명하면 Sparkle의 Autoupdate 같은
+    # 단독 실행 파일이 원래 서명을 유지한 채 남아 검증에서 걸립니다.
+    #
+    # 경로 깊이 역순(깊은 것부터)으로 서명해야 상위 번들의 봉인이 유효해집니다.
+    while IFS= read -r macho; do
+        if ! codesign --force --sign "$LOCAL_SIGN_IDENTITY" --options runtime \
+            --timestamp=none "$macho" > /dev/null 2>&1; then
+            echo "  [경고] 중첩 코드 서명 실패: $macho" >&2
+            resign_failed=1
+        fi
+    done < <(
+        find "$BUILT_APP/Contents" -type f \
+            -exec sh -c 'file -b "$1" | grep -q "Mach-O" && printf "%s\n" "$1"' _ {} \; \
+            | /usr/bin/awk -F/ '{ print NF"\t"$0 }' \
+            | /usr/bin/sort -rn \
+            | /usr/bin/cut -f2-
+    )
+
+    # 중첩 실행 파일을 다시 서명했으므로 이를 담고 있는 번들도 깊은 것부터 다시 봉인합니다.
+    while IFS= read -r -d '' bundle; do
         codesign --force --sign "$LOCAL_SIGN_IDENTITY" --options runtime \
-            --timestamp=none "$nested" > /dev/null 2>&1 || true
+            --timestamp=none "$bundle" > /dev/null 2>&1 || true
     done < <(find "$BUILT_APP/Contents" \
         \( -name "*.xpc" -o -name "*.app" -o -name "*.framework" \) -depth -print0)
-    if codesign --force --sign "$LOCAL_SIGN_IDENTITY" --options runtime \
-        --timestamp=none "$BUILT_APP" > /dev/null 2>&1; then
+
+    if [ "$resign_failed" -eq 0 ] \
+        && codesign --force --sign "$LOCAL_SIGN_IDENTITY" --options runtime \
+            --timestamp=none "$BUILT_APP" > /dev/null 2>&1; then
         echo "  재서명 완료 — 재설치해도 손쉬운 사용 권한이 유지됩니다"
     else
-        echo "  [경고] Developer ID 재서명 실패. ad-hoc 서명으로 진행합니다." >&2
+        echo "  [경고] Developer ID 재서명 실패. ad-hoc으로 되돌립니다." >&2
         echo "         재설치 시 손쉬운 사용 권한을 다시 승인해야 할 수 있습니다." >&2
+        # 부분 서명 상태로 두면 검증기가 Team ID 불일치로 설치를 막습니다.
+        # 전체를 ad-hoc으로 통일해 최소한 설치는 진행되게 합니다.
+        while IFS= read -r -d '' bundle; do
+            codesign --force --sign - "$bundle" > /dev/null 2>&1 || true
+        done < <(find "$BUILT_APP/Contents" \
+            \( -name "*.xpc" -o -name "*.app" -o -name "*.framework" \) -depth -print0)
+        codesign --force --sign - "$BUILT_APP" > /dev/null 2>&1 || true
     fi
 else
     echo "  Developer ID 인증서 없음 — ad-hoc 서명 유지"
