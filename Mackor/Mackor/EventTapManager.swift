@@ -366,17 +366,50 @@ class EventTapManager {
     }
 
     func stop() {
-        if let tap = eventTap {
+        // 정리 순서가 중요합니다. 무효화된(권한 회수된) 포트가 런루프에 소스로
+        // 남아 있으면 헤드 삽입 세션 탭이 시스템 입력 경로를 계속 막을 수 있습니다.
+        // tapEnable(false) → 소스 무효화·제거 → 포트 무효화 → nil 순으로 완전히
+        // 떼어냅니다. 죽은 포트에도 CFMachPortInvalidate는 안전하게 동작합니다.
+        if let tap = eventTap, CFMachPortIsValid(tap) {
             CGEvent.tapEnable(tap: tap, enable: false)
         }
         if let source = runLoopSource {
+            CFRunLoopSourceInvalidate(source)
             CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
+        }
+        if let tap = eventTap {
+            CFMachPortInvalidate(tap)
         }
         eventTap = nil
         runLoopSource = nil
         resetTransientState()
         clearSuppressedKeyUps()
         print("[Mackor] Event tap 중지됨.")
+    }
+
+    /// 시스템이 탭을 비활성화했을 때(`tapDisabledByTimeout`/`tapDisabledByUserInput`)
+    /// 콜백에서 호출합니다.
+    ///
+    /// 포트가 아직 살아 있으면 일시적 비활성화이므로 재활성화합니다. 포트가
+    /// 무효화됐다면(손쉬운 사용 권한 회수 등) 재활성화는 죽은 포트로의 헛된 CGS
+    /// 왕복일 뿐이고, 무효화된 탭을 런루프에 남겨 시스템 입력을 막을 수 있으므로
+    /// 즉시 정리합니다. 정리 뒤에는 MackorApp의 폴링/앱 활성화 재확인이 새 탭을
+    /// 만들어 복구합니다.
+    func handleSystemTapDisabled() {
+        resetComposition()
+        clearSuppressedKeyUps()
+        guard let tap = eventTap else { return }
+        if CFMachPortIsValid(tap) {
+            CGEvent.tapEnable(tap: tap, enable: true)
+        } else {
+            // 이 콜백은 탭 자신의 런루프 소스가 서비스하는 중이므로, 여기서 곧바로
+            // 그 소스를 무효화·제거하면 재진입이 된다. 정리는 다음 런루프 턴으로
+            // 미뤄 현재 콜백이 완전히 반환된 뒤 안전하게 수행한다.
+            print("[Mackor] 탭 포트가 무효화되어 정리합니다(권한 회수 등).")
+            DispatchQueue.main.async { [weak self] in
+                self?.stop()
+            }
+        }
     }
 
     // MARK: - 이벤트 처리
@@ -1358,15 +1391,11 @@ private func eventTapCallback(
     userInfo: UnsafeMutableRawPointer?
 ) -> Unmanaged<CGEvent>? {
 
-    // 시스템에 의해 tap이 비활성화된 경우 재활성화
+    // 시스템이 tap을 비활성화한 경우: 포트가 살았으면 재활성화, 무효화됐으면 정리.
     if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
         if let userInfo = userInfo {
             let manager = Unmanaged<EventTapManager>.fromOpaque(userInfo).takeUnretainedValue()
-            manager.resetComposition()
-            manager.clearSuppressedKeyUps()
-            if let tap = manager.eventTap {
-                CGEvent.tapEnable(tap: tap, enable: true)
-            }
+            manager.handleSystemTapDisabled()
         }
         return Unmanaged.passUnretained(event)
     }
