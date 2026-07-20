@@ -951,7 +951,7 @@ class EventTapManager {
            hasEligibleToken,
            automaticCorrectionFieldAllowed == true,
            focusToken != nil {
-            decision = resolveBoundary(.submit)
+            decision = resolveBoundary(.submit, boundaryUTF16Count: 0)
         } else {
             autoCorrectionEngine.reset()
             lexicalKeystrokeMirror.removeAll(keepingCapacity: true)
@@ -1083,7 +1083,7 @@ class EventTapManager {
            hasEligibleToken,
            automaticCorrectionFieldAllowed == true,
            focusToken != nil {
-            decision = resolveBoundary(boundary)
+            decision = resolveBoundary(boundary, boundaryUTF16Count: sequence.producedUTF16Count)
         } else {
             // 실제 경계는 discard 상태도 끝냅니다.
             autoCorrectionEngine.reset()
@@ -1453,8 +1453,17 @@ class EventTapManager {
     /// 규칙이 이미 교정하거나 다른 이유로 보존한 토큰은 건드리지 않습니다.
     /// 오직 `ambiguousBothValid` — 한국어·영어 두 문법을 모두 만족해 키열만으로는
     /// 구분할 수 없던 경우 — 만 대상입니다.
-    private func resolveBoundary(_ boundary: CorrectionBoundary) -> CorrectionDecision? {
+    private func resolveBoundary(
+        _ boundary: CorrectionBoundary,
+        boundaryUTF16Count: Int
+    ) -> CorrectionDecision? {
         let keystrokes = lexicalKeystrokeMirror
+        // `processBoundary`는 내부에서 `defer { reset() }`으로 토큰을 비웁니다.
+        // 사본도 같이 비우지 않으면 경계를 넘길 때마다 계속 쌓여, 길이 대조가
+        // 항상 어긋나고 이 아래의 방향 수정·어휘 판정이 영영 발동하지 못합니다.
+        // 실제로 그 상태였습니다 — 진단에서 token=이 문장 전체로 자라났습니다.
+        lexicalKeystrokeMirror.removeAll(keepingCapacity: true)
+
         if let decision = autoCorrectionEngine.processBoundary(boundary) {
             return decision
         }
@@ -1467,7 +1476,11 @@ class EventTapManager {
         //
         // 화면에 찍힌 글자는 증거입니다. 캐럿 앞 글자가 라틴인데 엔진이
         // 한글자판이라 믿었다면, 올바른 방향으로 동결 정책을 다시 돌립니다.
-        if let decision = directionCorrectedDecision(boundary: boundary, keystrokes: keystrokes) {
+        if let decision = directionCorrectedDecision(
+            boundary: boundary,
+            keystrokes: keystrokes,
+            boundaryUTF16Count: boundaryUTF16Count
+        ) {
             return decision
         }
 
@@ -1499,15 +1512,21 @@ class EventTapManager {
     /// 엔진 판정과 방향이 같으면 아무것도 하지 않습니다.
     private func directionCorrectedDecision(
         boundary: CorrectionBoundary,
-        keystrokes: [PhysicalKeystroke]
+        keystrokes: [PhysicalKeystroke],
+        boundaryUTF16Count: Int
     ) -> CorrectionDecision? {
         guard let diagnostic = autoCorrectionEngine.lastDiagnostic,
               diagnostic.boundary == boundary,
               diagnostic.tokenLength == keystrokes.count,
               !keystrokes.isEmpty,
               let focusToken = automaticCorrectionFocusToken,
-              // 경계 문자는 아직 앱에 들어가기 전이므로 캐럿 바로 앞이 토큰 끝입니다.
-              let observed = focusInspector.scriptBeforeCaret(focusToken, boundaryUTF16Count: 0),
+              // Space·쉼표는 경계 문자를 앱에 먼저 보낸 뒤 지우고 다시 넣는
+              // 방식이므로, 이 시점에 캐럿 앞은 경계 문자입니다. 그만큼 더
+              // 앞을 봐야 토큰의 마지막 글자에 닿습니다.
+              let observed = focusInspector.scriptBeforeCaret(
+                focusToken,
+                boundaryUTF16Count: boundaryUTF16Count
+              ),
               observed != diagnostic.direction else {
             return nil
         }
