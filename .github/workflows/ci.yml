@@ -30,9 +30,16 @@ jobs:
             build-installer.sh \
             uninstall.sh \
             uninstall.command \
+            MackorIMEProbe/build.sh \
             scripts/prepare-release.sh \
             scripts/prepare-appcast.sh \
             scripts/validate-release.sh
+
+      # R4-1 동결 가드: IMK 마이그레이션 동안 코어 규칙 엔진 9파일·순수 테스트
+      # 8파일·골든 코퍼스 4파일이 바이트 단위로 바뀌지 않았음을 보증한다.
+      # 이 파일들을 의도적으로 바꾸는 PR은 매니페스트 재생성 근거를 커밋에 명시해야 한다.
+      - name: Verify engine freeze (R4-1)
+        run: shasum -a 256 -c scripts/engine-freeze.sha256
 
       - name: Run unit tests
         run: |
