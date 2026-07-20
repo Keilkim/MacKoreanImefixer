@@ -176,9 +176,18 @@ enum FocusedInputSafety {
             diagnostic("focus token protected metadata hint=\(hit) \(diagnosticContext(role: role))")
             return .ineligible
         }
-        guard let selection = selectedTextRange(from: values[6]), selection.length == 0 else {
-            // 선택 영역을 못 읽는 것도 IPC 실패일 수 있어 일시적으로 봅니다.
-            diagnostic("focus token missing or nonempty selection \(diagnosticContext(role: role))")
+        // "못 읽었다"와 "선택 영역이 비어있지 않다"는 원인도 해법도 다르므로
+        // 진단에서 반드시 구분합니다. 전자는 앱이 캐럿 정보를 안 주는 것이고,
+        // 후자는 사용자가 실제로 글자를 선택해 둔 것입니다.
+        guard let selection = selectedTextRange(from: values[6]) else {
+            diagnostic("focus token caret unreadable \(diagnosticContext(role: role))")
+            return .unavailable
+        }
+        guard selection.length == 0 else {
+            diagnostic(
+                "focus token has selection len=\(selection.length) "
+                    + diagnosticContext(role: role)
+            )
             return .unavailable
         }
 

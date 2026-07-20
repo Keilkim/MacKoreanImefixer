@@ -1439,7 +1439,25 @@ class EventTapManager {
         if let decision = autoCorrectionEngine.processBoundary(boundary) {
             return decision
         }
-        return lexicalDecision(boundary: boundary, keystrokes: keystrokes)
+        if let decision = lexicalDecision(boundary: boundary, keystrokes: keystrokes) {
+            return decision
+        }
+
+        // 보존된 토큰도 반드시 흔적을 남깁니다.
+        //
+        // 지금까지 보존은 로그를 전혀 남기지 않았습니다. 그런데 사용자가
+        // "안 된다"고 겪는 상황의 대부분이 바로 이 보존입니다. 그래서 교정
+        // 시도만 세면 성공률이 좋아 보이는데 실제 체감은 정반대인, 지표와
+        // 현실이 어긋나는 상태였습니다. 무엇이 왜 안 바뀌었는지가 보여야
+        // 다음을 고칠 수 있습니다.
+        EventTapManager.diagnostic(
+            "preserved "
+                + "rule=\(autoCorrectionEngine.lastDiagnostic.map { "\($0.rule)" } ?? "노판정") "
+                + "len=\(autoCorrectionEngine.lastDiagnostic?.tokenLength ?? keystrokes.count) "
+                + "token=\(LayoutCorrectionPolicy.latinCandidate(for: keystrokes) ?? "?") "
+                + FocusedInputSafety.diagnosticContext()
+        )
+        return nil
     }
 
     /// 규칙이 보존한 토큰을 어휘로 다시 판정합니다.
