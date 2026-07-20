@@ -100,26 +100,32 @@ enum FocusedInputSafety {
         }
 
         let subrole = values[1] as? String
+        // 비밀번호 필드는 항상 제외합니다. 검색 필드(kAXSearchFieldSubrole)는
+        // 한국어 사용자가 한글을 가장 많이 입력하는 곳이므로 허용합니다. 주소창은
+        // 이 검사가 아니라 아래 메타데이터 필터의 "주소"/"url"에서 걸립니다(실측).
         let protectedSubroles: Set<String> = [
             kAXSecureTextFieldSubrole as String,
-            kAXSearchFieldSubrole as String,
         ]
         guard subrole.map({ !protectedSubroles.contains($0) }) ?? true else {
-            diagnostic("focus token protected subrole")
+            diagnostic("focus token protected subrole=\(subrole ?? "")")
             return nil
         }
 
-        // 브라우저의 주소/검색 겸용 필드는 URL 오교정을 막기 위해 제외합니다.
+        // URL 오교정과 비밀번호 유출만 막습니다.
+        //
+        // 이전에는 "search/검색/location/위치"까지 막았는데, 이 힌트는 URL 보호에
+        // 불필요하면서 한국어 사용자가 한글을 가장 많이 치는 검색창·게시글·댓글창을
+        // 통째로 차단했습니다. 주소창(옴니박스)은 "주소"/"url"/"web address" 힌트로
+        // 계속 걸리므로 URL 보호는 유지됩니다(실측: 주소창은 이 필터에서 걸림).
         let metadata = values[2...5]
             .compactMap { ($0 as? String)?.lowercased() }
             .joined(separator: " ")
         let protectedHints = [
-            "address", "url", "location", "web address",
-            "search", "주소", "웹 주소", "위치", "검색",
+            "address", "url", "web address", "주소", "웹 주소",
             "password", "passcode", "암호", "비밀번호",
         ]
-        guard !protectedHints.contains(where: metadata.contains) else {
-            diagnostic("focus token protected metadata")
+        if let hit = protectedHints.first(where: metadata.contains) {
+            diagnostic("focus token protected metadata hint=\(hit)")
             return nil
         }
         guard let selection = selectedTextRange(from: values[6]), selection.length == 0 else {
