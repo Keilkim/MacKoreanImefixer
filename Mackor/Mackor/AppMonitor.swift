@@ -272,33 +272,69 @@ class AppMonitor: ObservableObject {
 
     // MARK: - 상태 업데이트
 
-    private func updateActiveState() {
-        let compositionEnabled = targetAppManager?.autoCorrectionScope == .selectedApps
-            && (targetAppManager?.isHangulCompositionEnabled(
-                bundleID: frontAppBundleID,
-                appName: frontAppName
-            ) ?? false)
-        let autoCorrectionEnabled = targetAppManager?.isAutoCorrectionEnabled(
-            bundleID: frontAppBundleID,
-            appName: frontAppName
-        ) ?? false
+    /// 두 기능의 활성 여부.
+    struct ActiveState: Equatable {
+        /// 한글 직접 조합 (R2)
+        let composition: Bool
+        /// 한/영 오입력 자동 교정 (R3)
+        let autoCorrection: Bool
+    }
 
-        // 직접 한글 조합은 사용자가 명시적으로 켠 대상 앱에서만 활성화합니다.
-        // 전체 Mac 자동 교정에 필요한 임시 조합은 EventTapManager가 안전한
-        // 일반 텍스트 입력란임을 확인한 뒤 별도로 처리합니다.
-        let newCompositionActive = isEnabled
+    /// 활성 판정 순수 함수.
+    ///
+    /// `AppMonitor`의 실제 초기화는 NSWorkspace와 TIS를 읽으므로(init 참조)
+    /// 인스턴스 기반 테스트가 비결정적이다. 판정 로직만 떼어내 전 조합을
+    /// 결정론적으로 검증할 수 있게 한다.
+    ///
+    /// **R2와 R3는 배타가 아니라 D3 계층 관계다** — 조합이 확정된 뒤 그 확정
+    /// 문자열에 교정을 판정한다. 이전에는 조합에 `scope == .selectedApps`를
+    /// 요구해서 `.allApps`를 켜면 조합이 통째로 꺼졌고, 그것이 CorelDRAW
+    /// 회귀의 직접 원인이었다.
+    static func computeActiveState(
+        isEnabled: Bool,
+        isTargetAppFront: Bool,
+        isKoreanIME: Bool,
+        hangulCompositionEnabled: Bool,
+        autoCorrectionEnabled: Bool,
+        inputSourceKind: InputSourceKind
+    ) -> ActiveState {
+        // 직접 한글 조합은 명시적으로 등록되고(isTargetAppFront) 앱별 토글이 켜진
+        // 앱에서만 활성화됩니다. 자동 교정 엔진이 후보를 만들 때 쓰는 "임시 조합"은
+        // HangulStructure.evaluate 안의 메모리 재생이며(화면을 건드리지 않음) 이
+        // 플래그와 무관합니다. 따라서 scope로 둘을 배타시킬 이유가 없습니다.
+        let composition = isEnabled
             && isTargetAppFront
             && isKoreanIME
-            && compositionEnabled
-        if isActive != newCompositionActive {
-            isActive = newCompositionActive
-        }
+            && hangulCompositionEnabled
 
-        let newAutoCorrectionActive = isEnabled
+        let autoCorrection = isEnabled
             && autoCorrectionEnabled
             && inputSourceKind != .unsupported
-        if isAutoCorrectionActive != newAutoCorrectionActive {
-            isAutoCorrectionActive = newAutoCorrectionActive
+
+        return ActiveState(composition: composition, autoCorrection: autoCorrection)
+    }
+
+    private func updateActiveState() {
+        let state = Self.computeActiveState(
+            isEnabled: isEnabled,
+            isTargetAppFront: isTargetAppFront,
+            isKoreanIME: isKoreanIME,
+            hangulCompositionEnabled: targetAppManager?.isHangulCompositionEnabled(
+                bundleID: frontAppBundleID,
+                appName: frontAppName
+            ) ?? false,
+            autoCorrectionEnabled: targetAppManager?.isAutoCorrectionEnabled(
+                bundleID: frontAppBundleID,
+                appName: frontAppName
+            ) ?? false,
+            inputSourceKind: inputSourceKind
+        )
+
+        if isActive != state.composition {
+            isActive = state.composition
+        }
+        if isAutoCorrectionActive != state.autoCorrection {
+            isAutoCorrectionActive = state.autoCorrection
         }
     }
 }

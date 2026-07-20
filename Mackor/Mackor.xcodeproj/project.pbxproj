@@ -39,6 +39,7 @@
 		B100000D /* FocusedInputSafety.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000C; };
 		B100000E /* CorrectionNoticeController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000D; };
 		B100000F /* CorrectionNoticeControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000007; };
+		B1000010 /* AppMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000005; };
 		C0F00001 /* StructureCorrectionCorpusTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F00002; };
 		E1000001 /* KSX1001Table.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2000001; };
 		E1000011 /* KSX1001Table.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2000001; };
@@ -52,6 +53,7 @@
 		E1000022 /* KSX1001TableTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2000022; };
 		E1000023 /* LayoutCorrectionPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2000023; };
 		E1000024 /* GoldenCorpusParityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2000024; };
+		E1000025 /* AppMonitorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2000025; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -89,6 +91,7 @@
 		E2000022 /* KSX1001TableTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KSX1001TableTests.swift; sourceTree = "<group>"; };
 		E2000023 /* LayoutCorrectionPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LayoutCorrectionPolicyTests.swift; sourceTree = "<group>"; };
 		E2000024 /* GoldenCorpusParityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoldenCorpusParityTests.swift; sourceTree = "<group>"; };
+		E2000025 /* AppMonitorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppMonitorTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -171,6 +174,7 @@
 				E2000022 /* KSX1001TableTests.swift */,
 				E2000023 /* LayoutCorrectionPolicyTests.swift */,
 				E2000024 /* GoldenCorpusParityTests.swift */,
+				E2000025 /* AppMonitorTests.swift */,
 				D2000003 /* SparkleUpdateConfigurationTests.swift */,
 			);
 			path = MackorTests;
@@ -306,6 +310,7 @@
 				B100000A /* InputSourceController.swift in Sources */,
 				B100000B /* EventTapManagerTests.swift in Sources */,
 				B100000C /* EventTapManager.swift in Sources */,
+				B1000010 /* AppMonitor.swift in Sources */,
 				B100000D /* FocusedInputSafety.swift in Sources */,
 				B100000E /* CorrectionNoticeController.swift in Sources */,
 				B100000F /* CorrectionNoticeControllerTests.swift in Sources */,
@@ -318,6 +323,7 @@
 				E1000022 /* KSX1001TableTests.swift in Sources */,
 				E1000023 /* LayoutCorrectionPolicyTests.swift in Sources */,
 				E1000024 /* GoldenCorpusParityTests.swift in Sources */,
+				E1000025 /* AppMonitorTests.swift in Sources */,
 				D1000003 /* SparkleUpdateConfiguration.swift in Sources */,
 				D1000004 /* SparkleUpdateConfigurationTests.swift in Sources */,
 			);

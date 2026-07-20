@@ -506,6 +506,28 @@ class EventTapManager {
 
         // 백스페이스
         if keycode == EventTapManager.backspaceKeycode {
+            // 직접 조합과 자동 교정이 함께 켜진 앱에서는 백스페이스가 두 모델을
+            // 어긋나게 만든다. 엔진은 스트로크 하나를 지운 뒤 남은 키열을 새
+            // 트래커로 재생해 decision.original을 만들지만(HangulStructure.evaluate),
+            // 화면의 트래커는 이미 커밋한 음절을 다시 열지 못한다.
+            // 예: g, e, Backspace, o, o, d
+            //   화면  ㅎㄷ → BS → ㅎ → ㅎㅐㅐㅇ  (4자)
+            //   엔진  g,o,o,d 재생 → 해ㅐㅇ        (3자)
+            // 이 상태로 교정을 발사하면 백스페이스 수가 하나 모자라 유출 문자가
+            // 교정 단어에 붙는다. 그래서 이 토큰의 교정은 포기한다.
+            // 교정 기회만 잃고 텍스트는 손상되지 않는다.
+            // (근본 해결은 트래커/엔진의 스냅샷 공유 — 별도 단계)
+            if isAutoCorrectionEnabled, shouldDirectlyComposeCurrentInput {
+                invalidateAutomaticCorrectionTokenUntilBoundary()
+                guard shouldDirectlyComposeCurrentInput else { return event }
+                let result = tracker.processBackspace()
+                if result.passthrough {
+                    return event
+                }
+                executeResult(result)
+                return nil
+            }
+
             if isAutoCorrectionEnabled, processTrailingPeriodBackspace() {
                 // 화면의 마지막 period는 원래 Backspace가 지우도록 그대로
                 // 통과시킵니다. 엔진의 마지막 letter stroke는 건드리지 않습니다.

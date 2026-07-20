@@ -1371,6 +1371,93 @@ final class EventTapManagerTests: XCTestCase {
         }
     }
 
+    // MARK: - 공존 상태 (직접 조합 + 자동 교정 동시 활성)
+    //
+    // AutoCorrectionScope가 .allApps일 때 조합이 꺼지던 결합을 제거하면서
+    // 두 기능이 같은 앱에서 함께 켜지는 상태가 일상적으로 도달 가능해졌다.
+    // 아래 세 테스트가 그 상태의 불변식을 고정한다.
+
+    /// 공존 상태에서 자모 키 하나는 조합 출력을 **정확히 한 번만** 낸다.
+    /// 자동 교정 엔진의 record는 순수 부기라 화면에 아무것도 쓰지 않는다.
+    func testCoexistenceJamoProducesSingleCompositionOutput() {
+        let output = FakeKeyboardOutput()
+        let manager = makeManager(output: output)
+        manager.inputSourceKind = .koreanTwoSet
+        manager.isActive = true
+        manager.isAutoCorrectionEnabled = true
+
+        let down = keyDown(Self.keycodes["g"]!)   // ㅎ
+        XCTAssertNil(manager.handleKeyDown(down), "자모 키는 차단되어야 한다")
+        XCTAssertEqual(output.actions, [.text("ㅎ")], "조합 출력이 정확히 한 번")
+    }
+
+    /// 공존 상태에서도 우리가 주입한 이벤트는 기록도 조합도 하지 않는다.
+    func testCoexistenceIgnoresInjectedEvents() {
+        let output = FakeKeyboardOutput()
+        let manager = makeManager(output: output)
+        manager.inputSourceKind = .koreanTwoSet
+        manager.isActive = true
+        manager.isAutoCorrectionEnabled = true
+
+        let injected = keyDown(Self.keycodes["g"]!)
+        EventTapManager.tagAsInjected(injected)
+        XCTAssertNotNil(manager.handleKeyDown(injected), "주입 이벤트는 통과")
+        XCTAssertTrue(output.actions.isEmpty, "주입 이벤트로는 아무것도 출력하지 않는다")
+
+        // 트래커 상태도 오염되지 않았는지: 다음 물리 자모가 새 음절로 시작한다
+        XCTAssertNil(manager.handleKeyDown(keyDown(Self.keycodes["g"]!)))
+        XCTAssertEqual(output.actions, [.text("ㅎ")])
+    }
+
+    /// 공존 상태에서 백스페이스가 섞이면 그 토큰의 자동 교정을 포기한다.
+    ///
+    /// 엔진은 스트로크 하나를 지우고 남은 키열을 재생해 원문을 만들지만
+    /// 화면 트래커는 커밋된 음절을 다시 열지 못해 두 모델이 갈라진다.
+    /// 어긋난 채로 교정하면 백스페이스 수가 모자라 문자가 유출되므로,
+    /// 교정을 발사하지 않는 것이 올바른 동작이다.
+    func testCoexistenceBackspaceInvalidatesCorrectionForToken() {
+        // 조합 자체도 백스페이스를 내보내므로(ㅎ+ㅐ→해는 delete 1) 출력의
+        // 백스페이스 개수로는 교정 여부를 가릴 수 없다. onOriginalChoiceAvailable은
+        // 교정이 실제로 적용될 때만 호출되므로 이것이 정확한 판별자다.
+        func correctionFired(withBackspace: Bool) -> Bool {
+            let output = FakeKeyboardOutput()
+            var scheduled: [() -> Void] = []
+            let manager = makeManager(
+                output: output,
+                scheduleBoundaryCorrection: { scheduled.append($0) }
+            )
+            manager.inputSourceKind = .koreanTwoSet
+            manager.isActive = true
+            manager.isAutoCorrectionEnabled = true
+            var request: OriginalChoiceRequest?
+            manager.onOriginalChoiceAvailable = { request = $0 }
+
+            _ = manager.handleKeyDown(keyDown(Self.keycodes["g"]!))
+            _ = manager.handleKeyDown(keyDown(Self.keycodes["e"]!))
+            if withBackspace {
+                _ = manager.handleKeyDown(keyDown(0x33))   // 여기서 두 모델이 갈라진다
+            }
+            for character in "ood" {
+                _ = manager.handleKeyDown(keyDown(Self.keycodes[character]!))
+            }
+            _ = manager.handleKeyDown(keyDown(Self.spaceKeycode))
+            _ = manager.handleKeyUp(keyUp(Self.spaceKeycode))
+            for work in scheduled { work() }
+            return request != nil
+        }
+
+        XCTAssertFalse(
+            correctionFired(withBackspace: true),
+            "백스페이스가 섞인 토큰은 교정하지 않는다 — 화면과 원문의 글자 수가 어긋난다"
+        )
+        XCTAssertTrue(
+            correctionFired(withBackspace: false),
+            "대조군: 백스페이스가 없으면 같은 흐름에서 교정이 정상 발사된다"
+        )
+    }
+
+    private static let spaceKeycode: UInt16 = 0x31
+
     private func keyDown(
         _ keycode: UInt16,
         shift: Bool = false,
