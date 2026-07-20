@@ -1223,7 +1223,8 @@ class EventTapManager {
         }
         EventTapManager.diagnostic(
             "deferred focus match=\(focusMatches) expectedOffset=\(expectedOffset) "
-                + "attempt=\(attempt)\(confirmedByText ? " viaCaretText=true" : "")"
+                + "attempt=\(attempt)\(confirmedByText ? " viaCaretText=true" : "") "
+                + FocusedInputSafety.diagnosticContext()
         )
         guard focusMatches else {
             return false

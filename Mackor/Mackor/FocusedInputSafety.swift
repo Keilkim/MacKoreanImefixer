@@ -99,7 +99,7 @@ enum FocusedInputSafety {
         }
         guard let element = focusedElement() else {
             // 포커스된 요소를 못 얻는 건 대개 트리가 아직 차갑다는 뜻입니다.
-            diagnostic("focus token missing focused element")
+            diagnostic("focus token missing focused element \(diagnosticContext())")
             return .unavailable
         }
 
@@ -125,7 +125,7 @@ enum FocusedInputSafety {
         values.count == attributes.count,
         let role = values[0] as? String else {
             // 속성 읽기 실패는 IPC 타임아웃이 대부분이라 일시적입니다.
-            diagnostic("focus token attribute read failed result=\(copyResult.rawValue)")
+            diagnostic("focus token attribute read failed result=\(copyResult.rawValue) \(diagnosticContext())")
             return .unavailable
         }
 
@@ -143,7 +143,7 @@ enum FocusedInputSafety {
             kAXComboBoxRole as String,
         ]
         guard supportedRoles.contains(role) else {
-            diagnostic("focus token unsupported role=\(role)")
+            diagnostic("focus token unsupported \(diagnosticContext(role: role))")
             return .ineligible
         }
 
@@ -155,7 +155,7 @@ enum FocusedInputSafety {
             kAXSecureTextFieldSubrole as String,
         ]
         guard subrole.map({ !protectedSubroles.contains($0) }) ?? true else {
-            diagnostic("focus token protected subrole=\(subrole ?? "")")
+            diagnostic("focus token protected subrole=\(subrole ?? "") \(diagnosticContext(role: role))")
             return .ineligible
         }
 
@@ -173,15 +173,16 @@ enum FocusedInputSafety {
             "password", "passcode", "암호", "비밀번호",
         ]
         if let hit = protectedHints.first(where: metadata.contains) {
-            diagnostic("focus token protected metadata hint=\(hit)")
+            diagnostic("focus token protected metadata hint=\(hit) \(diagnosticContext(role: role))")
             return .ineligible
         }
         guard let selection = selectedTextRange(from: values[6]), selection.length == 0 else {
             // 선택 영역을 못 읽는 것도 IPC 실패일 수 있어 일시적으로 봅니다.
-            diagnostic("focus token missing or nonempty selection")
+            diagnostic("focus token missing or nonempty selection \(diagnosticContext(role: role))")
             return .unavailable
         }
 
+        diagnostic("focus token ok \(diagnosticContext(role: role))")
         return .eligible(FocusToken(element: element, initialSelection: selection))
     }
 
@@ -522,5 +523,22 @@ enum FocusedInputSafety {
     private static func diagnostic(_ message: @autoclosure () -> String) {
         guard diagnosticsEnabled else { return }
         print("[Mackor][diagnostic] \(message())")
+    }
+
+    /// 진단 로그에 붙일 문맥 — **어느 앱의 어떤 입력란인지**만 담습니다.
+    ///
+    /// 실패 로그에 이게 없으면 `matches=false`가 떠도 어느 앱에서 생긴 일인지
+    /// 알 수 없어 원인을 좁힐 수 없습니다. 특정 앱에만 몰리는지, 특정 역할
+    /// (텍스트필드/텍스트영역/콤보박스)에만 생기는지가 곧 다음 조사 방향입니다.
+    ///
+    /// **입력 내용은 절대 포함하지 않습니다.** 앱 이름·번들ID·요소 역할뿐입니다.
+    /// 호출부가 `diagnostic`의 지연 평가 안에서만 부르므로 진단이 꺼져 있으면
+    /// 이 조회 비용도 들지 않습니다.
+    static func diagnosticContext(role: String? = nil) -> String {
+        let app = NSWorkspace.shared.frontmostApplication
+        let name = app?.localizedName ?? "?"
+        let bundle = app?.bundleIdentifier ?? "?"
+        let roleText = role.map { " role=\($0)" } ?? ""
+        return "app=\(name)[\(bundle)]\(roleText)"
     }
 }
