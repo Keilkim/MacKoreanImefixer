@@ -81,9 +81,18 @@ enum FocusedInputSafety {
             return nil
         }
 
+        // AXComboBox는 브라우저 웹페이지의 입력란이 흔히 쓰는 역할이다.
+        // 이것이 빠져 있어서 Safari·Chrome에서 자동 교정이 전혀 걸리지 않았다.
+        //
+        // 주소창을 걱정할 필요는 없다. 실측으로 확인했다 — Safari 주소창은
+        // role 검사를 통과한 뒤 아래 메타데이터 필터("주소"/"url"/"search")에
+        // 걸려 거부된다(진단 로그 `focus token protected metadata`).
+        // role 검사가 먼저이고 메타데이터 필터가 나중이므로, 여기에 역할을
+        // 추가해도 그 보호는 그대로 유지된다.
         let supportedRoles: Set<String> = [
             kAXTextFieldRole as String,
             kAXTextAreaRole as String,
+            kAXComboBoxRole as String,
         ]
         guard supportedRoles.contains(role) else {
             diagnostic("focus token unsupported role=\(role)")

@@ -119,6 +119,43 @@ BUILT_IDENTIFIER="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$BUI
 if [ "$BUILT_IDENTIFIER" != "$EXPECTED_IDENTIFIER" ]; then
     fail "빌드 앱 ID가 일치하지 않습니다 (예상 $EXPECTED_IDENTIFIER, 실제 $BUILT_IDENTIFIER)."
 fi
+# Developer ID로 재서명해 손쉬운 사용 권한이 재설치를 넘어 유지되게 합니다.
+#
+# ad-hoc 서명은 빌드 내용이 바뀔 때마다 코드 해시가 달라져 TCC가 다른 앱으로
+# 인식합니다. 그래서 새 빌드를 설치할 때마다 권한을 다시 승인해야 했습니다.
+# 안정적인 Developer ID identity로 서명하면 designated requirement가 동일하게
+# 유지되어 승인이 남습니다.
+#
+# 인증서가 없는 기여자 환경에서는 조용히 건너뛰고 기존 ad-hoc 동작을 유지합니다.
+# 이 재서명은 로컬 개발 설치용이며, 공식 배포 서명·공증은 build-installer.sh가
+# REQUIRE_SIGNING/REQUIRE_NOTARIZATION 경로에서 따로 수행합니다.
+LOCAL_SIGN_IDENTITY="${LOCAL_SIGN_IDENTITY:-$(
+    security find-identity -v -p codesigning 2>/dev/null \
+        | /usr/bin/sed -n 's/.*"\(Developer ID Application: .*\)"/\1/p' \
+        | /usr/bin/head -n 1
+)}"
+
+if [ -n "$LOCAL_SIGN_IDENTITY" ]; then
+    echo "  Developer ID로 재서명 중: $LOCAL_SIGN_IDENTITY"
+    # Sparkle의 중첩 XPC·Updater부터 안쪽에서 바깥쪽 순서로 서명해야
+    # 상위 번들 서명이 유효해집니다.
+    while IFS= read -r -d '' nested; do
+        codesign --force --sign "$LOCAL_SIGN_IDENTITY" --options runtime \
+            --timestamp=none "$nested" > /dev/null 2>&1 || true
+    done < <(find "$BUILT_APP/Contents" \
+        \( -name "*.xpc" -o -name "*.app" -o -name "*.framework" \) -depth -print0)
+    if codesign --force --sign "$LOCAL_SIGN_IDENTITY" --options runtime \
+        --timestamp=none "$BUILT_APP" > /dev/null 2>&1; then
+        echo "  재서명 완료 — 재설치해도 손쉬운 사용 권한이 유지됩니다"
+    else
+        echo "  [경고] Developer ID 재서명 실패. ad-hoc 서명으로 진행합니다." >&2
+        echo "         재설치 시 손쉬운 사용 권한을 다시 승인해야 할 수 있습니다." >&2
+    fi
+else
+    echo "  Developer ID 인증서 없음 — ad-hoc 서명 유지"
+    echo "  (재설치할 때마다 손쉬운 사용 권한을 다시 승인해야 할 수 있습니다)"
+fi
+
 validate_local_app_graph "$BUILT_APP"
 echo "[2/4] 빌드 완료 (v$BUILT_VERSION, 빌드 $BUILT_BUILD_NUMBER)"
 
