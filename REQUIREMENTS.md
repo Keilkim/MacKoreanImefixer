@@ -329,6 +329,42 @@ AX 프로브 직접 측정 결과:
 → 다만 Chrome은 enhanced UI가 **이미 켜져 있는데도 실패**하므로, 속성만 바꾼다고
    해결되지 않는다. 구조적 한계다.
 
+### P0 프로토타입 실측 (2026-07-20, TextEdit / macOS 26.3.1)
+
+`MackorIMEProbe`를 `~/Library/Input Methods`에 설치·등록하고 합성 키 입력으로 측정.
+
+| 항목 | 결과 | 근거 |
+|---|---|---|
+| **P0-8 등록 즉시성** | **성립** | `TISRegisterInputSource → 0(OK)`. 재로그인 없이 `han2`·`roman` 두 모드가 TIS 목록에 `IsSelectCapable=true`로 등장, `TISEnableInputSource → 0` |
+| **P0-1 자기 모드 전환** | **성립 (D1 전제 확인)** | `selectMode(han2→roman)` 직후에도 `keyDown` 수신 지속 (`c`,`d` 로그). **IME가 비활성화되지 않는다** |
+| **P0-2 모드 통지 역방향** | **성립** | `setValue tag=1768778093 value=...MackorProbe.han2` 수신 확인. 구현 필수 확정 |
+| **P0-4 칩 앵커** | **성립** | marked text 없는 상태에서 `attributes(forCharacterIndex: 0, lineHeightRectangle:)` → `(214.76, 979.0, 1.0, 13.0)` 유효 캐럿 rect(1px 폭, 13pt 높이) |
+| **P0-7 ⌘Z 도달** | **미도달 (예상 확인)** | ⌘Z에 `CMD-combo REACHED handle` 로그 **없음**. 대신 TextEdit 자체 Undo가 실행되어 앞 내용이 전부 지워짐. **앱이 선점한다** |
+| **P0-3 조합 경로** | **정상** | `setMarkedText("ㅁ")` → `markedRange=(1,1)`, 화면 표시·커밋 정상 |
+| **P0-5 `replacementRange`** | **무시됨 ⚠** | 아래 별항 |
+
+#### ⚠ `insertText(_:replacementRange:)`는 신뢰할 수 없다 (설계 변경 유발)
+
+TextEdit(표준 Cocoa 텍스트 클라이언트)에서 두 경로가 갈렸다.
+
+| 호출 | 결과 |
+|---|---|
+| `setMarkedText` → `insertText(범위 NSNotFound)` | **정상 커밋** (`a` + `ㅁ` → `aㅁ`) |
+| `insertText("한", replacementRange:(1,1))` — 확정 텍스트 대상, 조합 세션 없음 | **완전 무시.** 치환도 덧붙임도 없음 (`ab` 그대로) |
+| `insertText("한", replacementRange:(1,1))` — 조합 세션 활성 중 | **범위 무시.** `b`가 아니라 **marked text 자리**에 삽입 (`ab` + marked`ㅁ` → `ab한`) |
+
+즉 **이미 확정된 텍스트를 `replacementRange`로 치환하는 것은 불가능하다.**
+Apple 문서(`IMKInputSession.h:249`)는 "Cocoa 텍스트 시스템은 TSMDocumentAccess를
+지원한다"고 하지만, 실측상 `replacementRange`가 존중되지 않는다.
+
+**설계 귀결:** 교정은 `replacementRange`로 하지 않는다. 대신
+
+- 조합 존중 클라이언트: **단어 전체를 marked text로 유지하다가 경계에서 원문/교정문 중
+  하나를 커밋** — 치환이 아예 불필요해진다 (IME 본연의 방식이며 키 롤오버 경합도
+  구조적으로 소멸)
+- 조합을 먹는 클라이언트: 즉시 커밋 + **백스페이스 카운트 삭제 후 재입력**
+  (현행 `executeResult`와 동일 방식)
+
 ### 증상 관찰
 
 - 카톡: 잘 동작
