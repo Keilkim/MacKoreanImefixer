@@ -1,12 +1,14 @@
 # Mackor 설계·원리·외부 검토 문서
 
-> 대상 기준: Mackor 1.3 (빌드 8) 현재 작업 트리  
-> 작성일: 2026-07-20  
+> 대상 기준: Mackor 1.3 (빌드 9) 현재 작업 트리  
+> 작성일: 2026-07-20 (최종 갱신 2026-07-21)  
 > 목적: 구현 의도, 실제 동작, 안전 경계, 검증 결과와 미해결 위험을 코드와 함께 외부 검토하기 위한 문서
 
 이 문서는 제품 홍보문이 아니라 검토용 기준 문서다. 따라서 “의도한 동작”, “현재 코드로 확인된 동작”, “실제 macOS 환경에서 아직 확인해야 하는 동작”을 구분한다. 이 문서만 믿지 말고 반드시 같은 커밋의 소스와 테스트를 함께 대조해야 한다.
 
 자동 한/영 오입력 판정과 제출 경계(Enter/Tab) 처리의 규범 문서는 [`STRUCTURE_CORRECTION_DESIGN4.md`](STRUCTURE_CORRECTION_DESIGN4.md)다 (v1.3에서 규칙 기반으로 전면 교체). 마침표 상태기계·원문 선택 UI 등 그 밖의 정책은 여전히 [`STRUCTURE_CORRECTION_DESIGN3.md`](STRUCTURE_CORRECTION_DESIGN3.md)를 따른다. 이 문서는 전체 제품 구조와 배포 경계를 설명하고, 세부 정책이 충돌하면 설계 문서와 같은 작업 트리의 테스트를 우선한다.
+
+**문서 우선순위(2026-07-21).** 교정 방법론의 현행 최상위 문서는 [`CORRECTION_METHOD.md`](CORRECTION_METHOD.md)다. DESIGN4가 정의한 규칙 코어는 그대로 유효하고(R4-1 동결 대상), 그 위에 Layer 1 어휘 tiebreaker가 얹혀 있다. 세 문서가 충돌하면 `CORRECTION_METHOD.md` → `DESIGN4` → `DESIGN3` 순으로 읽는다.
 
 ## 1. 현재 결론
 
@@ -14,11 +16,11 @@ Mackor 1.3의 핵심 구조와 단위 테스트는 상당히 정리되었지만,
 
 | 항목 | 현재 상태 | 공개 배포 판단 |
 |---|---|---|
-| 현재 소스 빌드 및 단위 테스트 | 2026-07-20 현재 161개 통과, 실패·건너뜀 0개 | 통과 |
+| 현재 소스 빌드 및 단위 테스트 | 2026-07-21 현재 182개 통과, 실패·건너뜀 0개 | 통과 |
 | Xcode 정적 분석 | 현재 소스의 Release Analyze 통과 | 통과 |
-| 자동 교정 판단 | source-first 보호 뒤 후보 구조·내장 사전·macOS 로컬 언어 근거를 결합해 양방향 동작 | 실험적 기능 |
+| 자동 교정 판단 | DESIGN4 규칙 코어(문법 제약)로 판정하고, 규칙만으로 가릴 수 없는 경계는 Layer 1 고정 사전 tiebreaker가 결정 | 실험적 기능 |
 | 실제 앱 종단간 입력 | 최신 설치본 교체 뒤 손쉬운 사용 권한 재연결이 필요하여 최종 실입력 확인 전 | 미완료 |
-| 오픈소스 로컬 설치 경로 | `install.command`가 1.3 빌드 8을 ad-hoc 빌드하고 앱·Sparkle 중첩 Mach-O의 Team ID와 strict 서명을 검사 | 로컬 테스트 전용 |
+| 오픈소스 로컬 설치 경로 | `install.command`가 1.3 빌드 9를 ad-hoc 빌드하고 앱·Sparkle 중첩 Mach-O의 Team ID와 strict 서명을 검사 | 로컬 테스트 전용 |
 | 현재 로컬 updater | feed URL·Ed25519 공개키 미주입으로 의도적으로 비활성 | 로컬 테스트 전용 |
 | 현재 `dist/` PKG·DMG 서명 | Mackor 1.3 로컬 개발용 산출물이며 ad-hoc 앱·미서명 PKG·미공증 DMG | 공개 배포 차단 |
 | 1.3 공증·스테이플 | 현재 소스 기준 최종 산출물 승인·검증을 완료하지 않음 | 배포 차단 |
@@ -437,7 +439,7 @@ PR과 `main` push에는 GitHub Actions가 shell 구문 검사, 전체 XCTest와 
 8. 스테이플된 앱으로 버전 고정 Sparkle ZIP을 만들고 EdDSA로 update archive·release notes·appcast를 서명
 9. GitHub Release 자산을 먼저 게시하고 HTTPS appcast를 마지막에 원자적으로 교체
 
-오픈소스 설치 스크립트는 1.3/빌드 8을 로컬 ad-hoc으로 만들고 최상위 앱과 Sparkle XPC·Updater를 포함한 모든 Mach-O의 Team ID 일치를 검사한다. 이 검증은 로컬 실행용 서명 혼합을 막지만 Developer ID·공증을 대신하지 않는다. legacy `dist/MacKR_Installer.pkg`, `dist/MacKR.dmg`와 `com.mackr.app` 설정·로그인 항목은 2026-07-20 로컬 검증 과정에서 제거했고, 현재 `dist/local-build`에는 Mackor 이름의 개발용 산출물만 둔다.
+오픈소스 설치 스크립트는 1.3/빌드 9를 로컬 ad-hoc으로 만들고 최상위 앱과 Sparkle XPC·Updater를 포함한 모든 Mach-O의 Team ID 일치를 검사한다. 이 검증은 로컬 실행용 서명 혼합을 막지만 Developer ID·공증을 대신하지 않는다. legacy `dist/MacKR_Installer.pkg`, `dist/MacKR.dmg`와 `com.mackr.app` 설정·로그인 항목은 2026-07-20 로컬 검증 과정에서 제거했고, 현재 `dist/local-build`에는 Mackor 이름의 개발용 산출물만 둔다.
 
 첫 공식 Mackor v1.3 기준선은 번들 ID `com.mackor.app`, 경로 `/Applications/Mackor.app`으로 고정한다. legacy `/Applications/MacKR.app`(`com.mackr.app`)과 CorelHangulFix는 다른 식별자이므로 현재 자동 설치·설정·TCC migration 대상이 아니다. `notarytool` 자격 증명을 Keychain에 저장한 상태도 공증 성공이 아니며, 특정 최종 산출물이 `Accepted`되고 staple 검증까지 끝나야 한다.
 
@@ -475,7 +477,7 @@ xcrun stapler validate dist/local-build/Mackor.dmg
 
 ## 17. 자동화 테스트 현황
 
-2026-07-20 현재 작업 트리에서 Sparkle 설정 검증 5개를 포함한 161개 테스트가 통과했고 실패·건너뜀은 0개였다.
+2026-07-21 현재 작업 트리에서 Sparkle 설정 검증 5개와 Layer 1 어휘 tiebreaker parity 검증을 포함한 182개 테스트가 통과했고 실패·건너뜀은 0개였다.
 
 ```bash
 xcodebuild \
@@ -527,7 +529,7 @@ xcodebuild \
 
 ### P2 — 제품 한계 또는 후속 개선
 
-1. **언어 자원의 어휘 한계:** source-first 보호는 내장 사전과 macOS 로컬 언어 근거에 의존하므로 두 자원이 모르는 정상 단어·활용형은 구조가 강한 반대 자판 후보로 교정될 수 있다. 현재 기능은 범용 문맥 언어 감지가 아니다.
+1. **어휘 자원의 한계:** 판정의 1차 근거는 DESIGN4의 문법 제약 규칙이고, 규칙이 양쪽을 모두 허용하는 경계에서만 Layer 1 고정 사전이 개입한다. 따라서 두 사전 어디에도 없는 정상 단어·활용형은 여전히 구조가 강한 반대 자판 후보로 교정될 수 있다. 현재 기능은 범용 문맥 언어 감지가 아니다.
 2. **제한된 경계:** 공백, `? ! . ,`, Return·숫자패드 Enter·Tab만 지원한다. Shift+Tab, 세미콜론, 콜론, 괄호 등은 교정 경계가 아니다.
 3. **제한된 배열:** Apple ABC/U.S.와 한국어 두벌식만 지원한다.
 4. **웹사이트별 예외 없음:** 브라우저 대상은 모든 탭과 사이트에 적용된다. 필드 안전 판정만 예외를 만든다.

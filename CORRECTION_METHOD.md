@@ -198,7 +198,8 @@ dory 많아  →  '애교' 많아       ✅ (의도가 한국어면 맞음)
 
 - **멈춤**: 이벤트 탭 소스가 메인 런루프(`EventTapManager.swift:359-361`)라, 교정 실행의
   AX IPC + usleep이 전역 입력을 막을 수 있음. 권한 회수 시 무효 탭이 입력 경로에 잔존.
-  → Step 1-A(무효 탭 정리, `handleSystemTapDisabled`) 커밋. Step 1-B(실행을 메인 밖으로) 미착수.
+  → Step 1-A(무효 탭 정리, `handleSystemTapDisabled`) 커밋. 이어서 Step 1-B-1(상시 탭 감시로
+  복구 교착 해소, `9a9b800`) 커밋. Step 1-B 본체(공용 `Session/EditPlan` 직렬 실행 배관)는 미착수.
 - **"갑자기 안됨"**: 앱 전환 직후 AX 트리가 cold → 첫 토큰 포커스 체크 실패. KAIST CHI 2019가
   "모드 오류의 78%가 앱 전환 직후"라 보고(단, 우리 AX cold와 **같은 원인으로 입증된 건 아님** —
   같은 경계에서 겹치는 두 현상). → AX 워밍업 미착수.
@@ -284,13 +285,16 @@ NSSpellChecker 금지 — 버전·해시 고정 실단어 목록을 Python·Swif
 0개라 코퍼스 자체가 이 영역을 못 잰다. 게다가 현재 `K_strong`이 단음절을 전부 보존 중이라,
 건드리려면 게이트 완화 → 새 위험. 전용 문장 코퍼스로 따로 연구.
 
-**E. 우선순위 (코덱스 + 검증):**
-1. Step 1-A 권한회수·탭 생명주기 **실기 검증 마감** (사용자 협조 필요)
-2. Step 1-B 공용 `Session/EditPlan` + 직렬 실행 배관 (이후 모든 교정·제안의 공통 토대)
-3. AX cold-start 대응
-4. Step 2 필터 테스트·안내 문구 마감
-5. **결정적 Layer 1** (고정 사전) + 별도 fixture ← 체감 이득 큰 지점
-6. 실제 문장 단위 잔여 빈도 측정
+**E. 우선순위 (코덱스 + 검증):** — 진행 상태는 2026-07-21 기준
+
+1. Step 1-A 권한회수·탭 생명주기 **실기 검증 마감** (사용자 협조 필요) — 미완료
+2. Step 1-B 공용 `Session/EditPlan` + 직렬 실행 배관 (이후 모든 교정·제안의 공통 토대) — 미착수
+   (Step 1-B-1 상시 탭 감시만 `9a9b800`으로 선행 완료)
+3. AX cold-start 대응 — 미착수
+4. Step 2 필터 테스트·안내 문구 마감 — 부분 완료 (`a0ef0aa`)
+5. ~~**결정적 Layer 1** (고정 사전) + 별도 fixture~~ — **완료** (`7082163` 기반 + `bb7cc06` 배선).
+   `LexicalTiebreaker.swift`, `scripts/lexicon/`, `Corpus/lexical/v1/tiebreaker.tsv` parity 테스트
+6. 실제 문장 단위 잔여 빈도 측정 — 미착수
 7. (IMK 이후) 제안형 Step R 실험 — 자동 소급은 제안 정밀도 입증 후에만
 
 **F. R4-1·마이그레이션 경계:** Layer 1은 코어 밖 래퍼라 R4-1과 양립. 단 IMK 전환 중

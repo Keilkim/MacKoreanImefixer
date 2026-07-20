@@ -1,5 +1,19 @@
 # Mackor 하이브리드 실행 계획 — v2 (코덱스 NO-GO 반영 개정판)
 
+> ## ⏸ 상태: 일시 중단 (2026-07-21)
+>
+> **G0(재측정 팩)와 Phase A는 완료**됐고, **Phase B·T·C·D+E·F는 미착수**다. 계획 자체는
+> 폐기가 아니라 **보류**다 — 하이브리드가 필요하다는 결론은 G0 실측으로 확정됐다
+> (Corel은 IMK 키 소비를 무시 → 탭 필요, Chrome은 AX role로 거부 → IMK 필요).
+>
+> 중단 근거는 [`CORRECTION_METHOD.md`](CORRECTION_METHOD.md) §10-F **"마이그레이션과
+> Layer 1 출시는 분리"**다. 현재 활성 작업선은 기존 CGEvent 탭 엔진 위의 교정 품질
+> (Layer 1 어휘 tiebreaker)과 런타임 안전성이며, IMK 마이그레이션은 그 이후로 미뤘다.
+>
+> 재개할 때 확인할 것: 아래 §4 "문서 동기화" 항목 ①·③이 아직 수행되지 않았다.
+> 소스 트리에 `MackorSession`·`EditPlan`·`TapRenderer`·`TransportArbiter`는 존재하지 않는다.
+> 측정 원본과 프로브는 `MackorIMEProbe/`에 그대로 보존돼 있다.
+
 기준: `REQUIREMENTS.md` · 태그 `pre-imk` · 브랜치 `imk`
 방향 유지: **하이브리드(IMK 주 + CGEvent 탭 폴백)** — 방향 자체는 심판이 지지.
 NO-GO 사유였던 근거 결함·설계 허점을 전부 반영해 개정했다.

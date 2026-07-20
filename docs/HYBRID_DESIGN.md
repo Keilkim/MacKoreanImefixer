@@ -8,6 +8,19 @@
 > - 심판 선택: risk-first, risk-first
 > - 생성: 2026-07-20
 
+> ## ⚠ 개정 이력 — v2와의 차이 (2026-07-21)
+>
+> 이 문서는 **생성 시점(2026-07-20)의 근거 archive**이며, 이후 실측으로 뒤집힌 부분이 있다.
+> 실행 기준은 항상 [MIGRATION_PLAN.md](../MIGRATION_PLAN.md) v2가 우선한다.
+>
+> - **A-1(필드 42 마커 생존) — 반증됨.** 이 문서 :629는 A-1과 A-3이 "추론이지 측정이 아니다"라고
+>   스스로 경고했다. 이후 7차 측정에서 `rawUserData=0`으로 **마커 소실이 확정**됐다
+>   (`MackorIMEProbe/p0-round7-marker-survival.log`). 따라서 이 문서의 마커 기반 필터링 논증은
+>   그대로 쓸 수 없고, MIGRATION_PLAN v2의 barrier 방식이 이를 대체한다.
+> - **CorelDRAW의 IMK 소비 무시** — 이 문서 :29의 판정은 v2에서 한 번 "강한 가설"로 강등됐다가
+>   G0 재측정으로 다시 확정됐다.
+> - 전체 계획의 현재 상태(일시 중단)는 MIGRATION_PLAN 상단 배너를 참고한다.
+
 ---
 
 # Mackor 하이브리드 아키텍처 최종 설계 (IMK 주 경로 + CGEvent tap 폴백)
