@@ -19,19 +19,57 @@
 - 특정 앱군(네이티브 전용 등)으로 범위를 좁히는 것은 **요구사항 미충족**이다.
 - 브라우저(Safari·Chrome), Electron(VS Code), 네이티브(카톡) 모두 포함한다.
 
-### R2. 한글 조합 문제를 해결해야 한다 — 코렐만이 아니다
+### R2. 한글 조합이 깨지는 현상 보완 — 코렐만이 아니다
 
+> "한글로 작성하는데 코렐드로우처럼 한글이 먹히는 현상 보완"
 > "코렐 뿐만이 아니라 ㅋㅋㅋㅋㅋㅋㅋ"
 
-- 이 현상은 CorelDRAW **한 앱의 문제가 아니라 여러 프로그램에서 공통으로** 나타난다.
-- 따라서 "문제 앱 목록을 등록해서 처리"하는 방식은 근본 해결이 아니다.
-- **TODO:** 같은 현상이 나타나는 프로그램 목록을 사용자에게 확인받아 여기에 채운다.
-  현재 확인된 것: CorelDRAW. (나머지 미확인 — 추측으로 채우지 말 것)
+- 한글을 입력하는데 앱이 조합 중인 글자를 **먹어버리는(삼키는)** 현상.
+- CorelDRAW **한 앱의 문제가 아니라 여러 프로그램에서 공통으로** 나타난다.
+- 따라서 "문제 앱 목록을 등록해서 처리"하는 방식은 근본 해결이 **아니다.**
+  전역으로 동작해야 한다 (R1과 결합).
+- **TODO:** 같은 현상이 나타나는 프로그램 목록을 사용자에게 확인받아 채운다.
+  현재 명시적으로 확인된 것: CorelDRAW. (나머지 미확인 — 추측으로 채우지 말 것)
 
-### R3. 한/영 오입력 자동 변환을 유지해야 한다
+### R3. 오입력 자동 전환 — 양방향 + 원문 칩 + 입력 소스 강제 전환
 
-영문 자판 상태로 한글을 친 경우(`dkwn` → `아주`) 자동으로 바로잡는 기능.
-R2와 함께 **두 기능 모두** 유지되어야 한다. 하나를 버리는 설계는 미충족이다.
+> "한글로 쓰는데 사실 영어로 써야 말이 되는걸 쓰던걸 영어로 자동 전환
+> (전환 전것은 위에 버튼식으로 보여주기) 이후 영어로 한영 전환 강제 또는 영어 > 한글"
+
+세 가지 동작이 **하나의 흐름**으로 묶인다. 어느 하나도 빠지면 미충족이다.
+
+**R3-a. 자동 전환 — 양방향**
+
+| 방향 | 상황 | 예 |
+|---|---|---|
+| 한 → 영 | 한글 IME가 켜진 채로 영어를 침 | `ㅗ디ㅣㅐ` → `hello` |
+| 영 → 한 | 영문 자판 상태로 한글을 침 | `dkwn` → `아주` |
+
+두 방향 **모두** 지원해야 한다. 한쪽만 되는 것은 미충족.
+
+**R3-b. 전환 전 원문을 위에 버튼식으로 표시**
+
+- 자동 전환이 일어나면 **바꾸기 전 원문**을 입력 지점 위에 버튼(칩) 형태로 보여준다.
+- 사용자가 그 버튼을 누르면 원문으로 되돌릴 수 있어야 한다.
+- 기존 구현 대응: `CorrectionNoticeController.swift`,
+  `onOriginalChoiceAvailable` / `isOriginalChoiceActive` / `restoreOriginalChoice` /
+  `cancelOriginalChoice` / `markOriginalChoiceChipVisible` (`MackorApp.swift:189-231`),
+  `originalChoiceHitTest` (`MackorApp.swift:233`)
+
+**R3-c. 전환 후 입력 소스 강제 전환**
+
+- 텍스트만 바꾸고 끝내면 안 된다. 이어서 치는 글자가 또 틀리기 때문이다.
+- 전환한 언어에 맞게 **한/영 입력 소스를 강제로 바꾼다.**
+  (한→영 전환이면 입력 소스도 영문으로, 영→한이면 한글로)
+- 기존 구현 대응: `InputSourceController.swift`,
+  `onInputSourceSwitch` / `onInputSourceRestore` (`MackorApp.swift:249-253`),
+  `AppMonitor.restoreInputSource` (`AppMonitor.swift:266-271`)
+
+### R3+R2 관계
+
+두 기능은 **모두** 유지되어야 한다. 하나를 버리는 설계는 미충족이다.
+현재 코드에서는 `AppMonitor.swift:276`이 두 기능을 배타적으로 만들어 놓았는데
+(`.allApps`면 R2가 꺼짐), **IMK 이후에는 둘이 동시에 동작해야 한다.**
 
 ### R4. 지금 방식 그대로 IMK로 옮긴다
 
@@ -40,6 +78,36 @@ R2와 함께 **두 기능 모두** 유지되어야 한다. 하나를 버리는 �
 - 동작·사용자 경험은 현재와 동일하게 유지한다.
 - 바꾸는 것은 **구현 계층**이다: CGEvent 탭 + Accessibility → InputMethodKit.
 - 기능 축소나 동작 변경을 동반한 "재설계"가 아니다.
+
+### R4-1. 코어 규칙은 그대로 전수한다 (재작성 금지)
+
+> "우리가 개발했던 코어 규칙도 전수하는거지?"
+
+IMK 전환은 **계층 교체**지 규칙 재작성이 아니다. 아래 자산은 손대지 않고 그대로
+옮긴다. 규칙을 다시 만들거나 "더 나은 방식"으로 바꾸는 것은 **요구사항 위반**이다.
+
+**전수 대상**
+
+| 구분 | 대상 |
+|---|---|
+| 규칙 코드 | `LayoutCorrectionPolicy.swift`(§2.3), `EnglishPhonotactics.swift`(§2.2), `HangulStructure.swift`(§2.1), `KSX1001Table.swift`, `WrongLayoutCorrectionEngine.swift` |
+| 조합 코드 | `HangulCompositionTracker.swift`, `HangulUnicode.swift`, `KeycodeToJamoMap.swift` |
+| 골든 코퍼스 | `Corpus/structure-correction/v2/golden.tsv` (406줄), v1 `holdout.tsv`(28) · `tune.tsv`(24) · `system-evidence.tsv`(21) |
+| 규칙 벤치 | `scripts/rulebench/` (auto.py, bench.py, genrules.py, make_golden.py, make_ksx1001.py, ko_words.txt, ksx1001.txt) |
+| 규범 문서 | `STRUCTURE_CORRECTION_DESIGN4.md` (§2.1–2.3 규칙 ID 정의), `STRUCTURE_CORRECTION_DESIGN3.md` (마침표 상태기계·원문 선택 UI) |
+
+**전수 보증 방법**
+
+규칙이 실제로 보존됐는지는 말로 확인하지 않는다. **테스트와 코퍼스가 판정한다.**
+
+- 규칙 관련 테스트 44개(`LayoutCorrectionPolicyTests` 17,
+  `WrongLayoutCorrectionEngineTests` 19, `KSX1001TableTests` 6,
+  `StructureCorrectionCorpusTests` 2)가 **수정 없이 그대로 통과**해야 한다.
+- 골든 코퍼스 판정 결과가 마이그레이션 전후로 **동일**해야 한다.
+- 테스트를 고쳐서 통과시키는 것은 전수 실패다. 테스트가 기준이다.
+
+즉 IMK 계층은 이 엔진들을 **호출하는 껍데기**여야 한다. 엔진 안으로 IMK 개념이
+스며들면 안 된다.
 
 ### R5. 백업 가능해야 한다
 
