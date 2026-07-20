@@ -35,11 +35,28 @@ jobs:
             scripts/prepare-appcast.sh \
             scripts/validate-release.sh
 
-      # R4-1 동결 가드: IMK 마이그레이션 동안 코어 규칙 엔진 9파일·순수 테스트
-      # 8파일·골든 코퍼스 4파일이 바이트 단위로 바뀌지 않았음을 보증한다.
-      # 이 파일들을 의도적으로 바꾸는 PR은 매니페스트 재생성 근거를 커밋에 명시해야 한다.
+      # R4-1 동결 가드: IMK 마이그레이션 동안 코어 규칙 자산 31파일(엔진 9·순수 테스트 8·
+      # 코퍼스 5·rulebench 7·규범 문서 2)이 바이트 단위로 바뀌지 않았음을 보증한다.
+      #
+      # 두 겹으로 검사한다. 해시 대조만 하면 같은 PR에서 엔진과 매니페스트를 함께
+      # 바꿔 통과시킬 수 있으므로, 기준 태그 pre-imk와 직접 diff도 함께 본다.
       - name: Verify engine freeze (R4-1)
-        run: shasum -a 256 -c scripts/engine-freeze.sha256
+        run: |
+          shasum -a 256 -c scripts/engine-freeze.sha256
+
+          git fetch --tags --quiet origin 'refs/tags/pre-imk:refs/tags/pre-imk' || true
+          if git rev-parse -q --verify refs/tags/pre-imk >/dev/null; then
+            CHANGED=$(git diff --name-only refs/tags/pre-imk HEAD -- \
+              $(awk '{print $2}' scripts/engine-freeze.sha256))
+            if [ -n "$CHANGED" ]; then
+              echo "R4-1 위반: 동결 대상이 기준 태그 pre-imk 이후 변경됨" >&2
+              echo "$CHANGED" >&2
+              exit 1
+            fi
+            echo "동결 대상 $(wc -l < scripts/engine-freeze.sha256)파일: pre-imk와 동일"
+          else
+            echo "경고: pre-imk 태그를 찾지 못해 기준 대조를 건너뜀" >&2
+          fi
 
       - name: Run unit tests
         run: |
