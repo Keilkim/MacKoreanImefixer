@@ -35,64 +35,34 @@ enum FocusedInputSafety {
     }
 
     /// 이벤트 탭 콜백이 응답하지 않는 앱의 Accessibility IPC에 오래
-    /// 묶이지 않도록 이 프로세스의 AX 요청 시간을 짧게 제한합니다.
-    private static let systemWideElement: AXUIElement = {
-        let element = AXUIElementCreateSystemWide()
-        AXUIElementSetMessagingTimeout(element, 0.05)
-        return element
-    }()
+    /// 묶이지 않도록 거는 요청 시간 제한.
+    ///
+    /// 이 값이 곧 교정 한 번이 시스템 입력을 붙잡을 수 있는 상한입니다.
+    /// 늘리면 느린 앱에서 입력 전체가 그만큼 지연되므로 함부로 올리지 마세요.
+    private static let messagingTimeout: Float = 0.05
 
+    /// 첫 조회 비용을 미리 치릅니다. 앱 시작 시 한 번 부르면 충분합니다.
     static func prepare() {
-        _ = systemWideElement
+        warmFocusCache()
     }
 
-    /// 포커스 캐시를 데웁니다. **결과를 쓰지 않고 버립니다.**
+    /// AX 연결을 미리 데웁니다. **결과를 쓰지 않고 버립니다.**
     ///
-    /// 실측(진단 로그)으로 확인한 문제: Mackor가 막 뜬 직후나 앱을 전환한 직후의
-    /// 첫 AX 읽기는 *실패*하는 게 아니라 **낡은 캐럿 위치를 돌려줍니다.**
-    /// 한 사례에서 실제 캐럿은 0인데 `initial=32`가 잡혔고, 그 토큰의 교정은
-    /// 위치 검증(`current == initial + 입력길이`)에서 어긋나 포기됐습니다.
-    /// 포기 자체는 옳은 안전 동작이지만 — 엉뚱한 자리의 글자를 지우면 안 되므로 —
-    /// 사용자에게는 "첫 단어만 안 바뀐다"로 보입니다.
+    /// 앱을 전환하면 그 앱과의 AX 연결을 새로 맺어야 하고, 그 첫 조회는 이후
+    /// 조회보다 훨씬 느립니다(실측: 데워진 뒤 중앙값 0.4ms, 차가울 때 최대 57ms).
+    /// 게다가 그 첫 조회는 *실패*가 아니라 **낡은 캐럿 위치를 돌려주기도** 합니다 —
+    /// 진단 로그에서 실제 캐럿이 0인데 `initial=32`가 잡혀 그 토큰의 교정이
+    /// 통째로 포기된 사례를 확인했습니다("첫 단어만 안 바뀐다").
     ///
-    /// 재시도로는 못 고칩니다. 재시도는 `current`만 다시 읽고 `initial`은 캡처
-    /// 시점 값에 고정되는데, 틀린 쪽이 `initial`이기 때문입니다. 그래서 캡처
-    /// **이전에** 한 번 버리는 읽기를 넣어 캐시를 갱신합니다.
+    /// 실제 입력이 오기 전에 여기서 그 비용을 치르고 캐시를 갱신합니다.
     ///
-    /// 반드시 이벤트 탭 콜백 **밖에서** 호출하세요. AX IPC가 탭 콜백을 늦추면
+    /// 반드시 이벤트 탭 콜백 **밖에서** 호출하세요. 탭 콜백에서 AX를 기다리면
     /// 시스템 입력 전체가 지연됩니다.
-    /// 워밍업 전용 시스템 전역 요소. **일반 조회보다 훨씬 긴 타임아웃**을 씁니다.
-    ///
-    /// 실측(이 맥): Chrome의 포커스 조회는 데워지면 중앙값 0.4ms·p95 0.6ms지만
-    /// **차가운 첫 조회는 약 57ms**가 걸립니다. 일반 경로의 50ms 제한으로는 그
-    /// 첫 조회가 반드시 타임아웃 나고, 그래서 Chrome에서는 자동 교정이 전혀
-    /// 걸리지 않았습니다(`focus token missing focused element`).
-    ///
-    /// 이 워밍업은 이벤트 탭 콜백 밖에서만 돌므로 기다려도 안전합니다. 여기서
-    /// 차가운 비용을 치러 두면 탭 경로의 조회는 데워진 0.4ms 경로를 타게 됩니다.
-    private static let warmingElement: AXUIElement = {
-        let element = AXUIElementCreateSystemWide()
-        AXUIElementSetMessagingTimeout(element, 2.0)
-        return element
-    }()
-
-    /// 포커스 캐시를 데웁니다. **결과를 쓰지 않고 버립니다.**
-    ///
-    /// 반드시 이벤트 탭 콜백 **밖에서** 호출하세요. 이 함수는 느린 앱을 기다리도록
-    /// 일부러 긴 타임아웃을 쓰므로, 탭 콜백에서 부르면 시스템 입력 전체가 멈춥니다.
     static func warmFocusCache() {
-        _ = systemWideElement
-        var focused: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(
-            warmingElement,
-            kAXFocusedUIElementAttribute as CFString,
-            &focused
-        ) == .success, let element = focused else {
-            return
-        }
+        guard let element = focusedElement() else { return }
         var value: CFTypeRef?
         _ = AXUIElementCopyAttributeValue(
-            element as! AXUIElement,
+            element,
             kAXSelectedTextRangeAttribute as CFString,
             &value
         )
@@ -408,10 +378,45 @@ enum FocusedInputSafety {
         }) ?? NSScreen.main
     }
 
+    /// 최전면 앱의 요소를 캐시합니다. 매 조회마다 만들면 AX 연결 핸드셰이크를
+    /// 반복해 느려집니다. pid가 바뀌면 버립니다.
+    private static var frontmostElementCache: (pid: pid_t, element: AXUIElement)?
+
+    /// 포커스된 요소를 **최전면 앱에 직접** 물어서 얻습니다.
+    ///
+    /// 전에는 시스템 전역 요소(`AXUIElementCreateSystemWide`)에 물었는데,
+    /// **크로미움 계열 앱에서 그 경로가 실패합니다.** 이 맥에서 측정한 결과
+    /// (Chrome이 최전면, 텍스트 입력란에 포커스가 있는 상태):
+    ///
+    ///     타임아웃 50ms — 시스템 전역: -25204 실패 / 앱 직접: 성공(AXComboBox)
+    ///     타임아웃  2초 — 시스템 전역: -25204 실패 / 앱 직접: 성공
+    ///
+    /// 타임아웃을 아무리 늘려도 전역 경로는 실패하고, 앱에 직접 물으면 50ms
+    /// 안에 곧바로 성공합니다. 그래서 Chrome·VS Code 같은 크로미움 앱에서는
+    /// 자동 교정이 전혀 걸리지 않았고, Safari·카카오톡 같은 네이티브 앱에서는
+    /// 잘 걸렸습니다.
+    ///
+    /// 전역 요소는 낡은 포커스를 돌려주기도 합니다. 앱에 직접 물으면 그 경로도
+    /// 함께 없어집니다.
     private static func focusedElement() -> AXUIElement? {
+        guard let app = NSWorkspace.shared.frontmostApplication else { return nil }
+        let pid = app.processIdentifier
+        guard pid != ProcessInfo.processInfo.processIdentifier else { return nil }
+
+        let element: AXUIElement
+        if let cached = frontmostElementCache, cached.pid == pid {
+            element = cached.element
+        } else {
+            element = AXUIElementCreateApplication(pid)
+            // 응답하지 않는 앱에 이벤트 탭 콜백이 오래 묶이지 않도록
+            // 전역 요소와 같은 제한을 겁니다.
+            AXUIElementSetMessagingTimeout(element, messagingTimeout)
+            frontmostElementCache = (pid, element)
+        }
+
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(
-            systemWideElement,
+            element,
             kAXFocusedUIElementAttribute as CFString,
             &value
         ) == .success,
