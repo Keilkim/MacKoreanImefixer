@@ -670,17 +670,30 @@ owner 전이)를 Phase C에 반드시 구현한다. 주입 카운터 단독은 �
 - [x] 전체 테스트 통과 확인 (161 tests, 0 failures)
 - [x] **백업 커밋** (R5) — `a1c5828` + 태그 `pre-imk`, 원격 푸시 완료 (`origin/main` = `d27ea90`)
 - [x] `ARCHITECTURE.md:444` 인증서 기술 정정 (RELEASING.md와 모순 해소)
-- [ ] **P0-1. IMK 프로토타입으로 D1 전제 검증** — 최소 기능 IMK 입력기를 만들어
-      `TISSelectInputSource`로 Apple 입력 소스로 전환했을 때 자기 자신이 비활성화되어
-      입력 관찰이 끊기는지 **실측**한다. 결정 D1의 근거가 문서 기반 추론이므로
-      **구현 착수 전에 반드시 확인한다.**
+- [x] **P0-1. IMK 프로토타입으로 D1 전제 검증** — 3차 측정에서 성립 확인.
+      `selectMode`로 자기 다른 모드 전환 후에도 `handle()` 수신이 이어진다.
+      (2차 실패는 대상 모드가 `enabled=false`였던 것이 원인)
 - [x] **P0-2. R2 대상 프로그램 목록 확보** — 출처 있는 25종 수집 완료 (§R2 표).
       실기기 시험 대상 선정: 필수 5종(R1 표) + 확장(Discord·Notion·Obsidian·터미널 1종)
-- [ ] IMK 마이그레이션 설계 확정 (R4) — P0-1 결과 반영 후
-- [ ] IMK 구현
+- [x] **G0 재측정 팩** — 하이브리드가 실측으로 확정됐다.
+      Corel 소비 무시(6차, 감사 가능) + Chrome AX role 거부(5차) →
+      **양쪽 다 필요 = 하이브리드**. A-1 마커 소실 확정(7차)으로
+      injection barrier가 필수로 승격.
+- [x] **Phase A. R2+R3 공존 복원** — `AppMonitor`의 scope 결합 제거 +
+      공존 상태 백스페이스 토큰 무효화. 테스트 173개 통과. 빌드 1.3(9).
+      **공시: `.allApps`에서 등록된 앱 전부가 직접 조합을 받는다.**
+      앱별 조합 토글은 계속 off 스위치로 유효하다.
+      (이 단계는 CorelDRAW 복구이지 R1 충족이 아니다 — 조합은 여전히 앱 등록을
+      요구하며, R1은 하이브리드의 rung 분류기가 담당한다)
+- [ ] Phase B. `MackorSession` + `EditPlan` 추출, 탭을 `TapRenderer`로
+- [ ] Phase T. 설치 토폴로지 확정 (번들 ID·경로·마이그레이션)
+- [ ] Phase C. `TransportArbiter`(epoch) + IMK 골격 + injection barrier
+- [ ] Phase D+E. IMK 조합 + R3 동시 활성화
+- [ ] Phase F. 토폴로지 전환 + 서명·공증
 - [ ] 권한 반복 가설 검증 — Developer ID 서명본 vs ad-hoc 재설치 비교
-- [ ] R2 대상 프로그램 목록 확인
 - [ ] 릴리스 절차 진행
+- [ ] 별도 PR: `:435` 롤오버 경합 (방향: 무효화가 아니라 즉시 적용)
+- [ ] 별도 PR: 비공존 경로의 후행 마침표 백스페이스 발산
 
 ---
 
