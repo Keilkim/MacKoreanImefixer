@@ -23,6 +23,11 @@ protocol EventTapFocusInspecting {
         original: String,
         boundaryUTF16Count: Int
     ) -> Bool
+    /// 화면에 실제로 찍힌 글자로 판단한 방향. 못 읽으면 nil.
+    func scriptBeforeCaret(
+        _ token: FocusedInputSafety.FocusToken,
+        boundaryUTF16Count: Int
+    ) -> CorrectionDirection?
 }
 
 extension EventTapFocusInspecting {
@@ -40,6 +45,13 @@ extension EventTapFocusInspecting {
         original: String,
         boundaryUTF16Count: Int
     ) -> Bool { false }
+
+    /// 실제 AX 요소가 없는 테스트 대역은 화면을 읽을 수 없으므로 nil입니다.
+    /// 기존 방향 판정이 그대로 쓰여 동작이 변하지 않습니다.
+    func scriptBeforeCaret(
+        _ token: FocusedInputSafety.FocusToken,
+        boundaryUTF16Count: Int
+    ) -> CorrectionDirection? { nil }
 }
 
 private struct AccessibilityEventTapFocusInspector: EventTapFocusInspecting {
@@ -61,6 +73,13 @@ private struct AccessibilityEventTapFocusInspector: EventTapFocusInspecting {
             original: original,
             boundaryUTF16Count: boundaryUTF16Count
         )
+    }
+
+    func scriptBeforeCaret(
+        _ token: FocusedInputSafety.FocusToken,
+        boundaryUTF16Count: Int
+    ) -> CorrectionDirection? {
+        FocusedInputSafety.scriptBeforeCaret(token, boundaryUTF16Count: boundaryUTF16Count)
     }
 
     func isCurrentFocus(
@@ -1439,6 +1458,19 @@ class EventTapManager {
         if let decision = autoCorrectionEngine.processBoundary(boundary) {
             return decision
         }
+        // 방향을 **믿음이 아니라 증거로** 다시 확인합니다.
+        //
+        // 엔진은 "지금 입력 소스가 무엇인가"로 방향을 정하는데, 그 믿음은
+        // 어긋날 수 있습니다 — 시스템(TIS)은 한글이라는데 앱은 계속 라틴을
+        // 찍는 경우가 실제로 있습니다. 그러면 영자판으로 친 `dkwn`을
+        // 한글자판으로 친 것으로 오판해 `아주` 교정을 통째로 놓칩니다.
+        //
+        // 화면에 찍힌 글자는 증거입니다. 캐럿 앞 글자가 라틴인데 엔진이
+        // 한글자판이라 믿었다면, 올바른 방향으로 동결 정책을 다시 돌립니다.
+        if let decision = directionCorrectedDecision(boundary: boundary, keystrokes: keystrokes) {
+            return decision
+        }
+
         if let decision = lexicalDecision(boundary: boundary, keystrokes: keystrokes) {
             return decision
         }
@@ -1458,6 +1490,53 @@ class EventTapManager {
                 + FocusedInputSafety.diagnosticContext()
         )
         return nil
+    }
+
+    /// 화면에 실제로 찍힌 글자로 방향을 확정하고, 엔진이 반대로 판정했다면
+    /// 올바른 방향으로 동결 정책을 다시 돌립니다.
+    ///
+    /// 사본이 발산했을 수 있으므로 여기서도 길이를 대조합니다. 증거를 못 읽거나
+    /// 엔진 판정과 방향이 같으면 아무것도 하지 않습니다.
+    private func directionCorrectedDecision(
+        boundary: CorrectionBoundary,
+        keystrokes: [PhysicalKeystroke]
+    ) -> CorrectionDecision? {
+        guard let diagnostic = autoCorrectionEngine.lastDiagnostic,
+              diagnostic.boundary == boundary,
+              diagnostic.tokenLength == keystrokes.count,
+              !keystrokes.isEmpty,
+              let focusToken = automaticCorrectionFocusToken,
+              // 경계 문자는 아직 앱에 들어가기 전이므로 캐럿 바로 앞이 토큰 끝입니다.
+              let observed = focusInspector.scriptBeforeCaret(focusToken, boundaryUTF16Count: 0),
+              observed != diagnostic.direction else {
+            return nil
+        }
+
+        let source: InputSourceKind = observed == .latinToKorean ? .supportedLatin : .koreanTwoSet
+        guard case .correct(let tier, let original, let replacement, let rule) =
+            LayoutCorrectionPolicy.evaluate(keystrokes: keystrokes, inputSource: source),
+            original != replacement else {
+            return nil
+        }
+
+        EventTapManager.diagnostic(
+            "direction corrected believed=\(diagnostic.direction) observed=\(observed) "
+                + "\(original)->\(replacement) " + FocusedInputSafety.diagnosticContext()
+        )
+        return CorrectionDecision(
+            original: original,
+            replacement: replacement,
+            direction: observed,
+            tier: tier,
+            rule: rule,
+            diagnostic: CorrectionDiagnostic(
+                direction: observed,
+                tier: tier,
+                rule: rule,
+                tokenLength: keystrokes.count,
+                boundary: boundary
+            )
+        )
     }
 
     /// 규칙이 보존한 토큰을 어휘로 다시 판정합니다.

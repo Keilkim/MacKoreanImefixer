@@ -368,6 +368,62 @@ enum FocusedInputSafety {
         return matches
     }
 
+    /// 화면에 **실제로 찍힌** 글자가 한글인지 라틴인지 확인합니다.
+    ///
+    /// 지금까지 교정 방향은 "입력 소스가 무엇인가"라는 **믿음**으로 정했습니다.
+    /// 그 믿음은 어긋날 수 있습니다 — 시스템(TIS)은 한글이라는데 앱은 계속
+    /// 라틴을 찍는 경우가 실제로 있습니다. 그러면 영자판으로 친 `dkwn`을
+    /// 한글자판으로 친 것으로 오판해 `아주` 교정을 놓칩니다.
+    ///
+    /// 화면에 찍힌 글자는 믿음이 아니라 **증거**입니다. 캐럿 바로 앞 한 글자의
+    /// 문자 종류만 보면 어느 자판으로 쳤는지 확정됩니다.
+    ///
+    /// 경계 문자(공백 등)는 이미 앱에 들어갔으므로 그만큼 앞을 봅니다.
+    /// 판단할 수 없으면 `nil` — 호출자는 기존 믿음을 그대로 씁니다.
+    static func scriptBeforeCaret(
+        _ token: FocusToken,
+        boundaryUTF16Count: Int
+    ) -> CorrectionDirection? {
+        guard boundaryUTF16Count >= 0, let element = token.element else { return nil }
+        var selectionValue: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(
+            element,
+            kAXSelectedTextRangeAttribute as CFString,
+            &selectionValue
+        ) == .success,
+        let selectionValue,
+        let caret = selectedTextRange(from: selectionValue),
+        caret.length == 0 else {
+            return nil
+        }
+
+        let start = caret.location - boundaryUTF16Count - 1
+        guard start >= 0 else { return nil }
+        var range = CFRange(location: start, length: 1)
+        guard let rangeValue = AXValueCreate(.cfRange, &range) else { return nil }
+        var stringValue: CFTypeRef?
+        guard AXUIElementCopyParameterizedAttributeValue(
+            element,
+            kAXStringForRangeParameterizedAttribute as CFString,
+            rangeValue,
+            &stringValue
+        ) == .success,
+        let text = stringValue as? String,
+        let scalar = text.unicodeScalars.first else {
+            return nil
+        }
+
+        // 완성형 음절·자모 어느 쪽이든 한글이면 한글자판으로 친 것입니다.
+        let isHangul = (0xAC00...0xD7A3).contains(scalar.value)
+            || (0x1100...0x11FF).contains(scalar.value)
+            || (0x3130...0x318F).contains(scalar.value)
+        if isHangul { return .koreanToLatin }
+        let isLatin = (0x41...0x5A).contains(scalar.value)
+            || (0x61...0x7A).contains(scalar.value)
+        if isLatin { return .latinToKorean }
+        return nil
+    }
+
     /// Converts Quartz global event coordinates to AppKit global coordinates.
     /// The main display defines the shared vertical origin even when another
     /// display has a negative x/y origin.
