@@ -20,6 +20,10 @@ import InputMethodKit
 class ProbeInputController: IMKInputController {
 
     private var markedProbeActive = false
+    /// [G0-1] 다음 일반 키 1개를 소비하도록 무장된 상태
+    private var consumeNextKeyArmed = false
+    /// [G0-2] 직접 조합 토글 상태
+    private var directComposeActive = false
 
     private func textClient(_ sender: Any!) -> (IMKTextInput & NSObjectProtocol)? {
         sender as? (IMKTextInput & NSObjectProtocol)
@@ -42,12 +46,22 @@ class ProbeInputController: IMKInputController {
     // MARK: - 수명 콜백
 
     override func activateServer(_ sender: Any!) {
-        ProbeLog.line("activateServer client=\(clientID(sender)) \(TISProbe.snapshot())")
+        // [G0-6] flap 계측: epoch + 직전 전이로부터의 간격.
+        // round4 로그에 같은 클라이언트의 1~3ms activate/deactivate 쌍이 있었고,
+        // 이 flap 자체가 "먹힘" 증상의 원인일 가능성이 제기됐다. TTL을 정하기 전에
+        // 분포부터 남긴다.
+        ProbeSessionEpoch.begin(client: clientID(sender))
+        ProbeLog.line("activateServer client=\(clientID(sender)) epoch=\(ProbeSessionEpoch.current) Δ=\(ProbeSessionEpoch.deltaDescription) \(TISProbe.snapshot())")
         super.activateServer(sender)
     }
 
     override func deactivateServer(_ sender: Any!) {
-        ProbeLog.line("deactivateServer client=\(clientID(sender))")
+        ProbeSessionEpoch.end(client: clientID(sender))
+        ProbeLog.line("deactivateServer client=\(clientID(sender)) epoch=\(ProbeSessionEpoch.current) Δ=\(ProbeSessionEpoch.deltaDescription)")
+        // 세션이 끝나면 무장 상태를 반드시 해제한다 — 다음 앱에서 엉뚱한 키가
+        // 소비되면 측정이 오염된다.
+        consumeNextKeyArmed = false
+        directComposeActive = false
         super.deactivateServer(sender)
     }
 
@@ -69,6 +83,17 @@ class ProbeInputController: IMKInputController {
 
     // MARK: - 이벤트 처리
 
+    /// 모든 반환 경로를 한 곳으로 모아 **반환값을 반드시 로그에 남긴다.**
+    ///
+    /// 1차 감사 실패의 원인: 이전 판은 반환값을 기록하지 않아, 화면에 나타난 문자가
+    /// 어느 키에 대응하는지 로그만으로 재구성할 수 없었다. 그 결과 "CorelDRAW가 키
+    /// 소비를 무시한다"는 결론이 감사 불가가 되어 철회됐다. 이제 모든 keyDown이
+    /// `RET=true/false`와 함께 기록된다.
+    private func ret(_ value: Bool, _ detail: String) -> Bool {
+        ProbeLog.line("RET=\(value ? "true(소비)" : "false(통과)") \(detail)")
+        return value
+    }
+
     override func handle(_ event: NSEvent!, client sender: Any!) -> Bool {
         guard let event else { return false }
 
@@ -87,15 +112,23 @@ class ProbeInputController: IMKInputController {
 
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         let keycode = event.keyCode
+        let cid = clientID(sender)
+        let chars = event.characters ?? ""
 
         if flags.contains(.command) {
-            ProbeLog.line("CMD-combo REACHED handle: keycode=\(keycode) flags=\(flagString(flags)) client=\(clientID(sender))")
-            return false
+            return ret(false, "CMD-combo REACHED handle keycode=\(keycode) flags=\(flagString(flags)) client=\(cid)")
         }
 
         if let measurement = measurementTrigger(keycode: keycode, flags: flags) {
             run(measurement, client: sender)
-            return true
+            return ret(true, "TRIGGER \(measurement.rawValue) keycode=\(keycode) flags=\(flagString(flags)) client=\(cid)")
+        }
+
+        // [G0-1] 소비 정직성 측정: 무장돼 있으면 이 일반 키 하나를 소비한다.
+        // 화면에 이 문자가 나타나면 앱이 IMK 소비를 무시하는 것이다.
+        if consumeNextKeyArmed {
+            consumeNextKeyArmed = false
+            return ret(true, "CONSUME-TEST 이 키를 소비함 keycode=\(keycode) chars=[\(chars)] client=\(cid) — 화면에 [\(chars)]가 보이면 앱이 소비를 무시한 것")
         }
 
         // 물리/합성 구분 기록.
@@ -106,15 +139,16 @@ class ProbeInputController: IMKInputController {
         // (a) 합성 이벤트가 handle()에 도달하는가
         // (b) 필드 42가 CGEvent → WindowServer → TSM → NSEvent 왕복에서 살아남는가
         let raw = event.cgEvent?.getIntegerValueField(CGEventField(rawValue: 42)!)
-        let synthetic = (raw == 0x4847_4C46)
-        ProbeLog.line("keyDown keycode=\(keycode) flags=\(flagString(flags)) chars=\(event.characters ?? "") autorepeat=\(event.isARepeat) mode=\(ProbeModeState.current) rawUserData=\(raw.map(String.init) ?? "nil") synth?=\(synthetic) client=\(clientID(sender))")
-        return false
+        let synthetic = (raw == 0x4847_4C46)   // 0x48474C46 = 1212632134
+        return ret(false, "keyDown keycode=\(keycode) flags=\(flagString(flags)) chars=[\(chars)] autorepeat=\(event.isARepeat) mode=\(ProbeModeState.current) rawUserData=\(raw.map(String.init) ?? "nil") synth?=\(synthetic) client=\(cid)")
     }
 
     // MARK: - 측정
 
     private enum Measurement: String {
         case selectMode, markedProbe, caretRect, rangedInsert, snapshot, mozcReconvert, rangedDelete
+        case armConsume        // [G0-1] 다음 일반 키 1개를 소비하도록 무장
+        case directCompose     // [G0-2] setMarkedText(NSNotFound) 직접 조합 표시 여부
     }
 
     private func measurementTrigger(keycode: UInt16, flags: NSEvent.ModifierFlags) -> Measurement? {
@@ -126,6 +160,8 @@ class ProbeInputController: IMKInputController {
         case UInt16(kVK_F5): return .snapshot
         case UInt16(kVK_F6): return .mozcReconvert
         case UInt16(kVK_F7): return .rangedDelete
+        case UInt16(kVK_F8): return .armConsume
+        case UInt16(kVK_F9): return .directCompose
         default: break
         }
         guard flags.contains(.control), flags.contains(.option) else { return nil }
@@ -137,6 +173,8 @@ class ProbeInputController: IMKInputController {
         case UInt16(kVK_ANSI_5): return .snapshot
         case UInt16(kVK_ANSI_6): return .mozcReconvert
         case UInt16(kVK_ANSI_7): return .rangedDelete
+        case UInt16(kVK_ANSI_8): return .armConsume
+        case UInt16(kVK_ANSI_9): return .directCompose
         default: return nil
         }
     }
@@ -244,6 +282,28 @@ class ProbeInputController: IMKInputController {
             client.insertText("", replacementRange: target)
             docText(client, "AFTER")
 
+        case .armConsume:
+            // [G0-1] 다음 일반 키 1개를 소비하도록 무장.
+            consumeNextKeyArmed = true
+            ProbeLog.line("MEASURE armConsume: 무장됨 — 다음 일반 문자 키 1개를 소비한다 client=\(cid)")
+
+        case .directCompose:
+            // [G0-2] 직접 조합 가능 여부. 대상 범위 없이(NSNotFound) 캐럿에 조합만 건다.
+            // Corel이 이걸 표시·유지하면 rung 3 없이 IMK 조합이 가능하다는 뜻이라
+            // 하이브리드 범위가 줄어든다.
+            if directComposeActive {
+                client.setMarkedText("", selectionRange: NSRange(location: 0, length: 0),
+                                     replacementRange: NSRange(location: NSNotFound, length: 0))
+                directComposeActive = false
+                ProbeLog.line("MEASURE directCompose: 클리어 marked=\(ProbeLog.range(client.markedRange())) client=\(cid)")
+            } else {
+                client.setMarkedText("ㅎ", selectionRange: NSRange(location: 1, length: 0),
+                                     replacementRange: NSRange(location: NSNotFound, length: 0))
+                directComposeActive = true
+                ProbeLog.line("MEASURE directCompose: setMarkedText(\"ㅎ\", NSNotFound) -> marked=\(ProbeLog.range(client.markedRange())) sel=\(ProbeLog.range(client.selectedRange())) client=\(cid) — 화면에 ㅎ가 보이는지 육안 확인")
+                docText(client, "AFTER-directCompose")
+            }
+
         case .snapshot:
             let supportsDocAccess = client.supportsProperty(TSMDocumentPropertyTag(kTSMDocumentSupportDocumentAccessPropertyTag))
             let attrs = client.validAttributesForMarkedText() ?? []
@@ -278,6 +338,36 @@ enum TISProbe {
             modeID = Unmanaged<CFString>.fromOpaque(p).takeUnretainedValue() as String
         }
         return "TIS[sourceID=\(prop(kTISPropertyInputSourceID)) modeID=\(modeID)]"
+    }
+}
+
+/// [G0-6] 세션 epoch·flap 계측.
+///
+/// 설계 v2가 세션 식별을 bundleID가 아니라 "identity + activation epoch"로 바꾼 근거를
+/// 실측으로 채우기 위한 것이다. round4 로그에서 activate(B) 뒤에 deactivate(A)가 늦게
+/// 도착하는 것이 관측됐으므로, epoch 없이 bundleID만으로는 소유권이 뒤집힐 수 있다.
+enum ProbeSessionEpoch {
+    private(set) static var current: UInt64 = 0
+    private static var lastTransition = Date()
+    private(set) static var lastDelta: TimeInterval = 0
+
+    static var deltaDescription: String {
+        String(format: "%.0fms", lastDelta * 1000)
+    }
+
+    static func begin(client: String) {
+        current &+= 1
+        stamp()
+    }
+
+    static func end(client: String) {
+        stamp()
+    }
+
+    private static func stamp() {
+        let now = Date()
+        lastDelta = now.timeIntervalSince(lastTransition)
+        lastTransition = now
     }
 }
 
