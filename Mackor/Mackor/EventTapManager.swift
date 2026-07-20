@@ -113,6 +113,23 @@ class EventTapManager {
     private var runLoopSource: CFRunLoopSource?
     private let tracker = HangulCompositionTracker()
     private let autoCorrectionEngine: WrongLayoutCorrectionEngine
+
+    /// Layer 1 어휘 판정기. 자산이 없으면 `nil`이고, 그때는 이 계층 없이
+    /// 오늘과 동일하게 동작합니다.
+    private let lexicalTiebreaker: LexicalTiebreaker?
+
+    /// 현재 토큰의 키열 사본.
+    ///
+    /// 엔진은 보존 판정 시 `nil`만 돌려주고 키열을 즉시 폐기하므로(설계상
+    /// 의도), 어휘 계층이 볼 후보가 남지 않습니다. 엔진은 동결 대상이라
+    /// 노출 표면을 추가할 수 없어 여기서 사본을 둡니다.
+    ///
+    /// 사본은 발산할 수 있습니다 — 엔진에는 입력 소스 변경·유휴 시간 초과처럼
+    /// 밖에서 관측할 수 없는 내부 리셋이 있습니다. 그래서 사본을 **신뢰하지 않고**
+    /// 사용 직전에 엔진의 진단과 대조해 검증합니다(`lexicalCandidate`).
+    /// 어긋나면 아무것도 하지 않으므로, 발산은 기회를 놓칠 뿐 오교정을 만들지
+    /// 못합니다.
+    private var lexicalKeystrokeMirror: [PhysicalKeystroke] = []
     private var _isActive: Bool = false
     private var _isAutoCorrectionEnabled: Bool = false
     private var automaticCorrectionFieldAllowed: Bool?
@@ -282,6 +299,9 @@ class EventTapManager {
         // 실패해도 입력을 막지 않습니다.
         KSX1001Table.prepare()
         autoCorrectionEngine = WrongLayoutCorrectionEngine()
+        // 사전은 앱 번들에서 읽습니다. 없으면 nil이고, 그때는 어휘 계층 없이
+        // 규칙만으로 오늘과 동일하게 동작합니다.
+        lexicalTiebreaker = LexicalTiebreaker(bundle: .main)
         keyboardOutput = QuartzKeyboardOutput()
         focusInspector = AccessibilityEventTapFocusInspector()
         now = Date.init
@@ -301,9 +321,11 @@ class EventTapManager {
         focusInspector: EventTapFocusInspecting,
         now: @escaping () -> Date,
         pause: @escaping (useconds_t) -> Void,
-        scheduleBoundaryCorrection: @escaping (@escaping () -> Void) -> Void = { $0() }
+        scheduleBoundaryCorrection: @escaping (@escaping () -> Void) -> Void = { $0() },
+        lexicalTiebreaker: LexicalTiebreaker? = LexicalTiebreaker(bundle: .main)
     ) {
         autoCorrectionEngine = WrongLayoutCorrectionEngine()
+        self.lexicalTiebreaker = lexicalTiebreaker
         self.keyboardOutput = keyboardOutput
         self.focusInspector = focusInspector
         self.now = now
@@ -575,6 +597,9 @@ class EventTapManager {
                 switch tokenCaptureState {
                 case .collecting(let letterStrokeCount):
                     autoCorrectionEngine.processBackspace()
+                    if !lexicalKeystrokeMirror.isEmpty {
+                        lexicalKeystrokeMirror.removeLast()
+                    }
                     if letterStrokeCount <= 1 {
                         tokenCaptureState = .idle
                         clearAutomaticCorrectionFocus()
@@ -658,10 +683,20 @@ class EventTapManager {
                 } else {
                     let effectiveShift = shiftPressed
                         || (capsLockPressed && inputSourceKind == .supportedLatin)
+                    let keystroke = PhysicalKeystroke(keycode: keycode, shift: effectiveShift)
                     let wasRecorded = autoCorrectionEngine.record(
-                        PhysicalKeystroke(keycode: keycode, shift: effectiveShift),
+                        keystroke,
                         inputSource: inputSourceKind
                     )
+                    // 엔진이 버퍼에 넣었을 때만 사본에도 넣습니다. 넣지 않았다면
+                    // 엔진이 토큰을 리셋했거나 폐기한 것이므로 사본도 비웁니다.
+                    // 보수적으로 비우는 쪽이 안전합니다 — 사본이 비면 아래 검증에서
+                    // 길이가 어긋나 어휘 계층이 그냥 동작하지 않을 뿐입니다.
+                    if wasRecorded {
+                        lexicalKeystrokeMirror.append(keystroke)
+                    } else {
+                        lexicalKeystrokeMirror.removeAll(keepingCapacity: true)
+                    }
                     if wasRecorded {
                         switch tokenCaptureState {
                         case .idle:
@@ -820,9 +855,10 @@ class EventTapManager {
            hasEligibleToken,
            automaticCorrectionFieldAllowed == true,
            focusToken != nil {
-            decision = autoCorrectionEngine.processBoundary(.submit)
+            decision = resolveBoundary(.submit)
         } else {
             autoCorrectionEngine.reset()
+            lexicalKeystrokeMirror.removeAll(keepingCapacity: true)
             decision = nil
         }
         tokenCaptureState = .idle
@@ -951,10 +987,11 @@ class EventTapManager {
            hasEligibleToken,
            automaticCorrectionFieldAllowed == true,
            focusToken != nil {
-            decision = autoCorrectionEngine.processBoundary(boundary)
+            decision = resolveBoundary(boundary)
         } else {
             // 실제 경계는 discard 상태도 끝냅니다.
             autoCorrectionEngine.reset()
+            lexicalKeystrokeMirror.removeAll(keepingCapacity: true)
             decision = nil
         }
         tokenCaptureState = .idle
@@ -1291,12 +1328,85 @@ class EventTapManager {
 
     private func resetAutomaticCorrectionToken() {
         autoCorrectionEngine.reset()
+        lexicalKeystrokeMirror.removeAll(keepingCapacity: true)
         tokenCaptureState = .idle
         clearAutomaticCorrectionFocus()
     }
 
+    /// 경계에서 규칙 엔진에 판정을 맡기고, 규칙이 가르지 못했을 때만
+    /// 어휘 계층(Layer 1)에 한 번 더 묻습니다.
+    ///
+    /// 규칙이 이미 교정하거나 다른 이유로 보존한 토큰은 건드리지 않습니다.
+    /// 오직 `ambiguousBothValid` — 한국어·영어 두 문법을 모두 만족해 키열만으로는
+    /// 구분할 수 없던 경우 — 만 대상입니다.
+    private func resolveBoundary(_ boundary: CorrectionBoundary) -> CorrectionDecision? {
+        let keystrokes = lexicalKeystrokeMirror
+        if let decision = autoCorrectionEngine.processBoundary(boundary) {
+            return decision
+        }
+        return lexicalDecision(boundary: boundary, keystrokes: keystrokes)
+    }
+
+    /// 규칙이 보존한 토큰을 어휘로 다시 판정합니다.
+    ///
+    /// 키열 사본은 발산할 수 있으므로 **신뢰하지 않고 검증**합니다. 사본으로
+    /// 동결된 정책을 다시 돌려, 엔진이 방금 낸 진단과 규칙·길이가 모두 일치할
+    /// 때만 어휘를 조회합니다. 하나라도 어긋나면 사본이 실제 토큰이 아니라는
+    /// 뜻이므로 아무것도 하지 않습니다 — 발산은 기회를 놓칠 뿐 오교정을
+    /// 만들지 못합니다.
+    private func lexicalDecision(
+        boundary: CorrectionBoundary,
+        keystrokes: [PhysicalKeystroke]
+    ) -> CorrectionDecision? {
+        guard let tiebreaker = lexicalTiebreaker,
+              let diagnostic = autoCorrectionEngine.lastDiagnostic,
+              diagnostic.rule == .ambiguousBothValid,
+              diagnostic.boundary == boundary,
+              // 어휘 계층은 영자판으로 친 한국어에만 적용합니다. 한글자판 쪽은
+              // 실측 결과 이 분기에 도달하는 토큰이 하나도 없습니다.
+              diagnostic.direction == .latinToKorean,
+              diagnostic.tokenLength == keystrokes.count,
+              !keystrokes.isEmpty else {
+            return nil
+        }
+
+        // 사본으로 동결 정책을 재실행해 같은 판정이 나오는지 확인합니다.
+        guard case .preserve(.ambiguousBothValid) = LayoutCorrectionPolicy.evaluate(
+            keystrokes: keystrokes,
+            inputSource: .supportedLatin
+        ) else {
+            return nil
+        }
+
+        guard let latin = LayoutCorrectionPolicy.latinCandidate(for: keystrokes),
+              let korean = tiebreaker.resolve(latin: latin),
+              latin != korean else {
+            return nil
+        }
+
+        EventTapManager.diagnostic("lexical tiebreak \(latin) -> \(korean)")
+
+        // tier는 medium입니다. 반대 읽기가 구조적으로 가능했다는 뜻이고,
+        // 원문 칩을 강조 표시해 되돌리기 쉽게 만듭니다.
+        return CorrectionDecision(
+            original: latin,
+            replacement: korean,
+            direction: .latinToKorean,
+            tier: .medium,
+            rule: .ambiguousBothValid,
+            diagnostic: CorrectionDiagnostic(
+                direction: .latinToKorean,
+                tier: .medium,
+                rule: .ambiguousBothValid,
+                tokenLength: keystrokes.count,
+                boundary: boundary
+            )
+        )
+    }
+
     private func invalidateAutomaticCorrectionTokenUntilBoundary() {
         autoCorrectionEngine.invalidateCurrentTokenUntilBoundary()
+        lexicalKeystrokeMirror.removeAll(keepingCapacity: true)
         tokenCaptureState = .discardUntilBoundary
         clearAutomaticCorrectionFocus()
     }

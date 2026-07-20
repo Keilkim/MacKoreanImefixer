@@ -36,6 +36,84 @@ final class EventTapManagerTests: XCTestCase {
         XCTAssertEqual(switchedDirections, [.latinToKorean])
     }
 
+    // MARK: - Layer 1 어휘 tiebreaker 배선
+    //
+    // 규칙만으로는 한국어·영어 두 문법을 모두 만족하는 토큰을 가를 수 없어
+    // 보존한다. 그 분기에서만 사전을 참조해 한쪽만 실단어면 그쪽으로 확정한다.
+    // 아래 테스트가 그 경로가 실제로 이벤트 탭 흐름을 타는지 고정한다.
+
+    /// 사전이 규칙의 보존 판정을 뒤집어 실제 교체까지 이어져야 한다.
+    /// `sork`는 한글로 `내가`인데 영어로는 아무 뜻이 없다.
+    func testLexicalTiebreakerCorrectsAmbiguousTokenEndToEnd() throws {
+        let output = FakeKeyboardOutput()
+        let manager = makeManager(output: output, lexicalTiebreaker: try makeLexicalTiebreaker())
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("sork", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertEqual(output.actions, [
+            .key(0x33, false),
+            .key(0x33, false),
+            .key(0x33, false),
+            .key(0x33, false),
+            .key(0x33, false),
+            .text("내가"),
+            .key(0x31, false),
+        ])
+    }
+
+    /// 영어로도 실제 단어면 보존해야 한다. 여기서 교정하면 영어를 치던
+    /// 사용자의 입력을 뒤집는 오변환이 된다.
+    func testLexicalTiebreakerLeavesGenuineEnglishUntouched() throws {
+        let output = FakeKeyboardOutput()
+        let manager = makeManager(output: output, lexicalTiebreaker: try makeLexicalTiebreaker())
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("work", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(output.actions.isEmpty, "실제 영어 단어를 교정했습니다")
+    }
+
+    /// 사전 자산이 없으면 이 계층 없이 오늘과 동일하게 동작해야 한다.
+    func testLexicalTiebreakerAbsentKeepsRulePreservation() {
+        let output = FakeKeyboardOutput()
+        let manager = makeManager(output: output, lexicalTiebreaker: nil)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("sork", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(output.actions.isEmpty)
+    }
+
+    /// 키열 사본이 백스페이스에서도 엔진과 어긋나지 않아야 한다.
+    /// 어긋나면 검증에서 걸려 교정이 조용히 사라진다.
+    func testLexicalMirrorSurvivesBackspace() throws {
+        let output = FakeKeyboardOutput()
+        let manager = makeManager(output: output, lexicalTiebreaker: try makeLexicalTiebreaker())
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        // 오타를 한 글자 더 친 뒤 지우고 경계를 낸다.
+        type("sorkk", into: manager)
+        _ = manager.handleKeyDown(keyDown(0x33))
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(
+            output.actions.contains(.text("내가")),
+            "백스페이스 뒤 사본이 어긋나 교정이 사라졌습니다: \(output.actions)"
+        )
+    }
+
     func testScreenshotExampleDkwnReplacesWithAju() {
         let output = FakeKeyboardOutput()
         let manager = makeManager(output: output)
@@ -1350,14 +1428,32 @@ final class EventTapManagerTests: XCTestCase {
         output: FakeKeyboardOutput,
         focus: FakeFocusInspector = FakeFocusInspector(),
         now: @escaping () -> Date = { Date(timeIntervalSince1970: 1_000) },
-        scheduleBoundaryCorrection: @escaping (@escaping () -> Void) -> Void = { $0() }
+        scheduleBoundaryCorrection: @escaping (@escaping () -> Void) -> Void = { $0() },
+        lexicalTiebreaker: LexicalTiebreaker? = nil
     ) -> EventTapManager {
         EventTapManager(
             keyboardOutput: output,
             focusInspector: focus,
             now: now,
             pause: { _ in },
-            scheduleBoundaryCorrection: scheduleBoundaryCorrection
+            scheduleBoundaryCorrection: scheduleBoundaryCorrection,
+            lexicalTiebreaker: lexicalTiebreaker
+        )
+    }
+
+    /// 저장소 원본 사전으로 어휘 계층을 만듭니다. 테스트 번들에는 앱 리소스가
+    /// 없으므로 파일에서 직접 읽습니다.
+    private func makeLexicalTiebreaker() throws -> LexicalTiebreaker {
+        var root = URL(fileURLWithPath: #filePath)
+        for _ in 0..<3 { root.deleteLastPathComponent() }
+        let dir = root.appendingPathComponent("scripts").appendingPathComponent("lexicon")
+        return LexicalTiebreaker(
+            korean: LexicalTiebreaker.parseKoreanLexicon(
+                try String(contentsOf: dir.appendingPathComponent("ko-lexicon.v1.txt"), encoding: .utf8)
+            ),
+            english: LexicalTiebreaker.parseEnglishLexicon(
+                try String(contentsOf: dir.appendingPathComponent("en-lexicon.v1.txt"), encoding: .utf8)
+            )
         )
     }
 
