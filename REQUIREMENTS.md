@@ -610,6 +610,41 @@ TextEdit에서 마크드 텍스트가 정상 표시된다. CorelDRAW 측정은 �
 실측으로 뒷받침된다. `activate(B)` 뒤에 `deactivate(A)`가 늦게 도착하는 패턴도
 같은 로그에 있다(`23:26:50.301 activate TextEdit` → `.319 deactivate Chrome`).
 
+### A-1 주입 마커 생존 — 실패 확정 (2026-07-20, 7차)
+
+도구: `MackorIMEProbe/inject.swift` — `EventTapManager.QuartzKeyboardOutput`(:54-110)의
+주입 방식을 그대로 복제(`CGEventSource(.privateState)` + `userData = 0x48474C46`,
+`setIntegerValueField(42, 0x48474C46)`, `post(tap: .cgAnnotatedSessionEventTap)`).
+
+> Mackor로 주입을 발생시키는 경로는 막혀 있다. 프로브가 활성 입력 소스이면
+> Mackor의 `inputSourceKind`가 `.unsupported`가 되어(`AppMonitor.swift:44`가 Apple
+> 두벌식을 하드코딩) 탭이 아무것도 주입하지 않는다. 설계 §5-6이 지적한 문제가
+> 측정 자체를 막는 형태로 나타나므로 주입기를 따로 만들었다.
+
+| 이벤트 | 주입 시점 field42 | `handle()`에서 읽은 `rawUserData` |
+|---|---|---|
+| 태깅 주입 (제품과 동일) | **1212632134** | **0** |
+| 무태그 합성 (대조군) | 0 | 0 |
+| 물리 키 경로 (대조군) | — | 0 |
+
+**확정 사실 두 가지:**
+
+1. **주입 이벤트는 IMK `handle()`에 도달한다.** 세 이벤트 모두 도달했다.
+   (그동안 "추정"으로만 서술하던 항목의 실측 확정)
+2. **마커는 왕복에서 소실된다.** 태깅 주입도 `rawUserData=0`이라 무태그·물리와
+   **구분이 불가능하다.** `NSEvent.cgEvent`가 NSEvent로부터 CGEvent를 재구성하며
+   커스텀 필드를 잃는 것으로 보인다.
+
+**영향:** 탭→IMK 방향의 **마커 기반 필터는 불가능**하다. 탭→탭 재진입 가드
+(`EventTapManager.swift:425`)는 CGEvent가 그대로 유지되는 경로이므로 영향받지 않는다
+(현행 제품이 동작하는 것이 그 증거).
+
+**설계 귀결:** 설계 v2가 "1차 방어선은 arbiter, 마커는 심층 방어"로 둔 순서 지정이
+옳았고, 심층 방어가 사라져도 아키텍처는 생존한다. 다만 조건부 항목이 **필수로
+승격**된다 — **injection drain/handoff barrier**(탭 출력 완료를 확인한 뒤에만
+owner 전이)를 Phase C에 반드시 구현한다. 주입 카운터 단독은 진짜 백스페이스를
+삼킬 수 있으므로 barrier가 유일한 안전장치다.
+
 ### 증상 관찰
 
 - 카톡: 잘 동작
