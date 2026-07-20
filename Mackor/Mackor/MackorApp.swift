@@ -289,17 +289,45 @@ class AppCoordinator: ObservableObject {
         }
         frontAppBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
 
-        if !hasAccessibility {
-            permissionPollingTask?.cancel()
-            permissionPollingTask = Task { @MainActor [weak self] in
-                while !Task.isCancelled {
-                    try? await Task.sleep(nanoseconds: 5_000_000_000)
-                    guard !Task.isCancelled, let self else { return }
-                    guard !self.eventTapManager.isEventTapHealthy else { return }
-                    if self.eventTapManager.start() {
-                        self.hasAccessibility = true
-                        return
-                    }
+        startTapWatchdog()
+    }
+
+    /// 탭 상태를 주기적으로 감시합니다.
+    ///
+    /// 실행 중 손쉬운 사용 권한을 회수하면 탭 포트가 죽지만 시스템은
+    /// `tapDisabledByTimeout`/`tapDisabledByUserInput` 콜백을 보내주지 않을 수 있습니다.
+    /// 그러면 무효화된 헤드 삽입 세션 탭이 입력 경로에 남아 **맥 전체 입력이 멈춥니다.**
+    ///
+    /// 이전 구현은 (1) 시작 시 권한이 없을 때만 폴링을 걸고 (2) 한 번 건강해지면
+    /// 영구 종료했으며 (3) 그 밖의 복구는 `didActivateApplication`(앱 전환)에만
+    /// 묶여 있었습니다. 권한을 가진 채 시작한 뒤 회수당하면 폴링이 아예 돌지 않고,
+    /// 복구하려면 앱을 전환해야 하는데 입력이 이미 얼어 전환할 수 없는 교착이었습니다.
+    ///
+    /// 그래서 권한 유무와 무관하게 **항상·계속** 감시하고, 죽은 포트를 발견하면
+    /// 재생성보다 **정리(`stop()`)를 먼저** 해 입력 경로부터 풀어줍니다.
+    ///
+    /// 주의: 이 감시는 메인 액터에서 돌므로 메인 스레드가 막힌 경우(교정 중
+    /// `usleep`·AX IPC)에는 스스로 뜨지 못합니다. 그 경로는 탭을 전용 스레드로
+    /// 옮기는 후속 단계에서 다룹니다.
+    private func startTapWatchdog() {
+        permissionPollingTask?.cancel()
+        permissionPollingTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                guard !Task.isCancelled, let self else { return }
+                guard !self.eventTapManager.isEventTapHealthy else { continue }
+
+                // 죽은 능동 탭을 먼저 떼어내 입력 경로를 푼다. 권한이 회수된
+                // 상태라면 재생성은 실패하지만, 정리만으로도 멈춤은 풀린다.
+                // 탭을 만든 적이 없으면(권한 없이 실행 중) 떼어낼 것도 없다.
+                if self.eventTapManager.eventTap != nil {
+                    self.eventTapManager.stop()
+                }
+
+                if EventTapManager.checkAccessibilityPermission(prompt: false) {
+                    self.hasAccessibility = self.eventTapManager.start()
+                } else {
+                    self.hasAccessibility = false
                 }
             }
         }
