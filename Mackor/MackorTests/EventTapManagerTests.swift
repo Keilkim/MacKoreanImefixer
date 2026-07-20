@@ -36,6 +36,53 @@ final class EventTapManagerTests: XCTestCase {
         XCTAssertEqual(switchedDirections, [.latinToKorean])
     }
 
+    // MARK: - 포커스 조회의 일시적 실패
+    //
+    // 실측: Chrome의 차가운 첫 AX 조회는 약 57ms 걸려 이벤트 탭 경로의 50ms
+    // 제한을 넘는다. 그 타임아웃을 "이 필드는 교정 금지"로 확정해 버리면
+    // Chrome에서는 자동 교정이 영영 걸리지 않는다 — 실제로 그랬다.
+
+    /// 첫 조회가 일시적으로 실패해도 그 토큰을 포기하지 않고, 다음 키에서
+    /// 다시 물어 성공하면 교정이 정상 진행돼야 한다.
+    func testTransientFocusFailureRetriesInsteadOfAbandoningTheToken() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.transientFailuresRemaining = 1   // 첫 키만 타임아웃, 그다음 성공
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("dkwn", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(
+            output.actions.contains(.text("아주")),
+            "일시적 조회 실패 뒤 재시도가 이뤄지지 않았습니다: \(output.actions)"
+        )
+    }
+
+    /// 계속 실패하는 앱에서는 상한에 닿으면 포기해야 한다. 그러지 않으면 매
+    /// 키마다 AX IPC를 반복해 이벤트 탭이 느려진다.
+    func testPersistentFocusFailureStopsRetryingAfterTheCap() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.transientFailuresRemaining = 99   // 끝까지 실패
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("dkwndkwn", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(output.actions.isEmpty, "실패가 계속되는데 교정을 시도했습니다")
+        XCTAssertLessThanOrEqual(
+            focus.tokenRequestCount, 3,
+            "상한을 넘겨 매 키마다 조회했습니다: \(focus.tokenRequestCount)회"
+        )
+    }
+
     // MARK: - Layer 1 어휘 tiebreaker 배선
     //
     // 규칙만으로는 한국어·영어 두 문법을 모두 만족하는 토큰을 가를 수 없어
@@ -1614,10 +1661,23 @@ private final class FakeFocusInspector: EventTapFocusInspecting {
     var currentFocusMatchResponses: [Bool] = []
     var tokenRequestCount = 0
     var currentFocusOffsets: [Int] = []
+    /// 이 횟수만큼 조회가 *일시적으로* 실패한 뒤 성공합니다. Chrome처럼 차가운
+    /// 첫 조회가 타임아웃 나는 앱을 흉내 냅니다.
+    var transientFailuresRemaining = 0
 
     func automaticCorrectionFocusToken() -> FocusedInputSafety.FocusToken? {
         tokenRequestCount += 1
         return tokenAvailable ? token : nil
+    }
+
+    func probeAutomaticCorrectionFocus() -> FocusedInputSafety.FocusProbe {
+        if transientFailuresRemaining > 0 {
+            transientFailuresRemaining -= 1
+            tokenRequestCount += 1
+            return .unavailable
+        }
+        guard let token = automaticCorrectionFocusToken() else { return .ineligible }
+        return .eligible(token)
     }
 
     func isCurrentFocus(

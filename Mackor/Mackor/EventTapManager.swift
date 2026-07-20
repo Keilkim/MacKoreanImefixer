@@ -9,15 +9,32 @@ protocol EventTapKeyboardOutputting {
 
 protocol EventTapFocusInspecting {
     func automaticCorrectionFocusToken() -> FocusedInputSafety.FocusToken?
+    /// 조회 실패와 확정 거부를 구분해 돌려줍니다. 기본 구현은 기존 동작과
+    /// 같도록 `automaticCorrectionFocusToken()`을 감싸므로, 테스트 대역은
+    /// 필요할 때만 이 메서드를 따로 구현하면 됩니다.
+    func probeAutomaticCorrectionFocus() -> FocusedInputSafety.FocusProbe
     func isCurrentFocus(
         _ token: FocusedInputSafety.FocusToken,
         utf16Offset: Int
     ) -> Bool
 }
 
+extension EventTapFocusInspecting {
+    /// 구분 정보를 제공하지 않는 대역을 위한 보수적 기본값. 실패를 확정 거부로
+    /// 다루므로 기존 동작과 완전히 같습니다.
+    func probeAutomaticCorrectionFocus() -> FocusedInputSafety.FocusProbe {
+        if let token = automaticCorrectionFocusToken() { return .eligible(token) }
+        return .ineligible
+    }
+}
+
 private struct AccessibilityEventTapFocusInspector: EventTapFocusInspecting {
     func automaticCorrectionFocusToken() -> FocusedInputSafety.FocusToken? {
         FocusedInputSafety.automaticCorrectionFocusToken()
+    }
+
+    func probeAutomaticCorrectionFocus() -> FocusedInputSafety.FocusProbe {
+        FocusedInputSafety.probeAutomaticCorrectionFocus()
     }
 
     func isCurrentFocus(
@@ -130,6 +147,7 @@ class EventTapManager {
     /// 어긋나면 아무것도 하지 않으므로, 발산은 기회를 놓칠 뿐 오교정을 만들지
     /// 못합니다.
     private var lexicalKeystrokeMirror: [PhysicalKeystroke] = []
+
     private var _isActive: Bool = false
     private var _isAutoCorrectionEnabled: Bool = false
     private var automaticCorrectionFieldAllowed: Bool?
@@ -167,6 +185,9 @@ class EventTapManager {
     private static let commandZKeycode: UInt16 = 0x06
     private static let undoLifetime: TimeInterval = 6
     private static let maximumBoundaryFocusCheckAttempts = 3
+    /// 한 키 안에서 포커스 조회를 다시 시도할 최대 횟수. 실패한 조회가
+    /// AX 연결을 데우므로 보통 2회째에 성공합니다.
+    private static let maximumFocusProbeAttempts = 3
 
     /// 앱에 실제로 입력된 경계 하나입니다. 현재 지원 경계는 모두 ASCII 한
     /// 문자지만, AX caret 계산(UTF-16)과 Backspace 횟수(Character)는 서로
@@ -665,9 +686,36 @@ class EventTapManager {
             }
 
             if !isAlreadyDiscarding, automaticCorrectionFieldAllowed == nil {
-                let focusToken = focusInspector.automaticCorrectionFocusToken()
-                automaticCorrectionFocusToken = focusToken
-                automaticCorrectionFieldAllowed = focusToken != nil
+                // 조회가 *실패*한 것과 이 필드가 *교정 대상이 아닌* 것은 다릅니다.
+                //
+                // 실측: Chrome의 차가운 첫 조회는 약 57ms 걸려 이 경로의 50ms
+                // 제한을 넘습니다. 그 타임아웃을 "교정 금지"로 확정해 버리면
+                // Chrome에서는 자동 교정이 영영 걸리지 않습니다. 실제로 그랬습니다.
+                //
+                // 그런데 실패한 조회 자체가 AX 연결을 데우므로, 다음 키에서는
+                // 데워진 경로(중앙값 0.4ms)로 성공합니다. 그래서 일시적 실패는
+                // 확정하지 않고 다음 키에서 다시 물어봅니다. 상한을 둬서 AX가
+                // 계속 죽어 있는 앱에서 매 키마다 IPC를 반복하지 않게 합니다.
+                // 재시도는 **이 키 안에서** 끝냅니다. 판정을 다음 키로 미루면
+                // 그 사이 눌린 키가 토큰에 기록되지 않아 `dkwn`이 `kwn`이 됩니다
+                // (테스트 `testTransientFocusFailure...`가 이걸 고정합니다).
+                var probe = focusInspector.probeAutomaticCorrectionFocus()
+                var attempts = 1
+                while case .unavailable = probe,
+                      attempts < EventTapManager.maximumFocusProbeAttempts {
+                    // 실패한 조회 자체가 AX 연결을 데우므로 다음 시도는
+                    // 데워진 경로(실측 중앙값 0.4ms)로 곧장 돌아옵니다.
+                    probe = focusInspector.probeAutomaticCorrectionFocus()
+                    attempts += 1
+                }
+                switch probe {
+                case .eligible(let token):
+                    automaticCorrectionFocusToken = token
+                    automaticCorrectionFieldAllowed = true
+                case .ineligible, .unavailable:
+                    automaticCorrectionFocusToken = nil
+                    automaticCorrectionFieldAllowed = false
+                }
             }
 
             if !isAlreadyDiscarding, automaticCorrectionFieldAllowed == true {

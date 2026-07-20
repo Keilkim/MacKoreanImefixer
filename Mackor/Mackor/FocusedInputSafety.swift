@@ -61,12 +61,38 @@ enum FocusedInputSafety {
     ///
     /// 반드시 이벤트 탭 콜백 **밖에서** 호출하세요. AX IPC가 탭 콜백을 늦추면
     /// 시스템 입력 전체가 지연됩니다.
+    /// 워밍업 전용 시스템 전역 요소. **일반 조회보다 훨씬 긴 타임아웃**을 씁니다.
+    ///
+    /// 실측(이 맥): Chrome의 포커스 조회는 데워지면 중앙값 0.4ms·p95 0.6ms지만
+    /// **차가운 첫 조회는 약 57ms**가 걸립니다. 일반 경로의 50ms 제한으로는 그
+    /// 첫 조회가 반드시 타임아웃 나고, 그래서 Chrome에서는 자동 교정이 전혀
+    /// 걸리지 않았습니다(`focus token missing focused element`).
+    ///
+    /// 이 워밍업은 이벤트 탭 콜백 밖에서만 돌므로 기다려도 안전합니다. 여기서
+    /// 차가운 비용을 치러 두면 탭 경로의 조회는 데워진 0.4ms 경로를 타게 됩니다.
+    private static let warmingElement: AXUIElement = {
+        let element = AXUIElementCreateSystemWide()
+        AXUIElementSetMessagingTimeout(element, 2.0)
+        return element
+    }()
+
+    /// 포커스 캐시를 데웁니다. **결과를 쓰지 않고 버립니다.**
+    ///
+    /// 반드시 이벤트 탭 콜백 **밖에서** 호출하세요. 이 함수는 느린 앱을 기다리도록
+    /// 일부러 긴 타임아웃을 쓰므로, 탭 콜백에서 부르면 시스템 입력 전체가 멈춥니다.
     static func warmFocusCache() {
         _ = systemWideElement
-        guard let element = focusedElement() else { return }
+        var focused: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(
+            warmingElement,
+            kAXFocusedUIElementAttribute as CFString,
+            &focused
+        ) == .success, let element = focused else {
+            return
+        }
         var value: CFTypeRef?
         _ = AXUIElementCopyAttributeValue(
-            element,
+            element as! AXUIElement,
             kAXSelectedTextRangeAttribute as CFString,
             &value
         )
