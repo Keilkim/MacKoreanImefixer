@@ -381,7 +381,40 @@ TextEdit에서 `supportsProperty(DocumentAccess) = true`이고
 즉 1차 결론("치환 불가")은 **정공법을 테스트하지 않아 생긴 오판**이었다.
 mozc 방식이 실제로 동작한다. **교정에 합성 백스페이스가 불필요하다**(적어도 TextEdit에서).
 
-**② D1(모드 전환) — 실패. 설계 변경 필요.**
+**②-정정 D1(모드 전환) — 3차 측정에서 성립 확인.**
+
+2차 실패는 **두 번째 모드가 `enabled=false`였던 것이 원인**이었다. 모드를 켠 뒤
+재측정하니 정상 동작한다:
+
+```
+BEFORE        TIS[sourceID=...roman modeID=...roman]
+setValue MODE-CHANGED -> ...han2        ← 모드 변경 통지 도착 (P0-2 완전 확정)
+AFTER-0ms     TIS = roman                (아직 미반영)
+AFTER-50ms    TIS[sourceID=...han2 modeID=...han2]   ← 실제 전환됨
+AFTER-1000ms  TIS = han2
+keyDown 'b' → handle() 수신 지속, mode=han2          ← IME 비활성화되지 않음
+외부 확인      com.mackor.inputmethod.MackorProbe.han2
+```
+
+**결론: `IMKTextInput.selectMode(모드ID)`로 자기 다른 모드로 전환해도 IME는 살아 있다.
+D1 성립.** 전환은 약 50ms 비동기이므로 즉시 읽으면 옛 값이 나온다(0ms 시점 주의).
+
+**단, 전제 조건이 있다: 대상 모드가 `enabled` 상태여야 한다.**
+`TISEnableInputSource`가 `0`을 반환하고도 실제로 켜지지 않는 경우를 관측했다.
+→ 온보딩에서 두 모드를 모두 켜도록 안내·검증하는 절차가 필요하다.
+켜지지 않은 상태에서는 `selectMode`가 조용히 실패하고 `TISSelectInputSource`는 `-50`.
+
+**설계 선택지가 둘 다 유효하다:**
+
+| 안 | 장점 | 단점 |
+|---|---|---|
+| 두 모드 + `selectMode` | 메뉴바에 한/영 표시가 보임(익숙한 UX) | 두 모드 모두 enabled여야 함(온보딩 부담) |
+| 단일 모드 + 내부 불리언 | 온보딩 부담 없음. Apple 한국어 IME와 동일 구조 | 메뉴바 표시가 없어 상태를 눈으로 못 봄 |
+
+Phase 2에서 확정한다. 현재는 **온보딩 리스크가 작은 단일 모드를 우선 후보**로 두되,
+D1이 성립하므로 두 모드 방식도 배제하지 않는다.
+
+**②(2차, 폐기된 판정) D1 — 실패로 기록했으나 위 3차 측정으로 정정됨.**
 
 | 시도 | 결과 |
 |---|---|
