@@ -159,13 +159,19 @@ CorelDRAW 외 프로그램 목록(§R2)은 **기능 적용 대상 목록이 아�
 > 비활성화되어 다음 입력을 관찰하지 못한다.** R3-c를 문자 그대로 "Apple 입력 소스로
 > 전환"으로 구현하면 R4(순수 IMK 전환)와 양립할 수 없다.
 >
-> **결정:** Mackor 입력 소스 **하나가 한글 모드와 영문 모드를 모두 소유**한다.
-> R3-c의 "강제 전환"은 `TISSelectInputSource` 호출이 아니라 **Mackor 내부 모드 변수
-> 전환**으로 달성한다. 사용자가 체감하는 효과(다음에 치는 글자가 맞는 언어로 나옴)는
-> 동일하다.
+> **결정 (2026-07-20 실측으로 확정):** Mackor 입력 소스에 **입력 모드를 하나만** 두고
+> 한/영을 **IME 내부 상태**로 처리한다. R3-c의 "강제 전환"은 `TISSelectInputSource`도
+> `IMKTextInput.selectMode`도 아닌 **내부 불리언 전환**이다.
+>
+> 근거 — 두 모드 방식은 실측에서 실패했다. `selectMode`는 모드를 바꾸지 못했고
+> (0/50/250/1000ms 전부 원래 모드 유지), `TISSelectInputSource`는 `-50`을 반환했다.
+> 원인은 두 번째 모드가 `enabled=false`이며 `TISEnableInputSource`가 성공을 반환하고도
+> 실제로 켜지지 않기 때문이다(사용자가 시스템 설정에서 직접 추가해야 함).
+> 반면 **Apple 한국어 IME도 활성 모드가 `2SetKorean` 하나뿐이고 한/영을 내부 처리한다**
+> (실측). 단일 모드가 검증된 구조다.
 >
 > **사용자가 받아들여야 하는 대가:** Apple 두벌식 대신 **Mackor를 입력 소스로 선택**해야
-> 한다. 입력기 목록에서 Mackor 하나만 쓰는 구성이 된다.
+> 한다. 다만 모드를 추가로 켜는 부담은 없다(모드가 하나뿐이므로).
 >
 > **미검증 전제:** "전환 시 IMK가 비활성화된다"는 Apple 문서 기반 추론이며 실측하지
 > 않았다. 구현 착수 전 최소 IMK 프로토타입으로 확인한다. (P0-1 참조)
@@ -333,37 +339,101 @@ AX 프로브 직접 측정 결과:
 
 `MackorIMEProbe`를 `~/Library/Input Methods`에 설치·등록하고 합성 키 입력으로 측정.
 
+> **⚠ 2026-07-20 2차 검토로 아래 다수 항목을 철회·강등했다.**
+> 측정 자체에 설계 결함이 있었다. 프로브의 `ProbeModeState.current`가 초기값
+> `han2`에서 **한 번도 갱신되지 않으므로**, 로그의 `selectMode: han2 -> roman`은
+> 실제 시스템 상태가 아니라 **호출 의도를 출력한 문자열**일 뿐이다.
+> 확정으로 기록했던 것을 아래와 같이 정정한다.
+
 | 항목 | 결과 | 근거 |
 |---|---|---|
 | **P0-8 등록 즉시성** | **성립** | `TISRegisterInputSource → 0(OK)`. 재로그인 없이 `han2`·`roman` 두 모드가 TIS 목록에 `IsSelectCapable=true`로 등장, `TISEnableInputSource → 0` |
-| **P0-1 자기 모드 전환** | **성립 (D1 전제 확인)** | `selectMode(han2→roman)` 직후에도 `keyDown` 수신 지속 (`c`,`d` 로그). **IME가 비활성화되지 않는다** |
-| **P0-2 모드 통지 역방향** | **성립** | `setValue tag=1768778093 value=...MackorProbe.han2` 수신 확인. 구현 필수 확정 |
-| **P0-4 칩 앵커** | **성립** | marked text 없는 상태에서 `attributes(forCharacterIndex: 0, lineHeightRectangle:)` → `(214.76, 979.0, 1.0, 13.0)` 유효 캐럿 rect(1px 폭, 13pt 높이) |
-| **P0-7 ⌘Z 도달** | **미도달 (예상 확인)** | ⌘Z에 `CMD-combo REACHED handle` 로그 **없음**. 대신 TextEdit 자체 Undo가 실행되어 앞 내용이 전부 지워짐. **앱이 선점한다** |
-| **P0-3 조합 경로** | **정상** | `setMarkedText("ㅁ")` → `markedRange=(1,1)`, 화면 표시·커밋 정상 |
-| **P0-5 `replacementRange`** | **무시됨 ⚠** | 아래 별항 |
+| **P0-1 자기 모드 전환** | **미확정 (철회)** | `selectMode` 호출 후 `handle()`이 계속 불린 것은 사실이나, **실제 모드가 바뀌었는지 확인하지 않았다.** 전환 후 `setValue` 통지가 없고, 두 모드의 `KeyboardLayout`이 동일(ABC)이라 출력 문자로도 구분 불가. **D1은 미확정이며 재측정 필요** |
+| **P0-2 모드 통지** | **부분 성립 (강등)** | 확인된 것은 **활성화 시 초기 모드 전달**(`activateServer` 직후 `setValue ...han2`)뿐이다. **시스템발 모드 변경 통지는 미측정** |
+| **P0-4 칩 앵커** | **부분 성립** | TextEdit 한 지점에서 유효 rect `(214.76, 979.0, 1.0, 13.0)` 반환 확인. 위치 정확도·타 앱 일반화는 미확인 |
+| **P0-7 ⌘Z 도달** | **부분 성립** | TextEdit에서 `CMD-combo REACHED handle` 로그 없음 + 앱 자체 Undo 실행 확인. **타 앱 일반화 불가** |
+| **P0-3 조합 경로** | **정상** | `setMarkedText("ㅁ")` → `markedRange=(1,1)`, 표시·커밋 정상 |
+| **P0-5 `replacementRange`** | **판정 철회** | 아래 별항 |
 
-#### ⚠ `insertText(_:replacementRange:)`는 신뢰할 수 없다 (설계 변경 유발)
+#### 2차 측정 결과 (프로브 개정 후, 구 Mackor 종료 격리 상태)
 
-TextEdit(표준 Cocoa 텍스트 클라이언트)에서 두 경로가 갈렸다.
+원시 로그: `MackorIMEProbe/p0-round2-textedit.log`
+
+**① `replacementRange` — 1차 결론 완전 반박. 확정 텍스트 치환은 가능하다.**
+
+```
+BEFORE:  length=2 text=[ab]  sel=(2,0) marked=NSNotFound
+STEP1 setMarkedText("한글", replacementRange:(0,2))  →  text=[한글]   ← 확정 텍스트 대체됨
+STEP2 insertText("한글", replacementRange:(0,2))     →  text=[한글] marked=NSNotFound (확정)
+```
+
+TextEdit에서 `supportsProperty(DocumentAccess) = true`이고
+`validAttributesForMarkedText`에 `NSTextInputReplacementRangeAttributeName`이 포함된다.
+
+**규칙: 먼저 대상 범위에 `setMarkedText`로 조합을 걸어야 한다.** 대조군:
 
 | 호출 | 결과 |
 |---|---|
-| `setMarkedText` → `insertText(범위 NSNotFound)` | **정상 커밋** (`a` + `ㅁ` → `aㅁ`) |
-| `insertText("한", replacementRange:(1,1))` — 확정 텍스트 대상, 조합 세션 없음 | **완전 무시.** 치환도 덧붙임도 없음 (`ab` 그대로) |
-| `insertText("한", replacementRange:(1,1))` — 조합 세션 활성 중 | **범위 무시.** `b`가 아니라 **marked text 자리**에 삽입 (`ab` + marked`ㅁ` → `ab한`) |
+| `setMarkedText(범위)` → `insertText(같은 범위)` | **작동** (`ab` → `한글`) |
+| `insertText(범위)` 단독 (선행 조합 없음) | 무시 (`ab` 그대로) |
+| `insertText("", 범위)` — ranged 삭제 | 무시 (`ab` 그대로) |
 
-즉 **이미 확정된 텍스트를 `replacementRange`로 치환하는 것은 불가능하다.**
-Apple 문서(`IMKInputSession.h:249`)는 "Cocoa 텍스트 시스템은 TSMDocumentAccess를
-지원한다"고 하지만, 실측상 `replacementRange`가 존중되지 않는다.
+즉 1차 결론("치환 불가")은 **정공법을 테스트하지 않아 생긴 오판**이었다.
+mozc 방식이 실제로 동작한다. **교정에 합성 백스페이스가 불필요하다**(적어도 TextEdit에서).
 
-**설계 귀결:** 교정은 `replacementRange`로 하지 않는다. 대신
+**② D1(모드 전환) — 실패. 설계 변경 필요.**
 
-- 조합 존중 클라이언트: **단어 전체를 marked text로 유지하다가 경계에서 원문/교정문 중
-  하나를 커밋** — 치환이 아예 불필요해진다 (IME 본연의 방식이며 키 롤오버 경합도
-  구조적으로 소멸)
-- 조합을 먹는 클라이언트: 즉시 커밋 + **백스페이스 카운트 삭제 후 재입력**
-  (현행 `executeResult`와 동일 방식)
+| 시도 | 결과 |
+|---|---|
+| `IMKTextInput.selectMode(roman)` | 모드 안 바뀜. 0/50/250/1000ms 전부 `han2` 유지 |
+| `TISSelectInputSource(roman)` | **-50 (paramErr)** |
+| `TISEnableInputSource(roman)` | 0(성공) 반환하지만 **실제 `enabled=false` 유지** |
+
+원인: `roman` 모드가 `enabled=false`다. 비활성 모드는 선택할 수 없고,
+**프로그램적 활성화가 먹지 않는다**(사용자가 시스템 설정에서 직접 추가해야 함).
+
+참고 — Apple 한국어 IME의 실제 구조(실측):
+
+```
+com.apple.inputmethod.Korean.2SetKorean      enabled=true   asciiCapable=false
+com.apple.inputmethod.Korean.3SetKorean      enabled=false
+com.apple.inputmethod.Korean.390Sebulshik    enabled=false
+com.apple.inputmethod.Korean.GongjinCheongRomaja  enabled=false
+```
+
+**Apple은 활성 모드가 하나뿐이고, 한/영 전환은 모드 전환이 아니라 IME 내부 처리다.**
+
+**설계 귀결 (D1 대체안):** 입력 모드를 **하나만** 두고 한/영을 **IME 내부 상태**로
+처리한다. 모드 전환 API에 의존하지 않으므로 D1 문제 자체가 소멸한다. R3-c는
+`TISSelectInputSource`도 `selectMode`도 아닌 **내부 불리언**이 된다.
+사용자가 시스템 설정에서 모드를 추가로 켜야 하는 온보딩 부담도 사라진다.
+
+#### (1차) `replacementRange` 결론 철회 — 실험 설계 오류
+
+이전에 "확정 텍스트를 `replacementRange`로 치환할 수 없다"고 일반 결론을 냈으나
+**철회한다. 정공법을 테스트하지 않았다.**
+
+관측된 사실 자체는 유효하다:
+
+| 호출 | 결과 |
+|---|---|
+| `setMarkedText` → `insertText(범위 NSNotFound)` | 정상 커밋 (`a`+`ㅁ` → `aㅁ`) |
+| 조합 세션 **없이** `insertText("한", range:(1,1))` on `ab` | 아무 일도 안 일어남 |
+| 조합이 **캐럿에** 걸린 상태로 `insertText("한", range:(1,1))` | `ab한` — 지정 범위가 아니라 **marked 자리**에 삽입 |
+
+그러나 이것이 "치환 불가"를 증명하지 않는다. 생산 IME(mozc)의 재변환은
+**대상 범위에 먼저 `setMarkedText(..., replacementRange:)`로 조합을 건 뒤
+같은 범위로 커밋**하는 순서인데, 위 실험은 그 순서를 한 번도 수행하지 않았다.
+세 번째 케이스는 조합이 **다른 위치**에 있었으므로 기존 marked가 우선 커밋된
+정상 동작을 관찰한 것일 가능성이 크다.
+
+**필요한 대조군 (미수행):**
+`supportsProperty(kTSMDocumentSupportDocumentAccessPropertyTag)` /
+`stringFromRange` 전후 비교 / 실제 selection에 대한 insert /
+`setMarkedText(대상범위)` → 같은 범위 커밋 / 별도 `NSTextView` 시험 앱 /
+물리 키 입력 병행.
+
+**따라서 교정 방식(치환 vs 커밋 지연)은 아직 확정하지 않는다.**
 
 ### 증상 관찰
 
