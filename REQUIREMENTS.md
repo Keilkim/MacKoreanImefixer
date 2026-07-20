@@ -468,6 +468,68 @@ com.apple.inputmethod.Korean.GongjinCheongRomaja  enabled=false
 
 **따라서 교정 방식(치환 vs 커밋 지연)은 아직 확정하지 않는다.**
 
+### CorelDRAW 실측 (R-1 게이트, 4차) — 원시 로그 `MackorIMEProbe/p0-round4-coreldraw.log`
+
+**결론: IMK는 CorelDRAW에 도달한다. 그러나 문서 상태를 전혀 노출하지 않는다.**
+
+| 항목 | 결과 |
+|---|---|
+| `activateServer client=com.corel.coreldrawsuite.2025.coreldraw` | ✅ **IMK 세션 성립** |
+| 키 입력 `handle()` 도달 (`a`, `b`) | ✅ **도달함** |
+| `supportsProperty(DocumentAccess)` | `true` (자기 신고) |
+| `validAttributesForMarkedText` | `NSTextInputReplacementRangeAttributeName` 포함 |
+| `length()` | **0** — 문서 문자열 읽기 불가 |
+| `selectedRange()` | **NSNotFound** — 대상 범위 계산 불가 |
+| `attributes(forCharacterIndex:lineHeightRectangle:)` | **`(0,0,0,0)`** — 캐럿 위치 없음 |
+
+**즉 `supportsDocumentAccess=true`는 거짓 신고다.** 실제 조회는 전부 실패한다.
+이는 능력 탐지를 API 응답에만 의존하면 안 된다는 적대 검증의 지적을 실증한다 —
+**속성 신고가 아니라 실제 조회 결과로 판정해야 한다.**
+
+**결정적: CorelDRAW는 IMK의 키 소비를 무시한다.**
+
+사용자 실측 — han2 모드에서 `ab` 입력 후 트리거 3개를 누르니 화면에 **`ab∞§£`**.
+`∞`=⌥5, `§`=⌥6, `£`=⌥3이다. 프로브는 이 세 키를 수신해 정상 처리하고
+`handle()`에서 **`true`(소비)를 반환**했는데도(위 MEASURE 로그가 증거) CorelDRAW가
+그 키를 그대로 문서에 입력했다.
+
+**즉 CorelDRAW는 IMK로 키를 보여주기만 하고, 입력기가 키를 억제하거나 텍스트를
+바꾸는 것을 허용하지 않는다.** 한글 조합은 자모 키를 삼키고 조합 결과를 대신 넣는
+방식이므로, 이 환경에서는 **자모가 전부 로마자로 새어 나간다. IMK 경로로 조합 불가.**
+
+**설계 귀결 — CorelDRAW는 IMK로 해결되지 않는다:**
+
+- R2의 원조 대상 앱을 IMK 단독 구조로는 지원할 수 없다
+- **현행 CGEvent 탭 경로를 CorelDRAW류를 위해 유지해야 한다** (하이브리드)
+- 이 경로는 손쉬운 사용 권한이 필요하다 → "IMK 전환 후 권한 불필요"는
+  **rung 1·2 앱에 한정**되는 주장으로 축소한다
+- 이벤트 탭이 CorelDRAW에서 예전에 잘 동작했다는 사용자 증언과 정합한다.
+  현재 안 되는 이유는 IMK와 무관한 `AppMonitor.swift:276`의 scope 결합이다
+
+### 부수 발견 (같은 로그)
+
+**① CapsLock이 모드를 전환한다.** `Info.plist`에 `TICapsLockLanguageSwitchCapable`을
+넣었더니 시스템이 CapsLock으로 한/영을 토글하고 `setValue`로 통지한다:
+
+```
+flagsChanged flags=caps keycode=57
+setValue MODE-CHANGED -> ...roman
+```
+
+→ R3-c의 사용자 수동 전환 경로를 **시스템이 제공**한다. 별도 구현이 불필요하고,
+사용자에게 익숙한 CapsLock 한/영이 그대로 동작한다.
+
+**② ⌘ 조합 도달은 앱마다 다르다.** VS Code에서는 도달했다:
+
+```
+CMD-combo REACHED handle: keycode=0 flags=cmd client=com.microsoft.VSCode
+```
+
+TextEdit에서는 ⌘Z가 도달하지 않았다(앱 Undo가 선점). **일반화 불가**이며,
+undo 1차 경로는 칩 클릭이라는 결론은 유지한다.
+
+**③ VS Code는 키가 정상 도달한다** — Electron이지만 IMK 경로는 살아 있다.
+
 ### 증상 관찰
 
 - 카톡: 잘 동작
