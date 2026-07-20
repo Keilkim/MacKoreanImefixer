@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-and-analyze:
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Validate shell entry points
+        run: |
+          bash -n \
+            install.sh \
+            install.command \
+            build-installer.sh \
+            uninstall.sh \
+            uninstall.command \
+            scripts/prepare-release.sh \
+            scripts/prepare-appcast.sh \
+            scripts/validate-release.sh
+
+      - name: Run unit tests
+        run: |
+          xcodebuild \
+            -project Mackor/Mackor.xcodeproj \
+            -scheme Mackor \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/MackorTests" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            test
+
+      - name: Analyze release build
+        run: |
+          xcodebuild \
+            -project Mackor/Mackor.xcodeproj \
+            -scheme Mackor \
+            -configuration Release \
+            -destination 'platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/MackorAnalyze" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            analyze

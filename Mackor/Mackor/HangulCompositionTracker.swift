@@ -2,7 +2,7 @@ import Foundation
 
 // MARK: - 조합 결과
 
-struct CompositionResult {
+struct CompositionResult: Equatable {
     /// 백스페이스 횟수 (현재 조합 중인 글자 삭제)
     let deleteCount: Int
     /// 백스페이스 후 입력할 텍스트
@@ -26,7 +26,7 @@ struct CompositionResult {
 /// 우리가 직접 자모를 조합하여 완성된 유니코드 문자를 보낸다.
 class HangulCompositionTracker {
 
-    enum State {
+    enum State: Equatable {
         case idle               // 조합 없음
         case choseong           // 초성만 (ㅎ)
         case syllable           // 초성+중성 또는 중성만 (하, ㅏ)
@@ -39,7 +39,9 @@ class HangulCompositionTracker {
     // 현재 조합 중인 자모
     private var cho: Character?
     private var jung: Character?
-    private var jungBase: Character?     // 복합 모음의 첫 모음 (ㅗ+ㅏ→ㅘ 에서 ㅗ)
+    // 복합 모음이 만들어진 경로. ㅗ+ㅏ+ㅣ→ㅙ이면 [ㅗ, ㅘ]를 보존해
+    // 백스페이스가 ㅙ→ㅘ→ㅗ 순서로 되돌아가게 한다.
+    private var jungHistory: [Character] = []
     private var jong: Character?         // 현재 종성 (복합 포함)
     private var jongFirst: Character?    // 복합 종성의 첫 자음
 
@@ -53,7 +55,7 @@ class HangulCompositionTracker {
 
     func reset() {
         state = .idle
-        cho = nil; jung = nil; jungBase = nil
+        cho = nil; jung = nil; jungHistory.removeAll(keepingCapacity: true)
         jong = nil; jongFirst = nil
     }
 
@@ -87,13 +89,13 @@ class HangulCompositionTracker {
             return .handled(delete: 1, insert: "")
 
         case .syllable:
-            if let base = jungBase, jung != base {
-                // 복합 모음 → 첫 모음으로 복귀 (ㅘ→ㅗ)
-                jung = base
+            if let previous = jungHistory.popLast() {
+                // 복합 모음 → 직전 모음으로 한 단계 복귀 (ㅙ→ㅘ→ㅗ)
+                jung = previous
                 return .handled(delete: 1, insert: currentComposing)
             } else if cho != nil {
                 // 초+중 → 초성만 (하→ㅎ)
-                jung = nil; jungBase = nil
+                jung = nil
                 state = .choseong
                 return .handled(delete: 1, insert: currentComposing)
             } else {
@@ -134,7 +136,7 @@ class HangulCompositionTracker {
         } else {
             cho = nil
             jung = jamo.character
-            jungBase = jamo.character
+            jungHistory.removeAll(keepingCapacity: true)
             state = .syllable
             return .handled(delete: 0, insert: String(jamo.character))
         }
@@ -145,7 +147,7 @@ class HangulCompositionTracker {
         if jamo.isVowel {
             // ㅎ + ㅏ → 하 (음절 시작)
             jung = jamo.character
-            jungBase = jamo.character
+            jungHistory.removeAll(keepingCapacity: true)
             state = .syllable
             return .handled(delete: 1, insert: currentComposing)
         } else {
@@ -161,18 +163,30 @@ class HangulCompositionTracker {
     private func handleSyllable(_ jamo: Jamo) -> CompositionResult {
         if jamo.isVowel {
             // 복합 모음 체크 (ㅗ+ㅏ→ㅘ)
-            if let base = jungBase,
-               let compound = HangulUnicode.compoundVowel(first: base, second: jamo.character) {
+            if let currentJung = jung,
+               let compound = HangulUnicode.compoundVowel(first: currentJung, second: jamo.character) {
+                jungHistory.append(currentJung)
                 jung = compound
                 return .handled(delete: 1, insert: currentComposing)
             } else {
                 // 복합 불가 → 현재 음절 확정, 새 모음 시작
                 let committed = currentComposing
-                cho = nil; jung = jamo.character; jungBase = jamo.character; jong = nil
+                cho = nil; jung = jamo.character; jungHistory.removeAll(keepingCapacity: true); jong = nil
                 state = .syllable
                 return .handled(delete: 1, insert: committed + currentComposing)
             }
         } else {
+            guard cho != nil else {
+                // 단독 모음 뒤 자음은 종성이 될 수 없다. 모음은 그대로 확정하고
+                // 자음을 새 초성으로 추가한다. (ㅏ+ㄴ → ㅏㄴ)
+                cho = jamo.character
+                jung = nil
+                jungHistory.removeAll(keepingCapacity: true)
+                jong = nil; jongFirst = nil
+                state = .choseong
+                return .handled(delete: 0, insert: String(jamo.character))
+            }
+
             // 자음 → 종성 후보
             if HangulUnicode.canBeJongseong(jamo.character) {
                 jong = jamo.character
@@ -182,7 +196,7 @@ class HangulCompositionTracker {
             } else {
                 // ㄸ, ㅃ, ㅉ은 종성 불가 → 현재 확정, 새 초성
                 let committed = currentComposing
-                cho = jamo.character; jung = nil; jungBase = nil; jong = nil
+                cho = jamo.character; jung = nil; jungHistory.removeAll(keepingCapacity: true); jong = nil
                 state = .choseong
                 return .handled(delete: 1, insert: committed + currentComposing)
             }
@@ -198,7 +212,7 @@ class HangulCompositionTracker {
             let commitJung = jung
             cho = jong
             jung = jamo.character
-            jungBase = jamo.character
+            jungHistory.removeAll(keepingCapacity: true)
             jong = nil; jongFirst = nil
             state = .syllable
 
@@ -215,7 +229,8 @@ class HangulCompositionTracker {
             } else {
                 // 복합 불가 → 현재 음절 확정 (종성 포함), 새 초성 시작
                 let committed = currentComposing
-                cho = jamo.character; jung = nil; jungBase = nil; jong = nil; jongFirst = nil
+                cho = jamo.character; jung = nil; jungHistory.removeAll(keepingCapacity: true)
+                jong = nil; jongFirst = nil
                 state = .choseong
                 return .handled(delete: 1, insert: committed + currentComposing)
             }
@@ -237,7 +252,7 @@ class HangulCompositionTracker {
 
             cho = split.second
             jung = jamo.character
-            jungBase = jamo.character
+            jungHistory.removeAll(keepingCapacity: true)
             jong = nil; jongFirst = nil
             state = .syllable
 
@@ -247,7 +262,8 @@ class HangulCompositionTracker {
         } else {
             // 자음 → 현재 음절 확정, 새 초성
             let committed = currentComposing
-            cho = jamo.character; jung = nil; jungBase = nil; jong = nil; jongFirst = nil
+            cho = jamo.character; jung = nil; jungHistory.removeAll(keepingCapacity: true)
+            jong = nil; jongFirst = nil
             state = .choseong
             return .handled(delete: 1, insert: committed + currentComposing)
         }
