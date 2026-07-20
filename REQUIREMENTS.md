@@ -10,14 +10,40 @@
 
 ## 1. 제품 요구사항 (변경 불가)
 
-### R1. 모든 앱과 프로그램에서 동작해야 한다
+### R1. 앱 등록 없이 시스템 전역에서 동작해야 한다
 
 > "모든 앱 및 프로그램에서 mackor가 작동해야한다니까"
 > "전체 모든 프로그램에서 작동하는거 아냐?"
 
-- 앱을 사용자가 **등록하지 않아도** 동작해야 한다.
-- 특정 앱군(네이티브 전용 등)으로 범위를 좁히는 것은 **요구사항 미충족**이다.
-- 브라우저(Safari·Chrome), Electron(VS Code), 네이티브(카톡) 모두 포함한다.
+**제품 의도 (변경 불가)**
+
+- 앱을 사용자가 **등록하거나 허용 목록에 넣지 않아도** 동작한다.
+- 특정 앱군(네이티브 전용 등)으로 좁히는 설계는 **요구사항 미충족**이다.
+
+**합격 기준 (검증 가능한 형태)**
+
+"문자 그대로 모든 프로그램"은 검증할 수 없다. IMK도 클라이언트가 macOS 텍스트 입력
+계약(`IMKTextInput`)을 지원해야 동작한다. 따라서 합격 기준을 이렇게 정한다.
+
+> 앱별 등록이나 허용 목록 없이 시스템 전역에서 활성화된다. 표준 macOS 텍스트 입력
+> 클라이언트에서 동작해야 하며, 아래 **필수 호환성 대상**을 모두 통과해야 한다.
+
+| 필수 대상 | 분류 | 현재 상태 |
+|---|---|---|
+| 카카오톡 | 네이티브 | 현재도 동작 |
+| Safari | WebKit | 현재 실패 |
+| Google Chrome | Chromium | 현재 실패 (실측: `focusedElement()` nil) |
+| VS Code | Electron | 현재 실패 |
+| CorelDRAW | 캔버스/커스텀 | R2 대상 |
+
+**명시적 비대상 (동작하지 않아도 미충족이 아님)**
+
+- 비밀번호 필드, Secure Event Input 활성 상태
+- 물리 키코드를 직접 읽는 앱 (게임 엔진, IOHIDManager 직접 사용)
+- VM·원격 데스크톱 클라이언트 (Parallels, VMware, RDP, VNC)
+
+CorelDRAW 외 프로그램 목록(§R2)은 **기능 적용 대상 목록이 아니라 실기기 시험
+매트릭스**다. 목록에 없는 앱에서 안 된다고 해서 설계가 앱 목록 기반이 되는 것은 아니다.
 
 ### R2. 한글 조합이 깨지는 현상 보완 — 코렐만이 아니다
 
@@ -28,8 +54,69 @@
 - CorelDRAW **한 앱의 문제가 아니라 여러 프로그램에서 공통으로** 나타난다.
 - 따라서 "문제 앱 목록을 등록해서 처리"하는 방식은 근본 해결이 **아니다.**
   전역으로 동작해야 한다 (R1과 결합).
-- **TODO:** 같은 현상이 나타나는 프로그램 목록을 사용자에게 확인받아 채운다.
-  현재 명시적으로 확인된 것: CorelDRAW. (나머지 미확인 — 추측으로 채우지 말 것)
+- 사용자가 명시적으로 확인한 것: CorelDRAW.
+- 아래 표는 웹 조사로 수집한 **출처 있는 보고**다 (2026-07-20 수집). 이것은 기능 적용
+  목록이 아니라 **실기기 시험 매트릭스 후보**다(R1 참조). 신뢰도 표기:
+  `확인됨` = 조사 에이전트가 출처 내용까지 확인, `부분확인` = 보고 존재는 확인했으나
+  세부 재검증 미완. URL 재검증(2차)은 일부 미완료 상태로 기록한다.
+
+**한글/CJK 조합 깨짐 보고 앱·툴킷 (조사 결과)**
+
+| 앱/툴킷 | 계열 | 신뢰도 | 출처 |
+|---|---|---|---|
+| Discord | Electron | 확인됨 | github.com/korean-input/issues/issues/15 (3번째 글자 초성 삭제) |
+| Notion | Electron | 확인됨 | github.com/gureum/gureum/issues/776 (앞 글자 소실) |
+| Obsidian | Electron | 확인됨 | forum.obsidian.md — Korean input line merge |
+| Figma | Electron+캔버스 | 확인됨 | forum.figma.com — 자모 분리·중복 |
+| VS Code | Electron | 부분확인 | github.com/microsoft/vscode/issues/134254 (자모 분해) |
+| ChatGPT 앱 | Electron계 | 확인됨 | community.openai.com (조합 취소·소실) |
+| Electron webview 전반 | Electron | 확인됨 | github.com/electron/electron/issues/9173 |
+| Qt 6.8.3/6.9.0 전반 | Qt | 확인됨 | bugreports.qt.io/QTBUG-136128 (첫 글자 깨짐) |
+| JetBrains IDE | Java/Swing | 부분확인 | youtrack.jetbrains.com/IDEA-331220 외 복수 |
+| Java AWT/Swing | Java | 부분확인 | bugs.openjdk.org/JDK-8068283 |
+| Unity Editor/InputField | 자체 렌더링 | 부분확인 | issuetracker.unity3d.com (확정 시 소실) |
+| Godot | 자체 렌더링 | 확인됨 | github.com/godotengine/godot/pull/85458 |
+| Blender | 자체 렌더링 | 부분확인 | developer.blender.org/T43569 |
+| Ghostty | 터미널 | 확인됨 | github.com/ghostty-org/ghostty/discussions/9213 (초성 소실) |
+| Alacritty | 터미널 | 확인됨 | github.com/alacritty/alacritty/issues/6942 |
+| kitty | 터미널 | 부분확인 | github.com/kovidgoyal/kitty/issues/4907 |
+| Corel Vector | Electron/캔버스 | 부분확인 | discuss.gravit.io (CJK 입력기 오동작 — CorelDRAW 계열) |
+| Avalonia (.NET) | 자체 렌더링 | 확인됨 | github.com/AvaloniaUI/Avalonia/issues/10031 |
+| wxWidgets/wxSTC | wxWidgets | 부분확인 | github.com/wxWidgets/wxWidgets/issues/26228 |
+| Evernote·AppFlowy·OBS(browser)·Toast UI·ink-text-input | 기타 | 부분확인 | 각 저장소 이슈 |
+
+주목할 사실: 이 보고들은 전부 **Apple 기본 한글 IME를 쓰는데도** 깨진다는 내용이다.
+즉 이 앱들은 NSTextInputClient(marked text)를 잘못 다루며, 이것이 R2 전달 사다리
+(조합 존중 클라이언트 = marked text, 먹는 클라이언트 = 즉시 커밋)가 필요한 실증 근거다.
+
+**합격 기준 (테스트 가능한 정의)**
+
+"먹힘"은 사용자 표현이지 테스트 조건이 아니다. 아래를 모두 만족해야 통과다.
+
+*포함하는 손상 유형*
+
+| 유형 | 설명 |
+|---|---|
+| 누락 | 친 자모가 화면에 나타나지 않음 |
+| 중복 | 같은 자모가 두 번 들어감 |
+| 자모 잔류 | 조합이 확정되지 못하고 낱자가 남음 (예: `좀ㅅ`) |
+| 잘못된 받침 | 받침이 다음 글자로 넘어가거나 잘못 붙음 |
+| 커서 이동 후 손상 | 방향키·클릭으로 커서를 옮긴 뒤 조합이 깨짐 |
+
+*시험 조건 — 각 필수 대상 앱마다 전부 수행*
+
+- 최소 재현 문자열: `안녕하세요 반갑습니다` (받침·쌍자음·복모음 포함)
+- **느린 입력**(자모당 200ms 이상)과 **빠른 입력**(키 롤오버 발생 수준) 각각
+- 조합 확정 트리거별로: Space / Enter / Backspace / 방향키 / 마우스 클릭
+- 각 조건 **10회 반복해 전부 무손실**이어야 통과 (1회라도 손상 시 실패)
+- 기대 최종 문자열이 입력 의도와 **정확히 일치**해야 함
+
+**[결정 D3] R2와 R3가 동시에 후보일 때 R2가 먼저다.**
+
+같은 키 흐름에서 조합 보정(R2)과 오입력 전환(R3)이 함께 발동할 수 있다.
+조합이 먼저 정상적으로 확정되어야 그 결과 문자열을 대상으로 R3 판정이 의미를 갖는다.
+따라서 **R2로 조합을 확정한 뒤 그 확정 문자열에 R3 규칙을 적용**한다.
+역순이면 깨진 조합을 대상으로 전환을 판정하게 되어 오탐이 발생한다.
 
 ### R3. 오입력 자동 전환 — 양방향 + 원문 칩 + 입력 소스 강제 전환
 
@@ -59,11 +146,35 @@
 **R3-c. 전환 후 입력 소스 강제 전환**
 
 - 텍스트만 바꾸고 끝내면 안 된다. 이어서 치는 글자가 또 틀리기 때문이다.
-- 전환한 언어에 맞게 **한/영 입력 소스를 강제로 바꾼다.**
-  (한→영 전환이면 입력 소스도 영문으로, 영→한이면 한글로)
+- 전환한 언어에 맞게 **입력 모드를 강제로 바꾼다.**
+  (한→영 전환이면 이후 입력이 영문으로, 영→한이면 한글로)
 - 기존 구현 대응: `InputSourceController.swift`,
   `onInputSourceSwitch` / `onInputSourceRestore` (`MackorApp.swift:249-253`),
   `AppMonitor.restoreInputSource` (`AppMonitor.swift:266-271`)
+
+> **[결정 D1] IMK에서 R3-c는 Mackor 내부 모드 전환으로 구현한다.**
+>
+> **충돌:** IMK 입력기는 활성 입력 소스일 때만 입력 세션과 이벤트를 받는다. 따라서
+> 교정 후 Apple ABC/두벌식으로 `TISSelectInputSource`를 호출하면 **Mackor 자신이
+> 비활성화되어 다음 입력을 관찰하지 못한다.** R3-c를 문자 그대로 "Apple 입력 소스로
+> 전환"으로 구현하면 R4(순수 IMK 전환)와 양립할 수 없다.
+>
+> **결정:** Mackor 입력 소스 **하나가 한글 모드와 영문 모드를 모두 소유**한다.
+> R3-c의 "강제 전환"은 `TISSelectInputSource` 호출이 아니라 **Mackor 내부 모드 변수
+> 전환**으로 달성한다. 사용자가 체감하는 효과(다음에 치는 글자가 맞는 언어로 나옴)는
+> 동일하다.
+>
+> **사용자가 받아들여야 하는 대가:** Apple 두벌식 대신 **Mackor를 입력 소스로 선택**해야
+> 한다. 입력기 목록에서 Mackor 하나만 쓰는 구성이 된다.
+>
+> **미검증 전제:** "전환 시 IMK가 비활성화된다"는 Apple 문서 기반 추론이며 실측하지
+> 않았다. 구현 착수 전 최소 IMK 프로토타입으로 확인한다. (P0-1 참조)
+>
+> **메커니즘 정정 (2026-07-20 적대 검증):** 내부 모드 전환의 구현 수단은
+> `TISSelectInputSource`가 아니라 **`IMKTextInput.selectMode(모드ID)`**다 — Gureum이
+> 실사용하는 검증된 경로이며, Gureum 리포에 `TISSelectInputSource` 호출은 0건이다
+> (`OSXCore/InputReceiver.swift` 실측). 시스템발 모드 변경 수신용
+> `setValue(forTag: kTextServiceInputModePropertyTag)` 구현이 짝으로 필수다.
 
 ### R3+R2 관계
 
@@ -122,6 +233,11 @@ IMK 전환은 **계층 교체**지 규칙 재작성이 아니다. 아래 자산�
 
 - 설치할 때마다 다시 승인해야 하는 상태는 해결 대상이다.
 - 확인된 사실: 프롬프트는 **전부 "손쉬운 사용"**이며 입력 모니터링은 관여하지 않는다.
+- IMK 전환 후: **현 기능 범위에서는** 권한이 아예 불필요하다 (Gureum도
+  `AXIsProcessTrusted` 0건). 단, 추후 "Caps Lock/우측 ⌘로 한영 전환" 류 기능을 넣으면
+  **입력 모니터링 권한이 부활**한다 — Gureum이 정확히 그 이유로
+  `IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)`를 호출한다
+  (`OSX/GureumAppDelegate.swift`). 프롬프트 소멸 주장은 기능 범위 한정으로만 유효.
 
 ---
 
@@ -131,13 +247,25 @@ IMK 전환은 **계층 교체**지 규칙 재작성이 아니다. 아래 자산�
 
 1. 실기기 입력 확인
 2. 전체 테스트 통과
-3. 소스와 `install.command` 커밋·푸시
-4. GitHub CI 통과 및 PR 병합
-5. 병합된 정확한 커밋을 깨끗하게 체크아웃
-6. 버전/build 번호 고정
+3. **버전/build 번호를 소스에 고정** ([결정 D2] 참조)
+4. 소스와 `install.command` 커밋·푸시 (버전 고정분 포함)
+5. GitHub CI 통과 및 PR 병합
+6. 병합된 정확한 커밋을 깨끗하게 체크아웃 — **이 시점 이후 소스를 수정하지 않는다**
 7. Developer ID 서명 → Apple 공증 → staple
 8. 공증된 DMG/PKG만 GitHub Release에 게시
 9. **Sparkle appcast는 마지막**
+
+> **[결정 D2] 버전/build 번호는 PR 전에 소스에 고정해 함께 병합한다.**
+>
+> 이전 순서는 버전 고정을 PR 병합 **뒤**에 두었다. 버전이 프로젝트 파일 변경이므로,
+> 병합된 커밋을 체크아웃한 뒤 다시 수정하면 **빌드한 트리가 병합된 커밋과 달라진다.**
+> "병합된 정확한 커밋으로 빌드"가 성립하지 않고 재현성이 깨진다.
+>
+> 따라서 버전·build를 소스에 박은 상태로 PR을 올려 함께 병합하고, 체크아웃 이후에는
+> 소스를 일절 수정하지 않는다.
+>
+> 주의: 버전 상수가 `build-installer.sh:10-11`, `install.sh:10-11`, `project.pbxproj`
+> 세 곳에 있다. 고정할 때 **세 곳을 함께** 맞춰야 한다.
 
 ### 금지사항
 
@@ -155,7 +283,7 @@ IMK 전환은 **계층 교체**지 규칙 재작성이 아니다. 아래 자산�
 | 항목 | 상태 | 근거 |
 |---|---|---|
 | Developer ID Application | **있음, 서명 성공** | `Authority=Developer ID Application: SEONGHUN KIM (TZQ9JL6R7R)` → `Developer ID CA` → `Apple Root CA`, exit 0 |
-| Developer ID Installer | **없음** | `security find-identity -v -p codesigning` 목록에 없음 → **PKG 불가, DMG만 가능** |
+| Developer ID Installer | **없음** | 목록에 없음 → **공개 배포용 서명 PKG 불가, DMG 경로만 가능.** 미서명 개발용 PKG 생성 자체는 가능 |
 | 공증 제출 | 미완료 | 아직 submit/staple 안 됨 |
 | 현재 설치본 서명 | ad-hoc | `Signature=adhoc`, `TeamIdentifier=not set`, `spctl: rejected` |
 
@@ -169,9 +297,13 @@ TCC 권한이 두 개인 게 **아니다.** 다이얼로그가 두 개다.
 2. 그 버튼 → `requestPermission()` → `checkAccessibilityPermission()`(`prompt: true`)
    → `AXIsProcessTrustedWithOptions` → macOS 시스템 프롬프트
 
-매번 다시 뜨는 것은 **ad-hoc 서명이라 재빌드마다 코드 해시가 바뀌어** TCC가 새 코드
-객체로 인식하기 때문. 해결책은 공증이 아니라 **안정적인 Developer ID 서명 + 동일
-bundle ID/designated requirement 유지**.
+**[실측]** 두 창이 모두 손쉬운 사용에 관한 것이라는 점, 그리고 코드가
+`AXIsProcessTrustedWithOptions`만 호출하고 Input Monitoring 요청 API는 쓰지 않는다는 점.
+
+**[가설 — 미검증]** 매번 다시 뜨는 원인이 "ad-hoc 서명이라 재빌드마다 코드 해시가 바뀌어
+TCC가 새 코드 객체로 인식하기 때문"이라는 설명은 **아직 검증하지 않았다.** Developer ID로
+서명한 빌드와 ad-hoc 빌드를 각각 재설치해 프롬프트 재발생 여부를 비교해야 확정된다.
+확정 전까지 "공증하면 해결된다"고 말하지 않는다.
 
 ### 현재 구조가 브라우저에서 실패하는 지점
 
@@ -220,9 +352,17 @@ AX 프로브 직접 측정 결과:
 - [x] 이벤트 탭 무효화 복구 버그 수정 (`CFMachPortIsValid` 검사 추가)
 - [x] `RELEASING.md` 서명 관련 사실 오류 정정
 - [x] 전체 테스트 통과 확인 (161 tests, 0 failures)
-- [ ] **백업 커밋** (R5)
-- [ ] IMK 마이그레이션 설계 확정 (R4)
+- [x] **백업 커밋** (R5) — `a1c5828` + 태그 `pre-imk`, 원격 푸시 완료 (`origin/main` = `d27ea90`)
+- [x] `ARCHITECTURE.md:444` 인증서 기술 정정 (RELEASING.md와 모순 해소)
+- [ ] **P0-1. IMK 프로토타입으로 D1 전제 검증** — 최소 기능 IMK 입력기를 만들어
+      `TISSelectInputSource`로 Apple 입력 소스로 전환했을 때 자기 자신이 비활성화되어
+      입력 관찰이 끊기는지 **실측**한다. 결정 D1의 근거가 문서 기반 추론이므로
+      **구현 착수 전에 반드시 확인한다.**
+- [x] **P0-2. R2 대상 프로그램 목록 확보** — 출처 있는 25종 수집 완료 (§R2 표).
+      실기기 시험 대상 선정: 필수 5종(R1 표) + 확장(Discord·Notion·Obsidian·터미널 1종)
+- [ ] IMK 마이그레이션 설계 확정 (R4) — P0-1 결과 반영 후
 - [ ] IMK 구현
+- [ ] 권한 반복 가설 검증 — Developer ID 서명본 vs ad-hoc 재설치 비교
 - [ ] R2 대상 프로그램 목록 확인
 - [ ] 릴리스 절차 진행
 

@@ -441,7 +441,23 @@ PR과 `main` push에는 GitHub Actions가 shell 구문 검사, 전체 XCTest와 
 
 첫 공식 Mackor v1.3 기준선은 번들 ID `com.mackor.app`, 경로 `/Applications/Mackor.app`으로 고정한다. legacy `/Applications/MacKR.app`(`com.mackr.app`)과 CorelHangulFix는 다른 식별자이므로 현재 자동 설치·설정·TCC migration 대상이 아니다. `notarytool` 자격 증명을 Keychain에 저장한 상태도 공증 성공이 아니며, 특정 최종 산출물이 `Accepted`되고 staple 검증까지 끝나야 한다.
 
-legacy 산출물 추가 진단에서는 thin build → `lipo` → 최종 번들 서명 순서와 `app-sandbox=false` entitlement 자체가 직접 원인은 아니었다. 같은 번들을 임시 ad-hoc 재서명하면 strict/deep 검증을 통과했다. 반면 현재 Mac에서는 Developer ID 서명의 Authority를 평가하지 못하고 `security find-identity -p codesigning`도 `0 valid identities`를 반환했다. 따라서 우선 Developer ID Application/Installer 인증서, 대응 개인 키와 Apple 인증 체인을 정상 상태로 재발급 또는 재설치해야 한다. 그 뒤 **현재 소스에서 새로 빌드한 산출물**로 아래 검증을 모두 다시 통과해야 한다.
+legacy 산출물 추가 진단에서는 thin build → `lipo` → 최종 번들 서명 순서와 `app-sandbox=false` entitlement 자체가 직접 원인은 아니었다. 같은 번들을 임시 ad-hoc 재서명하면 strict/deep 검증을 통과했다.
+
+2026-07-20 재측정으로 이전 기술을 정정한다. `security find-identity -v -p codesigning`은
+`Developer ID Application: SEONGHUN KIM (TZQ9JL6R7R)`를 포함해 **유효한 identity 3개**를
+보고하며, 이 인증서로 실제 `codesign` 서명이 성공한다(Authority 체인 `Developer ID
+Application` → `Developer ID Certification Authority` → `Apple Root CA`, exit 0).
+따라서 "0 valid identities"라는 이전 기술은 사실과 다르며, Developer ID Application
+인증서 재발급은 필요하지 않다.
+
+남은 차단 조건은 두 가지다.
+
+1. **`Developer ID Installer` identity 부재** — 공개 배포용으로 서명된 PKG를 만들 수 없다.
+   현재 공개 배포는 DMG 경로만 가능하다. (미서명 개발용 PKG 생성 자체는 가능하다.)
+2. **공증 미완료** — `notarytool` 자격 증명을 Keychain에 저장한 것은 제출 준비일 뿐이며,
+   특정 최종 산출물이 `Accepted`되고 staple 검증까지 끝나야 한다.
+
+그 뒤 **현재 소스에서 새로 빌드한 산출물**로 아래 검증을 모두 다시 통과해야 한다.
 
 ```bash
 codesign --verify --deep --strict --verbose=4 /Applications/Mackor.app
