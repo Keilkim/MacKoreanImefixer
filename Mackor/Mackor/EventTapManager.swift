@@ -1261,6 +1261,12 @@ class EventTapManager {
     private func resetTransientState() {
         tracker.reset()
         resetAutomaticCorrectionState()
+        // 차단한 keyDown의 짝 keyUp 대기 목록도 함께 비운다. 남겨두면 앱 전환 뒤
+        // 같은 keycode의 물리 keyUp이 handleKeyUp에서 삼켜지고(:663), 자동반복
+        // keyDown도 차단된다(:440). stop()과 탭 재활성 콜백은 이미 두 호출을
+        // 짝으로 하고 있었는데 앱 전환 경로(MackorApp의 resetComposition)만
+        // 빠져 있었다.
+        clearSuppressedKeyUps()
     }
 
     // MARK: - 결과 실행 (백스페이스 + 문자 전송)

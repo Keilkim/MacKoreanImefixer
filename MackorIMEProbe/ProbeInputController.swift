@@ -98,9 +98,16 @@ class ProbeInputController: IMKInputController {
             return true
         }
 
-        // 물리/합성 구분 기록 — 재현성 확보용
-        let synthetic = event.cgEvent?.getIntegerValueField(.eventSourceUserData) != nil
-        ProbeLog.line("keyDown keycode=\(keycode) flags=\(flagString(flags)) chars=\(event.characters ?? "") autorepeat=\(event.isARepeat) mode=\(ProbeModeState.current) synth?=\(synthetic) client=\(clientID(sender))")
+        // 물리/합성 구분 기록.
+        // 이전 판은 `getIntegerValueField(...) != nil`로 썼는데 이는 옵셔널 체인의
+        // nil 검사라 cgEvent가 있으면 항상 true였다 — 판별자로 무의미했다.
+        // 이제 EventTapManager와 같은 필드(42)·마커(0x48474C46 "HGLF")를 읽고
+        // 원시값을 그대로 남긴다. 이 값 하나가 두 가지를 동시에 판정한다:
+        // (a) 합성 이벤트가 handle()에 도달하는가
+        // (b) 필드 42가 CGEvent → WindowServer → TSM → NSEvent 왕복에서 살아남는가
+        let raw = event.cgEvent?.getIntegerValueField(CGEventField(rawValue: 42)!)
+        let synthetic = (raw == 0x4847_4C46)
+        ProbeLog.line("keyDown keycode=\(keycode) flags=\(flagString(flags)) chars=\(event.characters ?? "") autorepeat=\(event.isARepeat) mode=\(ProbeModeState.current) rawUserData=\(raw.map(String.init) ?? "nil") synth?=\(synthetic) client=\(clientID(sender))")
         return false
     }
 
