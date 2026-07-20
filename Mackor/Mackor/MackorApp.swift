@@ -246,9 +246,29 @@ class AppCoordinator: ObservableObject {
                 self?.correctionNoticeController.hide()
             }
         }
-        eventTapManager.onInputSourceSwitch = { [weak self] direction in
-            self?.appMonitor.switchInputSource(for: direction)
-        }
+        // 교정 뒤 입력 소스를 자동 전환하지 않습니다.
+        //
+        // 편의로 넣은 기능이었지만 핵심 기능을 망가뜨리고 있었습니다. 진단 로그로
+        // 확인한 사슬:
+        //
+        //   1. `dkwn ` → `아주` 교정 성공 → 입력 소스를 한글로 전환
+        //   2. 시스템(TIS)은 한글로 바뀌지만 앱은 계속 영문을 찍는 경우가 있다
+        //      (사용자 표현: "전환이 가끔 안 먹혀". 구글 검색창 스크린샷에서
+        //      `한` 배지가 떠 있는데 글자는 `dkwn wkf dksehlsp`로 남아 있었다)
+        //   3. Mackor는 TIS를 따라 "지금 한글자판"이라 믿는다
+        //   4. 그래서 이후 토큰을 반대 방향(한→영)으로 판정한다
+        //   5. `dksehlsmsrj`는 한→영으로 보면 `modernKoreanPreserved`라 그대로 둔다
+        //      (영→한으로 봤다면 `koreanStructure`로 `안되는거` 교정이었다)
+        //   6. 결과: 첫 단어만 바뀌고 그 뒤로 전부 죽는다
+        //
+        // 실측으로도 방향이 계속 뒤집혔다 — 한 실행에서 방향 전환 10회 대 같은
+        // 방향 연속 9회. 전환을 하지 않으면 Mackor의 믿음이 현실과 어긋날 일이
+        // 없고, 모드를 착각한 채 연달아 친 단어가 **전부** 교정된다.
+        //
+        // 되돌리려면 이 클로저에서 `appMonitor.switchInputSource(for:)`를 다시
+        // 부르면 됩니다. 기능 자체(`AppMonitor`/`InputSourceController`)는 원문
+        // 복원 경로가 계속 쓰므로 그대로 둡니다.
+        eventTapManager.onInputSourceSwitch = { _ in nil }
         eventTapManager.onInputSourceRestore = { [weak self] receipt in
             self?.appMonitor.restoreInputSource(receipt) ?? false
         }
