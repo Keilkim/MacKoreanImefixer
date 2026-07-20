@@ -1,0 +1,48 @@
+[23:35:56.972] deactivateServer client=com.apple.Keyboard-Settings.extension epoch=2 Δ=277581ms
+[23:35:58.559] activateServer client=com.microsoft.VSCode epoch=3 Δ=1586ms TIS[sourceID=com.mackor.inputmethod.MackorProbe.han2 modeID=com.mackor.inputmethod.MackorProbe.han2]
+[23:35:58.559] setValue MODE-CHANGED -> com.mackor.inputmethod.MackorProbe.han2 client=com.microsoft.VSCode
+[23:35:58.797] deactivateServer client=com.apple.systempreferences epoch=3 Δ=240ms
+[23:36:09.620] RET=false(통과) keyDown keycode=2 flags=- chars=[d] autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 rawUserData=0 synth?=false client=com.microsoft.VSCode
+[23:36:10.278] RET=false(통과) keyDown keycode=51 flags=- chars=[] autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 rawUserData=0 synth?=false client=com.microsoft.VSCode
+[23:36:10.658] flagsChanged flags=caps keycode=57
+[23:36:10.664] flagsChanged flags=- keycode=255
+[23:36:10.779] commitComposition client=com.microsoft.VSCode
+[23:36:10.783] deactivateServer client=com.microsoft.VSCode epoch=3 Δ=11986ms
+[23:36:10.784] deactivateServer client=com.microsoft.VSCode epoch=3 Δ=1ms
+[23:36:14.373] activateServer client=com.microsoft.VSCode epoch=4 Δ=3589ms TIS[sourceID=com.mackor.inputmethod.MackorProbe.han2 modeID=com.mackor.inputmethod.MackorProbe.han2]
+[23:36:14.374] setValue MODE-CHANGED -> com.mackor.inputmethod.MackorProbe.han2 client=com.microsoft.VSCode
+[23:36:14.377] flagsChanged flags=- keycode=57
+[23:36:14.473] RET=false(통과) keyDown keycode=15 flags=- chars=[r] autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 rawUserData=0 synth?=false client=com.microsoft.VSCode
+[23:36:14.540] RET=false(통과) keyDown keycode=46 flags=- chars=[m] autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 rawUserData=0 synth?=false client=com.microsoft.VSCode
+[23:36:14.649] RET=false(통과) keyDown keycode=3 flags=- chars=[f] autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 rawUserData=0 synth?=false client=com.microsoft.VSCode
+[23:36:14.756] RET=false(통과) keyDown keycode=38 flags=- chars=[j] autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 rawUserData=0 synth?=false client=com.microsoft.VSCode
+[23:36:14.861] RET=false(통과) keyDown keycode=1 flags=- chars=[s] autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 rawUserData=0 synth?=false client=com.microsoft.VSCode
+[23:36:14.941] RET=false(통과) keyDown keycode=37 flags=- chars=[l] autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 rawUserData=0 synth?=false client=com.microsoft.VSCode
+[23:36:14.988] flagsChanged flags=shift keycode=60
+[23:36:15.093] RET=false(통과) keyDown keycode=15 flags=shift chars=[R] autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 rawUserData=0 synth?=false client=com.microsoft.VSCode
+[23:36:15.169] RET=false(통과) keyDown keycode=40 flags=shift chars=[K] autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 rawUserData=0 synth?=false client=com.microsoft.VSCode
+[23:36:15.196] flagsChanged flags=- keycode=60
+[23:36:15.244] RET=false(통과) keyDown keycode=49 flags=- chars=[ ] autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 rawUserData=0 synth?=false client=com.microsoft.VSCode
+[23:36:16.242] activateServer client=com.apple.systempreferences epoch=5 Δ=1869ms TIS[sourceID=com.mackor.inputmethod.MackorProbe.han2 modeID=com.mackor.inputmethod.MackorProbe.han2]
+[23:36:16.245] setValue MODE-CHANGED -> com.mackor.inputmethod.MackorProbe.han2 client=com.apple.systempreferences
+[23:36:16.247] deactivateServer client=com.microsoft.VSCode epoch=5 Δ=5ms
+[23:36:17.098] activateServer client=com.corel.coreldrawsuite.2025.coreldraw epoch=6 Δ=851ms TIS[sourceID=com.mackor.inputmethod.MackorProbe.han2 modeID=com.mackor.inputmethod.MackorProbe.han2]
+[23:36:17.099] setValue MODE-CHANGED -> com.mackor.inputmethod.MackorProbe.han2 client=com.corel.coreldrawsuite.2025.coreldraw
+[23:36:17.272] deactivateServer client=com.apple.systempreferences epoch=6 Δ=173ms
+[23:36:19.347] RET=true(소비) AUTO-CONSUME [com.corel.coreldrawsuite.2025.coreldraw] 첫 글자 키 소비 chars=[q] — 화면에 [q]가 보이면 이 앱은 IMK 소비를 무시한다
+[23:36:20.568] deactivateServer client=com.corel.coreldrawsuite.2025.coreldraw epoch=6 Δ=3297ms
+[23:36:20.576] activateServer client=com.microsoft.VSCode epoch=7 Δ=8ms TIS[sourceID=com.mackor.inputmethod.MackorProbe.han2 modeID=com.mackor.inputmethod.MackorProbe.han2]
+[23:36:20.577] setValue MODE-CHANGED -> com.mackor.inputmethod.MackorProbe.han2 client=com.microsoft.VSCode
+[23:36:21.477] RET=false(통과) keyDown keycode=2 flags=- chars=[d] autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 rawUserData=0 synth?=false client=com.microsoft.VSCode
+[23:36:22.239] flagsChanged flags=cmd keycode=55
+[23:36:22.384] RET=false(통과) CMD-combo REACHED handle keycode=0 flags=cmd client=com.microsoft.VSCode
+[23:36:22.522] flagsChanged flags=- keycode=55
+[23:36:22.787] flagsChanged flags=caps keycode=57
+[23:36:22.793] flagsChanged flags=- keycode=255
+[23:36:22.871] commitComposition client=com.microsoft.VSCode
+[23:36:22.872] deactivateServer client=com.microsoft.VSCode epoch=7 Δ=2296ms
+[23:36:22.873] deactivateServer client=com.microsoft.VSCode epoch=7 Δ=1ms
+[23:36:59.715] activateServer client=com.corel.coreldrawsuite.2025.coreldraw epoch=8 Δ=36840ms TIS[sourceID=com.apple.inputmethod.Korean.2SetKorean modeID=com.apple.inputmethod.Korean.2SetKorean]
+[23:36:59.716] commitComposition client=com.corel.coreldrawsuite.2025.coreldraw
+[23:36:59.716] deactivateServer client=com.corel.coreldrawsuite.2025.coreldraw epoch=8 Δ=3ms
+[23:36:59.717] deactivateServer client=com.corel.coreldrawsuite.2025.coreldraw epoch=8 Δ=0ms

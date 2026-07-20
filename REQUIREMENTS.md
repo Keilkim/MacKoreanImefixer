@@ -560,6 +560,56 @@ CorelDRAW에서 도는 것은 직접 조합(R2)뿐이며, 사용자가 기억하
 조회는 `AXTextArea`를 정상 반환했다. **도구 아티팩트이지 앱의 성질이 아니므로**
 `axgate`는 애플리케이션 요소 경로를 쓴다.
 
+### G0-1 소비 정직성 — CorelDRAW 확정 (2026-07-20, 6차)
+
+앞선 "CorelDRAW가 IMK 소비를 무시한다"는 판정은 **감사 불가**였다(반환값 미기록,
+트리거가 전부 `ctrl+opt`인데 화면 기호는 `opt` 단독 문자). 프로브에
+**반환값 로깅 + 대상 앱 자동 소비**를 넣어 재측정했다.
+
+```
+23:36:17.098  activateServer client=com.corel.coreldrawsuite.2025.coreldraw
+              TIS[sourceID=com.mackor.inputmethod.MackorProbe.han2]   ← 프로브가 활성 입력 소스
+23:36:19.347  RET=true(소비) AUTO-CONSUME [com.corel...] 첫 글자 키 소비 chars=[q]
+```
+
+→ **화면에는 `q`가 나타났다.** (사용자 실측)
+
+대조군 (같은 프로브·같은 코드 경로, 같은 세션):
+
+| 앱 | `RET=true`로 소비한 글자 | 화면 |
+|---|---|---|
+| TextEdit | `q` | **안 나옴** (파일 내용 비어 있음) |
+| CorelDRAW | `q` | **나옴** |
+
+**확정: CorelDRAW는 IMK의 키 소비 결과를 무시한다.** 한글 조합은 자모 키를 삼키고
+조합 결과를 대신 넣는 방식이므로, 키를 억제할 수 없으면 자모가 전부 로마자로 샌다.
+**CorelDRAW류는 IMK로 조합 불가 → 이벤트 탭 경로 유지 필수(하이브리드 확정).**
+
+측정 설계상 유의점(두 번의 무효 측정에서 배운 것):
+- 반환값을 로그에 남기지 않으면 화면 결과와 대응시킬 수 없다 → `RET=` 필수
+- 사람이 트리거 키를 누르는 방식은 무장이 다른 키(백스페이스 등)에 소진되거나
+  의도한 앱이 아닌 곳에서 측정된다 → 대상 앱 자동 소비 + 글자 키 한정
+
+### G0-2 직접 조합 기준선 (TextEdit)
+
+```
+MEASURE directCompose: setMarkedText("ㅎ", NSNotFound) -> marked=(1,1) sel=(1,1)
+AFTER-directCompose: length=2 text=[Qㅎ]
+```
+
+TextEdit에서 마크드 텍스트가 정상 표시된다. CorelDRAW 측정은 미완(소비 무시가
+확정됐으므로 우선순위 하락 — 조합을 표시해도 자모 키 유출이 먼저 발생한다).
+
+### G0-6 flap 실측
+
+같은 세션에서 관측된 연속 전이 간격: `Δ=0ms`, `Δ=1ms`, `Δ=2ms`, `Δ=4ms`, `Δ=10ms`,
+`Δ=13ms` (VS Code·TextEdit·CorelDRAW 전환). 동일 클라이언트의 중복 `deactivateServer`도
+반복 관측된다(`epoch=19 Δ=2458ms` 직후 `Δ=0ms`).
+
+→ 설계 v2가 세션 식별을 bundleID가 아니라 **identity + epoch**로 바꾼 근거가
+실측으로 뒷받침된다. `activate(B)` 뒤에 `deactivate(A)`가 늦게 도착하는 패턴도
+같은 로그에 있다(`23:26:50.301 activate TextEdit` → `.319 deactivate Chrome`).
+
 ### 증상 관찰
 
 - 카톡: 잘 동작

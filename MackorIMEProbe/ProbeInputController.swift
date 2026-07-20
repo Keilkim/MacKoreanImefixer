@@ -126,9 +126,24 @@ class ProbeInputController: IMKInputController {
 
         // [G0-1] 소비 정직성 측정: 무장돼 있으면 이 일반 키 하나를 소비한다.
         // 화면에 이 문자가 나타나면 앱이 IMK 소비를 무시하는 것이다.
+        // 트리거 키를 사람이 누르는 방식은 오류를 부른다 — 무장이 백스페이스 같은
+        // 다른 키에 소진되어 측정이 무효가 된 사례가 있었다. 그래서 **글자 키에만**
+        // 반응하고, 대상 앱에서는 첫 글자 키를 자동으로 소비한다.
+        let isLetterKey = chars.count == 1 && (chars.first?.isLetter ?? false)
+
+        if isLetterKey, ProbeAutoConsume.targets.contains(cid),
+           !ProbeAutoConsume.done.contains(cid) {
+            ProbeAutoConsume.done.insert(cid)
+            return ret(true, "AUTO-CONSUME [\(cid)] 첫 글자 키 소비 chars=[\(chars)] — 화면에 [\(chars)]가 보이면 이 앱은 IMK 소비를 무시한다")
+        }
+
         if consumeNextKeyArmed {
+            guard isLetterKey else {
+                // 글자 키가 아니면 무장을 유지한다.
+                return ret(false, "keyDown(무장유지, 글자키 아님) keycode=\(keycode) chars=[\(chars)] client=\(cid)")
+            }
             consumeNextKeyArmed = false
-            return ret(true, "CONSUME-TEST 이 키를 소비함 keycode=\(keycode) chars=[\(chars)] client=\(cid) — 화면에 [\(chars)]가 보이면 앱이 소비를 무시한 것")
+            return ret(true, "CONSUME-TEST 이 키를 소비함 chars=[\(chars)] client=\(cid) — 화면에 [\(chars)]가 보이면 앱이 소비를 무시한 것")
         }
 
         // 물리/합성 구분 기록.
@@ -339,6 +354,23 @@ enum TISProbe {
         }
         return "TIS[sourceID=\(prop(kTISPropertyInputSourceID)) modeID=\(modeID)]"
     }
+}
+
+/// [G0-1] 자동 소비 대상.
+///
+/// 사람이 트리거 키를 누르는 방식은 실패했다 — 무장이 다른 키에 소진되거나,
+/// 애초에 의도한 앱이 아닌 곳에서 측정되기 쉽다. 대상 앱에서 **첫 글자 키를
+/// 자동으로 소비**하고 결과를 로그에 남기면, 사용자는 글자만 치면 된다.
+enum ProbeAutoConsume {
+    /// 소비 정직성을 측정할 앱. 환경변수로 덮어쓸 수 있다.
+    static let targets: Set<String> = {
+        if let env = ProcessInfo.processInfo.environment["MACKOR_PROBE_CONSUME"] {
+            return Set(env.split(separator: ",").map(String.init))
+        }
+        return ["com.corel.coreldrawsuite.2025.coreldraw"]
+    }()
+    /// 앱당 1회만 소비한다 (계속 삼키면 사용자가 타이핑을 못 한다).
+    static var done: Set<String> = []
 }
 
 /// [G0-6] 세션 epoch·flap 계측.
