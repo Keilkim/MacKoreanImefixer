@@ -58,6 +58,23 @@ jobs:
             echo "경고: pre-imk 태그를 찾지 못해 기준 대조를 건너뜀" >&2
           fi
 
+      # Layer 1 어휘 자산은 엔진 동결과 **별도**로 관리한다.
+      #
+      # engine-freeze에 합치지 않는 이유: 그쪽은 "마이그레이션 동안 한 바이트도
+      # 바뀌지 않는다"를 pre-imk 태그 diff로까지 강제한다. 사전은 앞으로 자랄
+      # 자산이므로 같은 매니페스트에 넣으면 태그 diff 가드가 즉시 실패하고,
+      # "동결"과 "성장"이 한 파일에 섞여 의미가 무너진다.
+      #
+      # 여기서는 해시 대조만 한다. 사전을 바꾸려면 생성 스크립트를 돌려
+      # 매니페스트를 함께 갱신해야 하고, 그 diff가 곧 어휘 변화의 기록이 된다.
+      - name: Verify lexicon freeze (Layer 1)
+        run: |
+          shasum -a 256 -c scripts/lexicon-freeze.sha256
+
+          # 투영이 원본 사전 대비 무손실인지 재검증한다. 이게 깨지면 사전을
+          # 줄인 것이 판정을 바꿨다는 뜻이므로 반드시 잡아야 한다.
+          python3 -B scripts/lexicon/make_lexicon.py verify
+
       - name: Run unit tests
         run: |
           xcodebuild \
