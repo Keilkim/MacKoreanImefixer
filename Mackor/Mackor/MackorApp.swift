@@ -344,7 +344,14 @@ class AppCoordinator: ObservableObject {
             hasAccessibility = started
             if started { return }
         }
-        guard EventTapManager.checkAccessibilityPermission() else {
+        // `prompt: false`로 **확인만** 합니다.
+        //
+        // 여기서 prompt를 켜면 macOS가 자체 권한 창을 띄우는데, 이 함수는 이미
+        // 우리 안내 창("설정을 마무리해 주세요")에서 사용자가 버튼을 누른 뒤에
+        // 불립니다. 그래서 창이 연달아 두 번 떴습니다 — 사용자가 반복해서
+        // 불편을 호소한 지점입니다. 우리 창이 이유와 개인정보 처리까지 설명하고
+        // 곧바로 시스템 설정을 열어 주므로 macOS 기본 창은 중복입니다.
+        guard EventTapManager.checkAccessibilityPermission(prompt: false) else {
             hasAccessibility = false
             return
         }

@@ -17,6 +17,12 @@ protocol EventTapFocusInspecting {
         _ token: FocusedInputSafety.FocusToken,
         utf16Offset: Int
     ) -> Bool
+    /// 캡처 앵커를 쓰지 않고, 지금 캐럿 바로 앞 글자가 원문과 같은지 확인합니다.
+    func originalPrecedesCaret(
+        _ token: FocusedInputSafety.FocusToken,
+        original: String,
+        boundaryUTF16Count: Int
+    ) -> Bool
 }
 
 extension EventTapFocusInspecting {
@@ -26,6 +32,14 @@ extension EventTapFocusInspecting {
         if let token = automaticCorrectionFocusToken() { return .eligible(token) }
         return .ineligible
     }
+
+    /// 실제 AX 요소가 없는 테스트 대역은 이 확인을 할 수 없으므로 false입니다.
+    /// 기존 산술 검증 결과만으로 판단하게 되어 동작이 그대로입니다.
+    func originalPrecedesCaret(
+        _ token: FocusedInputSafety.FocusToken,
+        original: String,
+        boundaryUTF16Count: Int
+    ) -> Bool { false }
 }
 
 private struct AccessibilityEventTapFocusInspector: EventTapFocusInspecting {
@@ -35,6 +49,18 @@ private struct AccessibilityEventTapFocusInspector: EventTapFocusInspecting {
 
     func probeAutomaticCorrectionFocus() -> FocusedInputSafety.FocusProbe {
         FocusedInputSafety.probeAutomaticCorrectionFocus()
+    }
+
+    func originalPrecedesCaret(
+        _ token: FocusedInputSafety.FocusToken,
+        original: String,
+        boundaryUTF16Count: Int
+    ) -> Bool {
+        FocusedInputSafety.originalPrecedesCaret(
+            token,
+            original: original,
+            boundaryUTF16Count: boundaryUTF16Count
+        )
     }
 
     func isCurrentFocus(
@@ -1175,12 +1201,29 @@ class EventTapManager {
         // 일치하기 전에는 어떤 삭제나 입력 소스 변경도 수행하지 않습니다.
         let expectedOffset = pending.decision.original.utf16.count
             + pending.boundarySequence.producedUTF16Count
-        let focusMatches = focusInspector.isCurrentFocus(
+        var focusMatches = focusInspector.isCurrentFocus(
             pending.focusToken,
             utf16Offset: expectedOffset
         )
+        // 캡처 시점 앵커가 낡으면 위 산술은 어긋납니다(실측: 실제 캐럿 0인데
+        // initial=32). 재시도해도 다시 읽는 건 현재 캐럿뿐이고 틀린 쪽은 앵커라
+        // 영영 맞지 않습니다 — 사용자가 겪는 "되다가 안 되다가"의 원인입니다.
+        //
+        // 그래서 앵커를 쓰지 않는 직접 증거로 한 번 더 확인합니다. 지금 캐럿
+        // 바로 앞의 실제 글자가 원문과 같으면 지울 대상이 정확히 그 자리에
+        // 있다는 뜻이므로 안전합니다. 산술보다 강한 보장입니다.
+        var confirmedByText = false
+        if !focusMatches {
+            confirmedByText = focusInspector.originalPrecedesCaret(
+                pending.focusToken,
+                original: pending.decision.original,
+                boundaryUTF16Count: pending.boundarySequence.producedUTF16Count
+            )
+            focusMatches = confirmedByText
+        }
         EventTapManager.diagnostic(
-            "deferred focus match=\(focusMatches) expectedOffset=\(expectedOffset) attempt=\(attempt)"
+            "deferred focus match=\(focusMatches) expectedOffset=\(expectedOffset) "
+                + "attempt=\(attempt)\(confirmedByText ? " viaCaretText=true" : "")"
         )
         guard focusMatches else {
             return false
@@ -1541,7 +1584,12 @@ class EventTapManager {
 
     // MARK: - 권한 확인
 
-    static func checkAccessibilityPermission(prompt: Bool = true) -> Bool {
+    /// 손쉬운 사용 권한 상태를 확인합니다.
+    ///
+    /// `prompt`를 켜면 macOS가 자체 권한 창을 띄웁니다. Mackor는 이유와 개인정보
+    /// 처리를 설명하는 자체 안내 창을 쓰고 시스템 설정도 직접 열어 주므로,
+    /// **기본값은 확인만 하는 `false`**입니다. 켜면 창이 두 번 뜹니다.
+    static func checkAccessibilityPermission(prompt: Bool = false) -> Bool {
         let options = [kAXTrustedCheckOptionPrompt.takeRetainedValue(): prompt] as CFDictionary
         return AXIsProcessTrustedWithOptions(options)
     }

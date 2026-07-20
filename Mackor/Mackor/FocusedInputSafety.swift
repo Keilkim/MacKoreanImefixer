@@ -295,6 +295,69 @@ enum FocusedInputSafety {
         return exactString == replacement
     }
 
+    /// 캡처 시점 앵커에 기대지 않고, **지금 캐럿 바로 앞의 실제 글자**가 원문과
+    /// 같은지 확인합니다.
+    ///
+    /// 기본 검증(`isCurrentFocus`)은 산술입니다 — `지금 캐럿 == 캡처한 캐럿 + 입력 길이`.
+    /// 그런데 토큰 시작 시의 AX 읽기가 **낡은 캐럿 위치를 돌려주는** 경우가 있습니다.
+    /// 진단 로그에서 실제 캐럿이 0인데 `initial=32`가 잡혀 교정이 포기된 사례를
+    /// 확인했고, 재시도 세 번이 모두 같은 값으로 실패했습니다 — 다시 읽는 쪽은
+    /// `current`뿐이고 틀린 쪽은 `initial`이라 재시도로는 고칠 수 없습니다.
+    /// 사용자에게는 "되다가 안 되다가" 하는 간헐 실패로 보입니다.
+    ///
+    /// 이 함수는 캡처값을 전혀 쓰지 않습니다. 지금 캐럿을 새로 읽고 그 바로 앞
+    /// `original` 길이만큼을 읽어 **문자열로 대조**합니다. 일치하면 지울 대상이
+    /// 정확히 그 자리에 있다는 직접 증거이므로 낡은 앵커와 무관하게 안전합니다.
+    /// 산술보다 오히려 강한 보장입니다 — 엉뚱한 글자를 지울 수 없습니다.
+    ///
+    /// 읽는 범위는 방금 사용자가 친 토큰과 경계 문자뿐이며, 주변 문장이나 필드
+    /// 전체 값은 읽지 않습니다(`exactReplacementIsCurrent`와 같은 범위 정책).
+    static func originalPrecedesCaret(
+        _ token: FocusToken,
+        original: String,
+        boundaryUTF16Count: Int
+    ) -> Bool {
+        guard boundaryUTF16Count >= 0, let element = token.element else {
+            return false
+        }
+        var selectionValue: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(
+            element,
+            kAXSelectedTextRangeAttribute as CFString,
+            &selectionValue
+        ) == .success,
+        let selectionValue,
+        let caret = selectedTextRange(from: selectionValue),
+        caret.length == 0 else {
+            diagnostic("caret text check could not read caret")
+            return false
+        }
+
+        let originalCount = original.utf16.count
+        let start = caret.location - boundaryUTF16Count - originalCount
+        guard start >= 0, originalCount > 0 else {
+            diagnostic("caret text check out of range start=\(start)")
+            return false
+        }
+
+        var range = CFRange(location: start, length: originalCount)
+        guard let rangeValue = AXValueCreate(.cfRange, &range) else { return false }
+        var stringValue: CFTypeRef?
+        guard AXUIElementCopyParameterizedAttributeValue(
+            element,
+            kAXStringForRangeParameterizedAttribute as CFString,
+            rangeValue,
+            &stringValue
+        ) == .success,
+        let text = stringValue as? String else {
+            diagnostic("caret text check could not read range")
+            return false
+        }
+        let matches = text == original
+        diagnostic("caret text check caret=\(caret.location) start=\(start) matches=\(matches)")
+        return matches
+    }
+
     /// Converts Quartz global event coordinates to AppKit global coordinates.
     /// The main display defines the shared vertical origin even when another
     /// display has a negative x/y origin.

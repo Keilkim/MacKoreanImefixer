@@ -36,6 +36,54 @@ final class EventTapManagerTests: XCTestCase {
         XCTAssertEqual(switchedDirections, [.latinToKorean])
     }
 
+    // MARK: - 낡은 캡처 앵커 (간헐 실패)
+    //
+    // 토큰 시작 시의 AX 읽기가 낡은 캐럿 위치를 돌려주면 산술 검증
+    // (`지금 캐럿 == 캡처 캐럿 + 입력 길이`)이 어긋난다. 재시도해도 다시 읽는
+    // 건 현재 캐럿뿐이라 영영 맞지 않는다 — 사용자가 겪은 "되다가 안 되다가".
+
+    /// 산술 검증이 실패해도, 캐럿 바로 앞 글자가 원문과 같으면 교정해야 한다.
+    /// 그게 지울 대상이 그 자리에 있다는 직접 증거다.
+    func testStaleAnchorStillCorrectsWhenCaretTextMatches() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.currentFocusMatches = false   // 앵커가 낡아 산술은 실패
+        focus.caretTextMatches = true       // 캐럿 앞 글자는 원문과 일치
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("dkwn", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(
+            output.actions.contains(.text("아주")),
+            "캐럿 앞 글자가 원문과 같은데도 교정을 포기했습니다: \(output.actions)"
+        )
+    }
+
+    /// 둘 다 실패하면 교정하지 않아야 한다. 캐럿이 실제로 옮겨간 경우이므로
+    /// 엉뚱한 자리의 글자를 지우는 것보다 안 고치는 편이 낫다.
+    func testCorrectionIsAbandonedWhenNeitherCheckConfirms() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.currentFocusMatches = false
+        focus.caretTextMatches = false
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("dkwn", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertFalse(
+            output.actions.contains(.text("아주")),
+            "확인되지 않았는데 교정했습니다: \(output.actions)"
+        )
+    }
+
     // MARK: - 포커스 조회의 일시적 실패
     //
     // 실측: Chrome의 차가운 첫 AX 조회는 약 57ms 걸려 이벤트 탭 경로의 50ms
@@ -1664,6 +1712,8 @@ private final class FakeFocusInspector: EventTapFocusInspecting {
     /// 이 횟수만큼 조회가 *일시적으로* 실패한 뒤 성공합니다. Chrome처럼 차가운
     /// 첫 조회가 타임아웃 나는 앱을 흉내 냅니다.
     var transientFailuresRemaining = 0
+    /// 캡처 앵커가 낡아 산술 검증이 실패해도, 캐럿 앞 글자 대조는 통과하는 상황.
+    var caretTextMatches = false
 
     func automaticCorrectionFocusToken() -> FocusedInputSafety.FocusToken? {
         tokenRequestCount += 1
@@ -1678,6 +1728,14 @@ private final class FakeFocusInspector: EventTapFocusInspecting {
         }
         guard let token = automaticCorrectionFocusToken() else { return .ineligible }
         return .eligible(token)
+    }
+
+    func originalPrecedesCaret(
+        _ token: FocusedInputSafety.FocusToken,
+        original: String,
+        boundaryUTF16Count: Int
+    ) -> Bool {
+        caretTextMatches
     }
 
     func isCurrentFocus(
