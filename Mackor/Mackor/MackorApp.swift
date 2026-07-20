@@ -264,6 +264,11 @@ class AppCoordinator: ObservableObject {
                 self.eventTapManager.resetComposition()
                 self.correctionNoticeController.hide()
                 self.frontAppBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+                // 전환 직후 첫 AX 읽기는 낡은 캐럿 위치를 돌려줄 수 있습니다.
+                // 그 값으로 토큰을 앵커하면 위치 검증이 어긋나 첫 단어의 교정이
+                // 통째로 포기됩니다. 여기서 미리 한 번 버리는 읽기로 캐시를
+                // 갱신합니다 — 탭 콜백 밖이라 입력을 지연시키지 않습니다.
+                FocusedInputSafety.warmFocusCache()
                 // 탭이 무효화된 채로 남으면 메뉴바는 켜져 있는데 어떤 앱에서도
                 // 키를 관찰하지 못합니다. 앱 전환은 입력 직전에 반드시 발생하므로
                 // 여기서 상태를 확인해 필요하면 재생성합니다.

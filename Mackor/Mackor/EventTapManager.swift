@@ -383,6 +383,9 @@ class EventTapManager {
             CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         }
         CGEvent.tapEnable(tap: tap, enable: true)
+        // 앱이 막 뜬 직후의 첫 AX 읽기는 낡은 캐럿 위치를 돌려줄 수 있습니다.
+        // 실제 입력이 오기 전에 미리 한 번 버리는 읽기로 캐시를 갱신합니다.
+        FocusedInputSafety.warmFocusCache()
         print("[Mackor] Event tap 시작됨.")
         return true
     }

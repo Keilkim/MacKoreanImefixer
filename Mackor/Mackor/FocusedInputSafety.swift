@@ -46,14 +46,65 @@ enum FocusedInputSafety {
         _ = systemWideElement
     }
 
+    /// 포커스 캐시를 데웁니다. **결과를 쓰지 않고 버립니다.**
+    ///
+    /// 실측(진단 로그)으로 확인한 문제: Mackor가 막 뜬 직후나 앱을 전환한 직후의
+    /// 첫 AX 읽기는 *실패*하는 게 아니라 **낡은 캐럿 위치를 돌려줍니다.**
+    /// 한 사례에서 실제 캐럿은 0인데 `initial=32`가 잡혔고, 그 토큰의 교정은
+    /// 위치 검증(`current == initial + 입력길이`)에서 어긋나 포기됐습니다.
+    /// 포기 자체는 옳은 안전 동작이지만 — 엉뚱한 자리의 글자를 지우면 안 되므로 —
+    /// 사용자에게는 "첫 단어만 안 바뀐다"로 보입니다.
+    ///
+    /// 재시도로는 못 고칩니다. 재시도는 `current`만 다시 읽고 `initial`은 캡처
+    /// 시점 값에 고정되는데, 틀린 쪽이 `initial`이기 때문입니다. 그래서 캡처
+    /// **이전에** 한 번 버리는 읽기를 넣어 캐시를 갱신합니다.
+    ///
+    /// 반드시 이벤트 탭 콜백 **밖에서** 호출하세요. AX IPC가 탭 콜백을 늦추면
+    /// 시스템 입력 전체가 지연됩니다.
+    static func warmFocusCache() {
+        _ = systemWideElement
+        guard let element = focusedElement() else { return }
+        var value: CFTypeRef?
+        _ = AXUIElementCopyAttributeValue(
+            element,
+            kAXSelectedTextRangeAttribute as CFString,
+            &value
+        )
+    }
+
+    /// 포커스 조회의 결과. **일시적 실패와 확정적 거부를 구분합니다.**
+    ///
+    /// 둘을 합치면 앱 전환 직후처럼 AX 트리가 아직 응답하지 않는 순간의 실패가
+    /// "이 필드는 교정하면 안 된다"와 똑같이 취급됩니다. 그러면 전환 후 첫 단어가
+    /// 통째로 교정되지 않습니다 — 사용자가 "처음 것만 안 바뀐다"고 겪는 증상입니다.
+    enum FocusProbe {
+        /// 교정해도 되는 입력란.
+        case eligible(FocusToken)
+        /// 확정적으로 교정하면 안 됨 — 보안 입력, 보호 필드, 텍스트가 아닌 역할.
+        /// 같은 토큰 안에서 다시 물어볼 필요가 없습니다.
+        case ineligible
+        /// 지금은 판단할 수 없음 — AX 트리가 아직 안 잡혔거나 IPC가 타임아웃.
+        /// 잠시 뒤 같은 자리에서 다시 물으면 성공할 수 있습니다.
+        case unavailable
+    }
+
+    /// 기존 호출자를 위한 얇은 껍데기. 일시적 실패와 확정 거부를 구분하지
+    /// 못하므로, 재시도가 필요한 경로에서는 `probeAutomaticCorrectionFocus()`를
+    /// 직접 쓰세요.
     static func automaticCorrectionFocusToken() -> FocusToken? {
+        if case .eligible(let token) = probeAutomaticCorrectionFocus() { return token }
+        return nil
+    }
+
+    static func probeAutomaticCorrectionFocus() -> FocusProbe {
         guard !IsSecureEventInputEnabled() else {
             diagnostic("focus token rejected secure event input")
-            return nil
+            return .ineligible
         }
         guard let element = focusedElement() else {
+            // 포커스된 요소를 못 얻는 건 대개 트리가 아직 차갑다는 뜻입니다.
             diagnostic("focus token missing focused element")
-            return nil
+            return .unavailable
         }
 
         // 여러 속성을 한 번의 IPC로 읽어 이벤트 탭의 대기 시간을 제한합니다.
@@ -77,8 +128,9 @@ enum FocusedInputSafety {
         let values = copiedValues as? [Any],
         values.count == attributes.count,
         let role = values[0] as? String else {
+            // 속성 읽기 실패는 IPC 타임아웃이 대부분이라 일시적입니다.
             diagnostic("focus token attribute read failed result=\(copyResult.rawValue)")
-            return nil
+            return .unavailable
         }
 
         // AXComboBox는 브라우저 웹페이지의 입력란이 흔히 쓰는 역할이다.
@@ -96,7 +148,7 @@ enum FocusedInputSafety {
         ]
         guard supportedRoles.contains(role) else {
             diagnostic("focus token unsupported role=\(role)")
-            return nil
+            return .ineligible
         }
 
         let subrole = values[1] as? String
@@ -108,7 +160,7 @@ enum FocusedInputSafety {
         ]
         guard subrole.map({ !protectedSubroles.contains($0) }) ?? true else {
             diagnostic("focus token protected subrole=\(subrole ?? "")")
-            return nil
+            return .ineligible
         }
 
         // URL 오교정과 비밀번호 유출만 막습니다.
@@ -126,14 +178,15 @@ enum FocusedInputSafety {
         ]
         if let hit = protectedHints.first(where: metadata.contains) {
             diagnostic("focus token protected metadata hint=\(hit)")
-            return nil
+            return .ineligible
         }
         guard let selection = selectedTextRange(from: values[6]), selection.length == 0 else {
+            // 선택 영역을 못 읽는 것도 IPC 실패일 수 있어 일시적으로 봅니다.
             diagnostic("focus token missing or nonempty selection")
-            return nil
+            return .unavailable
         }
 
-        return FocusToken(element: element, initialSelection: selection)
+        return .eligible(FocusToken(element: element, initialSelection: selection))
     }
 
     static func isCurrentFocus(_ token: FocusToken, utf16Offset: Int) -> Bool {
