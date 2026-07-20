@@ -4,3 +4,6 @@ DerivedData/
 *.xcuserstate
 xcuserdata/
 dist/
+
+# 도구 로컬 설정 (개인 환경에 종속되므로 공유하지 않습니다)
+.claude/
