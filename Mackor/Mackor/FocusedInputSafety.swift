@@ -5,10 +5,10 @@ import Carbon.HIToolbox
 /// 자동 교정이 현재 입력 위치에서 안전한지 보수적으로 판단합니다.
 ///
 /// 주변 문장이나 필드 전체 값은 읽지 않습니다. 포커스된 접근성 요소의
-/// 역할·하위 역할과 제목/설명·선택 범위를 확인하고, 원문 선택 UI를
-/// 표시하거나 실행할 때만 교정된 exact range를 예상 결과와 비교합니다.
-/// 역할이나 빈 선택 범위를 확인하지 못하면 자동 교정을 하지 않는
-/// fail-closed 정책입니다.
+/// 역할·하위 역할과 제목/설명·선택 범위를 확인하고, 문자 삭제 직전에는
+/// 캐럿 앞 exact 원문 range를, 복원과 원문 선택 UI 전에는 exact 교정 range를
+/// 예상 문자열과 비교합니다. 역할이나 빈 선택 범위를 확인하지 못하면 자동
+/// 교정을 하지 않는 fail-closed 정책입니다.
 enum FocusedInputSafety {
     private static let diagnosticsEnabled =
         ProcessInfo.processInfo.environment["MACKOR_DIAGNOSTICS"] == "1"
@@ -37,14 +37,10 @@ enum FocusedInputSafety {
     /// 이벤트 탭 콜백이 응답하지 않는 앱의 Accessibility IPC에 오래
     /// 묶이지 않도록 거는 요청 시간 제한.
     ///
-    /// 이 값이 곧 교정 한 번이 시스템 입력을 붙잡을 수 있는 상한입니다.
-    /// 늘리면 느린 앱에서 입력 전체가 그만큼 지연되므로 함부로 올리지 마세요.
+    /// 각 AX 요청의 상한입니다. 교정 한 번에는 여러 요청이 이어질 수 있어
+    /// 전체 대기 시간은 이보다 길 수 있습니다. 늘리면 느린 앱에서 입력 전체가
+    /// 그만큼 더 지연될 수 있으므로 함부로 올리지 마세요.
     private static let messagingTimeout: Float = 0.05
-
-    /// 첫 조회 비용을 미리 치릅니다. 앱 시작 시 한 번 부르면 충분합니다.
-    static func prepare() {
-        warmFocusCache()
-    }
 
     /// AX 연결을 미리 데웁니다. **결과를 쓰지 않고 버립니다.**
     ///
@@ -68,6 +64,12 @@ enum FocusedInputSafety {
         )
     }
 
+    /// 응답하지 않는 대상 앱의 AX 요청이 이벤트 탭이나 메인 루프를 오래
+    /// 붙잡지 않도록 모든 요청 대상에 같은 제한을 적용합니다.
+    static func limitMessagingTime(for element: AXUIElement) {
+        AXUIElementSetMessagingTimeout(element, messagingTimeout)
+    }
+
     /// 포커스 조회의 결과. **일시적 실패와 확정적 거부를 구분합니다.**
     ///
     /// 둘을 합치면 앱 전환 직후처럼 AX 트리가 아직 응답하지 않는 순간의 실패가
@@ -82,14 +84,6 @@ enum FocusedInputSafety {
         /// 지금은 판단할 수 없음 — AX 트리가 아직 안 잡혔거나 IPC가 타임아웃.
         /// 잠시 뒤 같은 자리에서 다시 물으면 성공할 수 있습니다.
         case unavailable
-    }
-
-    /// 기존 호출자를 위한 얇은 껍데기. 일시적 실패와 확정 거부를 구분하지
-    /// 못하므로, 재시도가 필요한 경로에서는 `probeAutomaticCorrectionFocus()`를
-    /// 직접 쓰세요.
-    static func automaticCorrectionFocusToken() -> FocusToken? {
-        if case .eligible(let token) = probeAutomaticCorrectionFocus() { return token }
-        return nil
     }
 
     static func probeAutomaticCorrectionFocus() -> FocusProbe {
@@ -205,7 +199,7 @@ enum FocusedInputSafety {
             return false
         }
 
-        guard let currentToken = automaticCorrectionFocusToken(),
+        guard case .eligible(let currentToken) = probeAutomaticCorrectionFocus(),
               let currentElement = currentToken.element else {
             diagnostic("focus check could not read current token")
             return false
@@ -226,6 +220,47 @@ enum FocusedInputSafety {
         return matches
     }
 
+    /// 캡처한 토큰 시작점과 현재 캐럿의 거리를 확인하고, 그 시작점의 실제
+    /// 문자열이 원문과 정확히 같은지도 대조합니다. 같은 길이의 자동 치환이
+    /// 끼어도 다른 텍스트를 지우지 않도록 교정 직전에 사용합니다.
+    static func anchoredOriginalFocusToken(
+        _ token: FocusToken,
+        original: String,
+        boundaryUTF16Count: Int,
+        shouldContinue: () -> Bool = { true }
+    ) -> FocusToken? {
+        let originalUTF16Count = original.utf16.count
+        guard shouldContinue(),
+              originalUTF16Count > 0,
+              boundaryUTF16Count >= 0,
+              isCurrentFocus(
+                token,
+                utf16Offset: originalUTF16Count + boundaryUTF16Count
+              ),
+              shouldContinue(),
+              let element = token.element,
+              let rangeValue = anchoredRangeValue(
+                token,
+                utf16Count: originalUTF16Count
+              ) else {
+            return nil
+        }
+
+        var stringValue: CFTypeRef?
+        guard AXUIElementCopyParameterizedAttributeValue(
+            element,
+            kAXStringForRangeParameterizedAttribute as CFString,
+            rangeValue,
+            &stringValue
+        ) == .success,
+        let exactString = stringValue as? String,
+        shouldContinue(),
+        exactString == original else {
+            return nil
+        }
+        return token
+    }
+
     /// Verifies only the exact replacement range produced by Mackor and returns
     /// its screen bounds. No surrounding text or whole-field value is read.
     ///
@@ -242,9 +277,9 @@ enum FocusedInputSafety {
             boundaryUTF16Count: boundaryUTF16Count
         ),
         let element = token.element,
-        let rangeValue = replacementRangeValue(
+        let rangeValue = anchoredRangeValue(
             token,
-            replacementUTF16Count: replacement.utf16.count
+            utf16Count: replacement.utf16.count
         ) else {
             return nil
         }
@@ -289,9 +324,9 @@ enum FocusedInputSafety {
                 utf16Offset: replacement.utf16.count + boundaryUTF16Count
               ),
               let element = token.element,
-              let rangeValue = replacementRangeValue(
+              let rangeValue = anchoredRangeValue(
                 token,
-                replacementUTF16Count: replacement.utf16.count
+                utf16Count: replacement.utf16.count
               ) else {
             return false
         }
@@ -326,13 +361,27 @@ enum FocusedInputSafety {
     ///
     /// 읽는 범위는 방금 사용자가 친 토큰과 경계 문자뿐이며, 주변 문장이나 필드
     /// 전체 값은 읽지 않습니다(`exactReplacementIsCurrent`와 같은 범위 정책).
-    static func originalPrecedesCaret(
+    static func reanchoredFocusToken(
         _ token: FocusToken,
         original: String,
-        boundaryUTF16Count: Int
-    ) -> Bool {
-        guard boundaryUTF16Count >= 0, let element = token.element else {
-            return false
+        boundaryUTF16Count: Int,
+        shouldContinue: () -> Bool = { true }
+    ) -> FocusToken? {
+        guard shouldContinue() else {
+            diagnostic("caret text check exceeded time budget before focus lookup")
+            return nil
+        }
+        guard boundaryUTF16Count >= 0,
+              !IsSecureEventInputEnabled(),
+              let element = token.element,
+              let currentElement = focusedElement(),
+              CFEqual(element, currentElement) else {
+            diagnostic("caret text check rejected changed focus or secure input")
+            return nil
+        }
+        guard shouldContinue() else {
+            diagnostic("caret text check exceeded time budget after focus lookup")
+            return nil
         }
         var selectionValue: CFTypeRef?
         guard AXUIElementCopyAttributeValue(
@@ -344,18 +393,22 @@ enum FocusedInputSafety {
         let caret = selectedTextRange(from: selectionValue),
         caret.length == 0 else {
             diagnostic("caret text check could not read caret")
-            return false
+            return nil
+        }
+        guard shouldContinue() else {
+            diagnostic("caret text check exceeded time budget after caret lookup")
+            return nil
         }
 
         let originalCount = original.utf16.count
         let start = caret.location - boundaryUTF16Count - originalCount
         guard start >= 0, originalCount > 0 else {
             diagnostic("caret text check out of range start=\(start)")
-            return false
+            return nil
         }
 
         var range = CFRange(location: start, length: originalCount)
-        guard let rangeValue = AXValueCreate(.cfRange, &range) else { return false }
+        guard let rangeValue = AXValueCreate(.cfRange, &range) else { return nil }
         var stringValue: CFTypeRef?
         guard AXUIElementCopyParameterizedAttributeValue(
             element,
@@ -365,11 +418,15 @@ enum FocusedInputSafety {
         ) == .success,
         let text = stringValue as? String else {
             diagnostic("caret text check could not read range")
-            return false
+            return nil
         }
         let matches = text == original
         diagnostic("caret text check caret=\(caret.location) start=\(start) matches=\(matches)")
-        return matches
+        guard shouldContinue(), matches else { return nil }
+        return FocusToken(
+            element: element,
+            initialSelection: CFRange(location: start, length: 0)
+        )
     }
 
     /// 화면에 **실제로 찍힌** 글자가 한글인지 라틴인지 확인합니다.
@@ -382,13 +439,23 @@ enum FocusedInputSafety {
     /// 화면에 찍힌 글자는 믿음이 아니라 **증거**입니다. 캐럿 바로 앞 한 글자의
     /// 문자 종류만 보면 어느 자판으로 쳤는지 확정됩니다.
     ///
-    /// 경계 문자(공백 등)는 이미 앱에 들어갔으므로 그만큼 앞을 봅니다.
+    /// 이미 앱에 들어간 선행 경계 문자(후행 마침표 등)가 있으면 그만큼
+    /// 앞을 봅니다. 현재 처리 중인 경계 keyDown은 이 수에 포함하지 않습니다.
     /// 판단할 수 없으면 `nil` — 호출자는 기존 믿음을 그대로 씁니다.
     static func scriptBeforeCaret(
         _ token: FocusToken,
-        boundaryUTF16Count: Int
+        boundaryUTF16Count: Int,
+        shouldContinue: () -> Bool = { true }
     ) -> CorrectionDirection? {
-        guard boundaryUTF16Count >= 0, let element = token.element else { return nil }
+        guard shouldContinue(),
+              boundaryUTF16Count >= 0,
+              !IsSecureEventInputEnabled(),
+              let element = token.element,
+              let currentElement = focusedElement(),
+              CFEqual(element, currentElement) else {
+            return nil
+        }
+        guard shouldContinue() else { return nil }
         var selectionValue: CFTypeRef?
         guard AXUIElementCopyAttributeValue(
             element,
@@ -401,6 +468,7 @@ enum FocusedInputSafety {
             return nil
         }
 
+        guard shouldContinue() else { return nil }
         let start = caret.location - boundaryUTF16Count - 1
         guard start >= 0 else { return nil }
         var range = CFRange(location: start, length: 1)
@@ -440,52 +508,14 @@ enum FocusedInputSafety {
         return CGPoint(x: point.x, y: mainScreen.frame.maxY - point.y)
     }
 
-    /// 현재 삽입 커서의 화면 좌표를 AppKit 좌표계로 반환합니다.
-    /// 좌표를 얻지 못하면 알림 UI를 띄우지 않습니다.
-    static func caretRect() -> CGRect? {
-        guard let element = focusedElement() else { return nil }
-
-        var rangeValue: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(
-            element,
-            kAXSelectedTextRangeAttribute as CFString,
-            &rangeValue
-        ) == .success,
-        let rangeValue else {
-            return nil
-        }
-
-        var boundsValue: CFTypeRef?
-        guard AXUIElementCopyParameterizedAttributeValue(
-            element,
-            kAXBoundsForRangeParameterizedAttribute as CFString,
-            rangeValue,
-            &boundsValue
-        ) == .success,
-        let boundsValue,
-        CFGetTypeID(boundsValue) == AXValueGetTypeID() else {
-            return nil
-        }
-
-        let axValue = boundsValue as! AXValue
-        guard AXValueGetType(axValue) == .cgRect else { return nil }
-
-        var axRect = CGRect.zero
-        guard AXValueGetValue(axValue, .cgRect, &axRect), !axRect.isNull else {
-            return nil
-        }
-
-        return appKitRect(fromQuartz: axRect)
-    }
-
-    private static func replacementRangeValue(
+    private static func anchoredRangeValue(
         _ token: FocusToken,
-        replacementUTF16Count: Int
+        utf16Count: Int
     ) -> AXValue? {
-        guard replacementUTF16Count >= 0 else { return nil }
+        guard utf16Count >= 0 else { return nil }
         var range = CFRange(
             location: token.initialSelection.location,
-            length: replacementUTF16Count
+            length: utf16Count
         )
         return AXValueCreate(.cfRange, &range)
     }
@@ -543,7 +573,7 @@ enum FocusedInputSafety {
             element = AXUIElementCreateApplication(pid)
             // 응답하지 않는 앱에 이벤트 탭 콜백이 오래 묶이지 않도록
             // 전역 요소와 같은 제한을 겁니다.
-            AXUIElementSetMessagingTimeout(element, messagingTimeout)
+            limitMessagingTime(for: element)
             frontmostElementCache = (pid, element)
         }
 
@@ -557,22 +587,12 @@ enum FocusedInputSafety {
         CFGetTypeID(value) == AXUIElementGetTypeID() else {
             return nil
         }
-        return (value as! AXUIElement)
-    }
-
-    private static func selectedTextRange(from element: AXUIElement) -> CFRange? {
-        var value: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(
-            element,
-            kAXSelectedTextRangeAttribute as CFString,
-            &value
-        ) == .success,
-        let value,
-        CFGetTypeID(value) == AXValueGetTypeID() else {
-            return nil
-        }
-
-        return selectedTextRange(from: value)
+        let focusedElement = value as! AXUIElement
+        // 앱 요소에 건 50ms 상한은 반환된 child 요소에 자동으로 전파되지
+        // 않습니다. 경계 keyDown 안의 exact-range 조회도 이 상한 밖으로
+        // 빠져나가지 않도록 실제 요청 대상에도 같은 제한을 겁니다.
+        limitMessagingTime(for: focusedElement)
+        return focusedElement
     }
 
     private static func selectedTextRange(from value: Any) -> CFRange? {

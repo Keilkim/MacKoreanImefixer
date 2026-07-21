@@ -93,6 +93,10 @@ final class TargetAppManagerTests: XCTestCase {
             bundleID: "com.example.Editor",
             appName: nil
         ))
+        XCTAssertTrue(manager.isHangulCompositionEnabled(
+            bundleID: "com.example.Editor",
+            appName: nil
+        ))
         XCTAssertFalse(manager.isAutoCorrectionEnabled(
             bundleID: "com.example.Other",
             appName: "Other"
@@ -175,7 +179,7 @@ final class TargetAppManagerTests: XCTestCase {
         manager.setHangulCompositionEnabled(false, bundleID: "COM.EXAMPLE.EDITOR")
         manager.setAutoCorrectionEnabled(true, bundleID: "com.example.Editor")
 
-        XCTAssertTrue(manager.isHangulCompositionEnabled(
+        XCTAssertFalse(manager.isHangulCompositionEnabled(
             bundleID: "com.example.Editor",
             appName: nil
         ))
@@ -194,11 +198,11 @@ final class TargetAppManagerTests: XCTestCase {
             from: storedData
         )
         let storedApp = try XCTUnwrap(storedApps.first)
-        XCTAssertTrue(storedApp.hangulCompositionEnabled)
+        XCTAssertFalse(storedApp.hangulCompositionEnabled)
         XCTAssertTrue(storedApp.autoCorrectionEnabled)
 
         let restoredManager = TargetAppManager()
-        XCTAssertTrue(restoredManager.isHangulCompositionEnabled(
+        XCTAssertFalse(restoredManager.isHangulCompositionEnabled(
             bundleID: "com.example.Editor",
             appName: nil
         ))
@@ -207,8 +211,9 @@ final class TargetAppManagerTests: XCTestCase {
             appName: nil
         ))
 
+        restoredManager.setHangulCompositionEnabled(true, bundleID: "com.example.Editor")
         restoredManager.setHangulCompositionEnabled(false, bundleID: "com.example.Editor")
-        XCTAssertFalse(restoredManager.isAutoCorrectionEnabled(
+        XCTAssertTrue(restoredManager.isAutoCorrectionEnabled(
             bundleID: "com.example.Editor",
             appName: nil
         ))

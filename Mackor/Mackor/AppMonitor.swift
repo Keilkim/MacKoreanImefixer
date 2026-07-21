@@ -7,28 +7,30 @@ import Combine
 class AppMonitor: ObservableObject {
 
     /// 기존 한글 직접 조합 보정이 현재 작동 중인지
-    @Published var isActive: Bool = false
+    @Published private(set) var isActive: Bool = false
 
     /// 한/영 오입력 자동 보정이 현재 입력 소스를 관찰 중인지
     @Published private(set) var isAutoCorrectionActive: Bool = false
 
     /// 대상 앱이 현재 포커스 중인지
-    @Published var isTargetAppFront: Bool = false
+    @Published private(set) var isTargetAppFront: Bool = false
+
+    /// 메뉴의 현재 대상 표시에도 사용하는 앞쪽 앱 번들 ID
+    @Published private(set) var frontAppBundleID: String?
 
     /// 한글 IME가 활성 상태인지
-    @Published var isKoreanIME: Bool = false
+    @Published private(set) var isKoreanIME: Bool = false
 
     /// 자동 보정 엔진이 구분해서 처리할 현재 입력 소스 종류
     @Published private(set) var inputSourceKind: InputSourceKind = .unsupported
-
-    /// Undo에서 사용자의 별도 ABC↔U.S. 전환까지 구분하기 위한 정확한 ID
-    @Published private(set) var inputSourceID: String?
 
     /// 활성화/비활성화 토글
     @Published var isEnabled: Bool {
         didSet {
             UserDefaults.standard.set(isEnabled, forKey: Self.enabledKey)
-            updateActiveState()
+            // 비활성 중 열린 Chromium 앱은 아직 AX 트리를 노출하지 않았을 수
+            // 있으므로, 다시 켤 때 현재 앱의 접근성 준비도 함께 수행합니다.
+            checkFrontmostApp()
         }
     }
 
@@ -41,14 +43,8 @@ class AppMonitor: ObservableObject {
     }
 
     private static let enabledKey = "AppMonitorIsEnabled"
-    private static let supportedKoreanInputSourceID = "com.apple.inputmethod.Korean.2SetKorean"
-    private static let supportedLatinInputSourceIDs: Set<String> = [
-        "com.apple.keylayout.ABC",
-        "com.apple.keylayout.US",
-    ]
     private var workspaceObservers: [NSObjectProtocol] = []
     private var targetSettingsCancellable: AnyCancellable?
-    private var frontAppBundleID: String?
     private var frontAppName: String?
     private var manuallyAccessibleProcessIDs: Set<pid_t> = []
     private let inputSourceController = InputSourceController()
@@ -151,7 +147,10 @@ class AppMonitor: ObservableObject {
         frontAppBundleID = frontApp.bundleIdentifier
         frontAppName = frontApp.localizedName
         prepareLazyAccessibilityIfNeeded(for: frontApp)
-        isTargetAppFront = isTargetApp(bundleID: frontAppBundleID, appName: frontAppName)
+        isTargetAppFront = targetAppManager?.isTargetApp(
+            bundleID: frontAppBundleID,
+            appName: frontAppName
+        ) ?? false
         updateActiveState()
     }
 
@@ -175,6 +174,7 @@ class AppMonitor: ObservableObject {
         }
 
         let applicationElement = AXUIElementCreateApplication(app.processIdentifier)
+        FocusedInputSafety.limitMessagingTime(for: applicationElement)
         let result = AXUIElementSetAttributeValue(
             applicationElement,
             "AXManualAccessibility" as CFString,
@@ -182,6 +182,8 @@ class AppMonitor: ObservableObject {
         )
         if result == .success {
             manuallyAccessibleProcessIDs.insert(app.processIdentifier)
+            // manual AX를 켠 직후 첫 키가 연결 준비 비용을 떠안지 않게 합니다.
+            FocusedInputSafety.warmFocusCache()
         }
         if ProcessInfo.processInfo.environment["MACKOR_DIAGNOSTICS"] == "1" {
             print(
@@ -189,12 +191,6 @@ class AppMonitor: ObservableObject {
                     + "result=\(result.rawValue)"
             )
         }
-    }
-
-    /// 대상 앱인지 확인 (TargetAppManager에 등록된 앱만)
-    private func isTargetApp(bundleID: String?, appName: String?) -> Bool {
-        guard let manager = targetAppManager else { return false }
-        return manager.isTargetApp(bundleID: bundleID, appName: appName)
     }
 
     // MARK: - 입력 소스 감지
@@ -223,35 +219,50 @@ class AppMonitor: ObservableObject {
 
     private func checkInputSource() {
         guard let source = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue() else {
-            inputSourceID = nil
-            isKoreanIME = false
-            inputSourceKind = .unsupported
-            updateActiveState()
+            updateInputSourceState(sourceID: nil)
             return
         }
 
         if let idPtr = TISGetInputSourceProperty(source, kTISPropertyInputSourceID) {
             let sourceID = Unmanaged<CFString>.fromOpaque(idPtr).takeUnretainedValue() as String
-            inputSourceID = sourceID
-            inputSourceController.noteCurrentInputSource(sourceID)
-            if sourceID.caseInsensitiveCompare(Self.supportedKoreanInputSourceID) == .orderedSame {
-                inputSourceKind = .koreanTwoSet
-                isKoreanIME = true
-            } else if Self.supportedLatinInputSourceIDs.contains(where: {
-                sourceID.caseInsensitiveCompare($0) == .orderedSame
-            }) {
-                inputSourceKind = .supportedLatin
-                isKoreanIME = false
-            } else {
-                inputSourceKind = .unsupported
-                isKoreanIME = false
-            }
+            updateInputSourceState(sourceID: sourceID)
         } else {
-            inputSourceID = nil
-            isKoreanIME = false
-            inputSourceKind = .unsupported
+            updateInputSourceState(sourceID: nil)
+        }
+    }
+
+    /// 이벤트 탭의 첫 keyDown이 TIS 알림을 추월할 때 쓰는 동기 새로고침입니다.
+    @discardableResult
+    func refreshInputSourceKind() -> InputSourceKind {
+        checkInputSource()
+        return inputSourceKind
+    }
+
+    private func updateInputSourceState(sourceID: String?) {
+        inputSourceController.noteCurrentInputSource(sourceID)
+
+        let kind: InputSourceKind
+        if let sourceID,
+           sourceID.caseInsensitiveCompare(
+            InputSourceController.koreanTwoSetInputSourceID
+           ) == .orderedSame {
+            kind = .koreanTwoSet
+        } else if let sourceID,
+                  InputSourceController.supportedLatinInputSourceIDs.contains(where: {
+                    sourceID.caseInsensitiveCompare($0) == .orderedSame
+                  }) {
+            kind = .supportedLatin
+        } else {
+            kind = .unsupported
         }
 
+        if inputSourceKind != kind {
+            inputSourceKind = kind
+        }
+        let koreanIME = kind == .koreanTwoSet
+        if isKoreanIME != koreanIME {
+            isKoreanIME = koreanIME
+        }
         updateActiveState()
     }
 

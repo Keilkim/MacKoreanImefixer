@@ -112,15 +112,10 @@ class TargetAppManager: ObservableObject {
         guard let index = targetApps.firstIndex(where: {
             bundleIDsMatch($0.bundleID, bundleID)
         }) else { return }
-        guard targetApps[index].hangulCompositionEnabled != enabled
-                || (!enabled && targetApps[index].autoCorrectionEnabled) else { return }
+        guard targetApps[index].hangulCompositionEnabled != enabled else { return }
 
         var updatedApp = targetApps[index]
         updatedApp.hangulCompositionEnabled = enabled
-        if !enabled {
-            // 한글→영문 자동 교정은 직접 조합기가 함께 필요합니다.
-            updatedApp.autoCorrectionEnabled = false
-        }
         targetApps[index] = updatedApp
     }
 
@@ -128,14 +123,10 @@ class TargetAppManager: ObservableObject {
         guard let index = targetApps.firstIndex(where: {
             bundleIDsMatch($0.bundleID, bundleID)
         }) else { return }
-        guard targetApps[index].autoCorrectionEnabled != enabled
-                || (enabled && !targetApps[index].hangulCompositionEnabled) else { return }
+        guard targetApps[index].autoCorrectionEnabled != enabled else { return }
 
         var updatedApp = targetApps[index]
         updatedApp.autoCorrectionEnabled = enabled
-        if enabled {
-            updatedApp.hangulCompositionEnabled = true
-        }
         targetApps[index] = updatedApp
     }
 

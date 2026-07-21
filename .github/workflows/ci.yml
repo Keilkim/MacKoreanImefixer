@@ -42,21 +42,24 @@ jobs:
       # 바꿔 통과시킬 수 있으므로, 기준 태그 pre-imk와 직접 diff도 함께 본다.
       - name: Verify engine freeze (R4-1)
         run: |
+          ENGINE_FREEZE_EXPECTED_SHA256=58f21bffdfd0a3e1eb795c6e7f5ac3b3a4e2c06e1dc46a9cfa5f8ffe1886b99b
+          ENGINE_FREEZE_ACTUAL_SHA256=$(shasum -a 256 scripts/engine-freeze.sha256 | awk '{print $1}')
+          if [ "$ENGINE_FREEZE_ACTUAL_SHA256" != "$ENGINE_FREEZE_EXPECTED_SHA256" ]; then
+            echo "R4-1 위반: 동결 매니페스트 자체가 변경됨" >&2
+            exit 1
+          fi
           shasum -a 256 -c scripts/engine-freeze.sha256
 
-          git fetch --tags --quiet origin 'refs/tags/pre-imk:refs/tags/pre-imk' || true
-          if git rev-parse -q --verify refs/tags/pre-imk >/dev/null; then
-            CHANGED=$(git diff --name-only refs/tags/pre-imk HEAD -- \
-              $(awk '{print $2}' scripts/engine-freeze.sha256))
-            if [ -n "$CHANGED" ]; then
-              echo "R4-1 위반: 동결 대상이 기준 태그 pre-imk 이후 변경됨" >&2
-              echo "$CHANGED" >&2
-              exit 1
-            fi
-            echo "동결 대상 $(wc -l < scripts/engine-freeze.sha256)파일: pre-imk와 동일"
-          else
-            echo "경고: pre-imk 태그를 찾지 못해 기준 대조를 건너뜀" >&2
+          git fetch --force --quiet origin 'refs/tags/pre-imk:refs/tags/pre-imk'
+          git rev-parse --verify refs/tags/pre-imk >/dev/null
+          CHANGED=$(git diff --name-only refs/tags/pre-imk HEAD -- \
+            $(awk '{print $2}' scripts/engine-freeze.sha256))
+          if [ -n "$CHANGED" ]; then
+            echo "R4-1 위반: 동결 대상이 기준 태그 pre-imk 이후 변경됨" >&2
+            echo "$CHANGED" >&2
+            exit 1
           fi
+          echo "동결 대상 $(wc -l < scripts/engine-freeze.sha256)파일: pre-imk와 동일"
 
       # Layer 1 어휘 자산은 엔진 동결과 **별도**로 관리한다.
       #
@@ -86,6 +89,18 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             test
+
+      - name: Verify bundled lexicon resources
+        run: |
+          MACKOR_RESOURCE_DIR="$RUNNER_TEMP/MackorTests/Build/Products/Debug/Mackor.app/Contents/Resources"
+          for LEXICON_NAME in ko-lexicon.v1.txt en-lexicon.v1.txt; do
+            if ! cmp -s \
+              "scripts/lexicon/$LEXICON_NAME" \
+              "$MACKOR_RESOURCE_DIR/$LEXICON_NAME"; then
+              echo "앱 번들의 어휘 자산이 없거나 원본과 다름: $LEXICON_NAME" >&2
+              exit 1
+            fi
+          done
 
       - name: Analyze release build
         run: |
