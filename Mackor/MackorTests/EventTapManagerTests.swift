@@ -36,6 +36,39 @@ final class EventTapManagerTests: XCTestCase {
         XCTAssertEqual(switchedDirections, [.latinToKorean])
     }
 
+    /// 키열 사본이 경계마다 비워져야 한다.
+    ///
+    /// 사본은 `processBoundary`가 내부 `defer { reset() }`으로 토큰을 비우는
+    /// 것을 알지 못한다. 그래서 한때 사본이 경계를 넘길 때마다 계속 쌓였고,
+    /// 사본을 쓰는 계층(어휘 tiebreaker·방향 수정)이 전부 길이 대조에서 걸려
+    /// **한 번도 발동하지 못했다.** 에러도 경고도 없이 조용히 아무 일도 하지
+    /// 않았기 때문에 오래 눈치채지 못했다.
+    ///
+    /// 두 번째 토큰이 교정되면 그 시점에 사본 길이가 실제 토큰과 같았다는
+    /// 뜻이므로, 이 테스트가 누수를 잡는다.
+    func testKeystrokeMirrorIsClearedAtEveryBoundary() throws {
+        let output = FakeKeyboardOutput()
+        let manager = makeManager(output: output, lexicalTiebreaker: try makeLexicalTiebreaker())
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        // 첫 토큰을 경계까지 흘려보낸다.
+        type("dkwn", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+        output.actions.removeAll()
+
+        // 두 번째 토큰. 사본이 쌓여 있으면 길이가 어긋나 어휘 계층이 죽는다.
+        type("sork", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(
+            output.actions.contains(.text("내가")),
+            "경계 뒤 사본이 남아 어휘 계층이 발동하지 못했습니다: \(output.actions)"
+        )
+    }
+
     // MARK: - 낡은 캡처 앵커 (간헐 실패)
     //
     // 토큰 시작 시의 AX 읽기가 낡은 캐럿 위치를 돌려주면 산술 검증
