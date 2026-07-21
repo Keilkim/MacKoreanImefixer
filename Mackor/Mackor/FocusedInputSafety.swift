@@ -184,11 +184,15 @@ enum FocusedInputSafety {
             return .unavailable
         }
         guard selection.length == 0 else {
+            // 선택 영역이 있는 건 명확한 상태이지 일시적 실패가 아닙니다.
+            // 다시 물어도 같은 답이 오므로 재시도하지 않습니다 — 재시도하면
+            // 주소창처럼 늘 전체 선택된 필드에서 매 키마다 AX IPC를 세 번씩
+            // 반복해, 이벤트 탭 경로에 불필요한 지연을 쌓습니다.
             diagnostic(
                 "focus token has selection len=\(selection.length) "
                     + diagnosticContext(role: role)
             )
-            return .unavailable
+            return .ineligible
         }
 
         diagnostic("focus token ok \(diagnosticContext(role: role))")
