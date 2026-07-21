@@ -30,9 +30,53 @@ jobs:
             build-installer.sh \
             uninstall.sh \
             uninstall.command \
+            MackorIMEProbe/build.sh \
             scripts/prepare-release.sh \
             scripts/prepare-appcast.sh \
             scripts/validate-release.sh
+
+      # R4-1 동결 가드: IMK 마이그레이션 동안 코어 규칙 자산 31파일(엔진 9·순수 테스트 8·
+      # 코퍼스 5·rulebench 7·규범 문서 2)이 바이트 단위로 바뀌지 않았음을 보증한다.
+      #
+      # 두 겹으로 검사한다. 해시 대조만 하면 같은 PR에서 엔진과 매니페스트를 함께
+      # 바꿔 통과시킬 수 있으므로, 기준 태그 pre-imk와 직접 diff도 함께 본다.
+      - name: Verify engine freeze (R4-1)
+        run: |
+          ENGINE_FREEZE_EXPECTED_SHA256=58f21bffdfd0a3e1eb795c6e7f5ac3b3a4e2c06e1dc46a9cfa5f8ffe1886b99b
+          ENGINE_FREEZE_ACTUAL_SHA256=$(shasum -a 256 scripts/engine-freeze.sha256 | awk '{print $1}')
+          if [ "$ENGINE_FREEZE_ACTUAL_SHA256" != "$ENGINE_FREEZE_EXPECTED_SHA256" ]; then
+            echo "R4-1 위반: 동결 매니페스트 자체가 변경됨" >&2
+            exit 1
+          fi
+          shasum -a 256 -c scripts/engine-freeze.sha256
+
+          git fetch --force --quiet origin 'refs/tags/pre-imk:refs/tags/pre-imk'
+          git rev-parse --verify refs/tags/pre-imk >/dev/null
+          CHANGED=$(git diff --name-only refs/tags/pre-imk HEAD -- \
+            $(awk '{print $2}' scripts/engine-freeze.sha256))
+          if [ -n "$CHANGED" ]; then
+            echo "R4-1 위반: 동결 대상이 기준 태그 pre-imk 이후 변경됨" >&2
+            echo "$CHANGED" >&2
+            exit 1
+          fi
+          echo "동결 대상 $(wc -l < scripts/engine-freeze.sha256)파일: pre-imk와 동일"
+
+      # Layer 1 어휘 자산은 엔진 동결과 **별도**로 관리한다.
+      #
+      # engine-freeze에 합치지 않는 이유: 그쪽은 "마이그레이션 동안 한 바이트도
+      # 바뀌지 않는다"를 pre-imk 태그 diff로까지 강제한다. 사전은 앞으로 자랄
+      # 자산이므로 같은 매니페스트에 넣으면 태그 diff 가드가 즉시 실패하고,
+      # "동결"과 "성장"이 한 파일에 섞여 의미가 무너진다.
+      #
+      # 여기서는 해시 대조만 한다. 사전을 바꾸려면 생성 스크립트를 돌려
+      # 매니페스트를 함께 갱신해야 하고, 그 diff가 곧 어휘 변화의 기록이 된다.
+      - name: Verify lexicon freeze (Layer 1)
+        run: |
+          shasum -a 256 -c scripts/lexicon-freeze.sha256
+
+          # 투영이 원본 사전 대비 무손실인지 재검증한다. 이게 깨지면 사전을
+          # 줄인 것이 판정을 바꿨다는 뜻이므로 반드시 잡아야 한다.
+          python3 -B scripts/lexicon/make_lexicon.py verify
 
       - name: Run unit tests
         run: |
@@ -45,6 +89,18 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             test
+
+      - name: Verify bundled lexicon resources
+        run: |
+          MACKOR_RESOURCE_DIR="$RUNNER_TEMP/MackorTests/Build/Products/Debug/Mackor.app/Contents/Resources"
+          for LEXICON_NAME in ko-lexicon.v1.txt en-lexicon.v1.txt; do
+            if ! cmp -s \
+              "scripts/lexicon/$LEXICON_NAME" \
+              "$MACKOR_RESOURCE_DIR/$LEXICON_NAME"; then
+              echo "앱 번들의 어휘 자산이 없거나 원본과 다름: $LEXICON_NAME" >&2
+              exit 1
+            fi
+          done
 
       - name: Analyze release build
         run: |

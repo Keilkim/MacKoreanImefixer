@@ -1,0 +1,131 @@
+[21:27:05.267] activateServer client=com.microsoft.VSCode TIS[sourceID=com.mackor.inputmethod.MackorProbe.han2 modeID=com.mackor.inputmethod.MackorProbe.han2]
+[21:27:05.268] setValue MODE-CHANGED -> com.mackor.inputmethod.MackorProbe.han2 client=com.microsoft.VSCode
+[21:27:05.271] deactivateServer client=com.apple.TextEdit
+[21:27:05.271] deactivateServer client=com.apple.TextEdit
+[21:27:13.828] activateServer client=com.apple.TextEdit TIS[sourceID=com.mackor.inputmethod.MackorProbe.han2 modeID=com.mackor.inputmethod.MackorProbe.han2]
+[21:27:13.829] setValue MODE-CHANGED -> com.mackor.inputmethod.MackorProbe.han2 client=com.apple.TextEdit
+[21:27:13.832] deactivateServer client=com.microsoft.VSCode
+[21:27:14.546] deactivateServer client=com.apple.TextEdit
+[21:27:14.558] activateServer client=com.corel.coreldrawsuite.2025.coreldraw TIS[sourceID=com.mackor.inputmethod.MackorProbe.han2 modeID=com.mackor.inputmethod.MackorProbe.han2]
+[21:27:14.559] setValue MODE-CHANGED -> com.mackor.inputmethod.MackorProbe.han2 client=com.corel.coreldrawsuite.2025.coreldraw
+[21:27:15.975] keyDown keycode=0 flags=- chars=a autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 synth?=true client=com.corel.coreldrawsuite.2025.coreldraw
+[21:27:16.051] keyDown keycode=11 flags=- chars=b autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 synth?=true client=com.corel.coreldrawsuite.2025.coreldraw
+[21:27:18.750] deactivateServer client=com.corel.coreldrawsuite.2025.coreldraw
+[21:27:18.755] activateServer client=com.microsoft.VSCode TIS[sourceID=com.mackor.inputmethod.MackorProbe.han2 modeID=com.mackor.inputmethod.MackorProbe.han2]
+[21:27:18.756] setValue MODE-CHANGED -> com.mackor.inputmethod.MackorProbe.han2 client=com.microsoft.VSCode
+[21:27:32.418] deactivateServer client=com.microsoft.VSCode
+[21:27:32.434] activateServer client=com.corel.coreldrawsuite.2025.coreldraw TIS[sourceID=com.mackor.inputmethod.MackorProbe.han2 modeID=com.mackor.inputmethod.MackorProbe.han2]
+[21:27:32.435] setValue MODE-CHANGED -> com.mackor.inputmethod.MackorProbe.han2 client=com.corel.coreldrawsuite.2025.coreldraw
+[21:27:34.245] flagsChanged flags=ctrl keycode=59
+[21:27:34.264] flagsChanged flags=ctrl+opt keycode=58
+[21:27:34.583] MEASURE snapshot: client=com.corel.coreldrawsuite.2025.coreldraw supportsDocumentAccess=true validAttrs=[NSFont, NSUnderline, NSColor, NSBackgroundColor, NSUnderlineColor, NSMarkedClauseSegment, NSLanguage, NSTextInputReplacementRangeAttributeName, NSGlyphInfo, NSTextAlternatives, NSTextInsertionUndoable, NSAttachment, NSDictationHiliteMarkedText] TIS[sourceID=com.mackor.inputmethod.MackorProbe.han2 modeID=com.mackor.inputmethod.MackorProbe.han2]
+[21:27:34.583]   DOC: length=0 (문서 문자열 읽기 불가)
+[21:27:35.222] MEASURE mozcReconvert: 대상 범위 확보 실패 sel=NSNotFound client=com.corel.coreldrawsuite.2025.coreldraw
+[21:27:36.035] MEASURE caretRect: index=0 rect=(0.0, 0.0, 0.0, 0.0) client=com.corel.coreldrawsuite.2025.coreldraw
+[21:27:36.496] flagsChanged flags=ctrl keycode=58
+[21:27:36.522] flagsChanged flags=- keycode=59
+[21:27:39.117] deactivateServer client=com.corel.coreldrawsuite.2025.coreldraw
+[21:27:39.119] activateServer client=com.corel.coreldrawsuite.2025.coreldraw TIS[sourceID=com.mackor.inputmethod.MackorProbe.han2 modeID=com.mackor.inputmethod.MackorProbe.han2]
+[21:27:39.121] setValue MODE-CHANGED -> com.mackor.inputmethod.MackorProbe.han2 client=com.corel.coreldrawsuite.2025.coreldraw
+[21:27:39.296] deactivateServer client=com.corel.coreldrawsuite.2025.coreldraw
+[21:27:39.297] activateServer client=com.corel.coreldrawsuite.2025.coreldraw TIS[sourceID=com.mackor.inputmethod.MackorProbe.han2 modeID=com.mackor.inputmethod.MackorProbe.han2]
+[21:27:39.298] setValue MODE-CHANGED -> com.mackor.inputmethod.MackorProbe.han2 client=com.corel.coreldrawsuite.2025.coreldraw
+[21:27:39.671] flagsChanged flags=ctrl keycode=59
+[21:27:39.692] flagsChanged flags=ctrl+opt keycode=58
+[21:27:40.175] MEASURE snapshot: client=com.corel.coreldrawsuite.2025.coreldraw supportsDocumentAccess=true validAttrs=[NSFont, NSUnderline, NSColor, NSBackgroundColor, NSUnderlineColor, NSMarkedClauseSegment, NSLanguage, NSTextInputReplacementRangeAttributeName, NSGlyphInfo, NSTextAlternatives, NSTextInsertionUndoable, NSAttachment, NSDictationHiliteMarkedText] TIS[sourceID=com.mackor.inputmethod.MackorProbe.han2 modeID=com.mackor.inputmethod.MackorProbe.han2]
+[21:27:40.176]   DOC: length=0 (문서 문자열 읽기 불가)
+[21:27:40.888] MEASURE mozcReconvert: 대상 범위 확보 실패 sel=NSNotFound client=com.corel.coreldrawsuite.2025.coreldraw
+[21:27:41.956] MEASURE caretRect: index=0 rect=(0.0, 0.0, 0.0, 0.0) client=com.corel.coreldrawsuite.2025.coreldraw
+[21:27:42.236] flagsChanged flags=ctrl keycode=58
+[21:27:42.282] flagsChanged flags=- keycode=59
+[21:27:43.120] deactivateServer client=com.corel.coreldrawsuite.2025.coreldraw
+[21:27:43.127] activateServer client=com.microsoft.VSCode TIS[sourceID=com.mackor.inputmethod.MackorProbe.han2 modeID=com.mackor.inputmethod.MackorProbe.han2]
+[21:27:43.128] setValue MODE-CHANGED -> com.mackor.inputmethod.MackorProbe.han2 client=com.microsoft.VSCode
+[21:27:45.397] keyDown keycode=2 flags=- chars=d autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 synth?=true client=com.microsoft.VSCode
+[21:27:45.726] keyDown keycode=51 flags=- chars= autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 synth?=true client=com.microsoft.VSCode
+[21:27:46.097] flagsChanged flags=caps keycode=57
+[21:27:46.111] flagsChanged flags=- keycode=255
+[21:27:46.197] setValue MODE-CHANGED -> com.mackor.inputmethod.MackorProbe.roman client=com.microsoft.VSCode
+[21:27:46.199] flagsChanged flags=- keycode=57
+[21:27:46.333] keyDown keycode=5 flags=- chars=g autorepeat=false mode=com.mackor.inputmethod.MackorProbe.roman synth?=true client=com.microsoft.VSCode
+[21:27:46.385] keyDown keycode=31 flags=- chars=o autorepeat=false mode=com.mackor.inputmethod.MackorProbe.roman synth?=true client=com.microsoft.VSCode
+[21:27:46.449] flagsChanged flags=shift keycode=60
+[21:27:46.509] keyDown keycode=17 flags=shift chars=T autorepeat=false mode=com.mackor.inputmethod.MackorProbe.roman synth?=true client=com.microsoft.VSCode
+[21:27:46.580] flagsChanged flags=- keycode=60
+[21:27:46.664] keyDown keycode=2 flags=- chars=d autorepeat=false mode=com.mackor.inputmethod.MackorProbe.roman synth?=true client=com.microsoft.VSCode
+[21:27:46.733] keyDown keycode=38 flags=- chars=j autorepeat=false mode=com.mackor.inputmethod.MackorProbe.roman synth?=true client=com.microsoft.VSCode
+[21:27:46.829] keyDown keycode=36 flags=- chars= autorepeat=false mode=com.mackor.inputmethod.MackorProbe.roman synth?=true client=com.microsoft.VSCode
+[21:27:47.466] flagsChanged flags=caps keycode=57
+[21:27:47.477] flagsChanged flags=- keycode=255
+[21:27:47.576] setValue MODE-CHANGED -> com.mackor.inputmethod.MackorProbe.han2 client=com.microsoft.VSCode
+[21:27:47.577] flagsChanged flags=- keycode=57
+[21:27:47.752] keyDown keycode=5 flags=- chars=g autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 synth?=true client=com.microsoft.VSCode
+[21:27:47.812] keyDown keycode=31 flags=- chars=o autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 synth?=true client=com.microsoft.VSCode
+[21:27:47.854] flagsChanged flags=shift keycode=60
+[21:27:47.929] keyDown keycode=17 flags=shift chars=T autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 synth?=true client=com.microsoft.VSCode
+[21:27:48.078] flagsChanged flags=- keycode=60
+[21:27:48.153] keyDown keycode=2 flags=- chars=d autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 synth?=true client=com.microsoft.VSCode
+[21:27:48.245] keyDown keycode=38 flags=- chars=j autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 synth?=true client=com.microsoft.VSCode
+[21:27:48.592] keyDown keycode=51 flags=- chars= autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 synth?=true client=com.microsoft.VSCode
+[21:27:48.702] keyDown keycode=51 flags=- chars= autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 synth?=true client=com.microsoft.VSCode
+[21:27:48.830] keyDown keycode=51 flags=- chars= autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 synth?=true client=com.microsoft.VSCode
+[21:27:48.918] keyDown keycode=51 flags=- chars= autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 synth?=true client=com.microsoft.VSCode
+[21:27:49.082] keyDown keycode=51 flags=- chars= autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 synth?=true client=com.microsoft.VSCode
+[21:27:49.379] keyDown keycode=5 flags=- chars=g autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 synth?=true client=com.microsoft.VSCode
+[21:27:49.428] keyDown keycode=31 flags=- chars=o autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 synth?=true client=com.microsoft.VSCode
+[21:27:49.528] flagsChanged flags=shift keycode=60
+[21:27:49.575] keyDown keycode=17 flags=shift chars=T autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 synth?=true client=com.microsoft.VSCode
+[21:27:49.711] flagsChanged flags=- keycode=60
+[21:27:49.779] keyDown keycode=2 flags=- chars=d autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 synth?=true client=com.microsoft.VSCode
+[21:27:49.831] keyDown keycode=38 flags=- chars=j autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 synth?=true client=com.microsoft.VSCode
+[21:27:50.338] keyDown keycode=51 flags=- chars= autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 synth?=true client=com.microsoft.VSCode
+[21:27:50.500] keyDown keycode=51 flags=- chars= autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 synth?=true client=com.microsoft.VSCode
+[21:27:50.658] keyDown keycode=51 flags=- chars= autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 synth?=true client=com.microsoft.VSCode
+[21:27:50.810] keyDown keycode=51 flags=- chars= autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 synth?=true client=com.microsoft.VSCode
+[21:27:50.959] keyDown keycode=51 flags=- chars= autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 synth?=true client=com.microsoft.VSCode
+[21:27:51.421] keyDown keycode=34 flags=- chars=i autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 synth?=true client=com.microsoft.VSCode
+[21:27:51.506] keyDown keycode=49 flags=- chars=  autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 synth?=true client=com.microsoft.VSCode
+[21:27:51.685] keyDown keycode=2 flags=- chars=d autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 synth?=true client=com.microsoft.VSCode
+[21:27:51.795] keyDown keycode=34 flags=- chars=i autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 synth?=true client=com.microsoft.VSCode
+[21:27:51.867] keyDown keycode=2 flags=- chars=d autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 synth?=true client=com.microsoft.VSCode
+[21:27:52.767] keyDown keycode=51 flags=- chars= autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 synth?=true client=com.microsoft.VSCode
+[21:27:52.957] flagsChanged flags=cmd keycode=55
+[21:27:53.053] CMD-combo REACHED handle: keycode=0 flags=cmd client=com.microsoft.VSCode
+[21:27:53.172] flagsChanged flags=- keycode=55
+[21:27:53.212] keyDown keycode=51 flags=- chars= autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 synth?=true client=com.microsoft.VSCode
+[21:27:57.098] commitComposition client=com.microsoft.VSCode
+[21:27:57.099] deactivateServer client=com.microsoft.VSCode
+[21:27:57.100] deactivateServer client=com.microsoft.VSCode
+[21:27:59.351] deactivateServer client=com.microsoft.VSCode
+[21:27:59.380] activateServer client=com.corel.coreldrawsuite.2025.coreldraw TIS[sourceID=com.apple.keylayout.ABC modeID=-]
+[21:27:59.381] commitComposition client=com.corel.coreldrawsuite.2025.coreldraw
+[21:27:59.381] deactivateServer client=com.corel.coreldrawsuite.2025.coreldraw
+[21:27:59.382] deactivateServer client=com.corel.coreldrawsuite.2025.coreldraw
+[21:28:10.529] activateServer client=com.corel.coreldrawsuite.2025.coreldraw TIS[sourceID=com.apple.keylayout.ABC modeID=-]
+[21:28:10.532] commitComposition client=com.corel.coreldrawsuite.2025.coreldraw
+[21:28:10.539] deactivateServer client=com.corel.coreldrawsuite.2025.coreldraw
+[21:28:10.541] activateServer client=com.corel.coreldrawsuite.2025.coreldraw TIS[sourceID=com.mackor.inputmethod.MackorProbe.han2 modeID=com.mackor.inputmethod.MackorProbe.han2]
+[21:28:10.542] setValue MODE-CHANGED -> com.mackor.inputmethod.MackorProbe.han2 client=com.corel.coreldrawsuite.2025.coreldraw
+[21:28:13.096] keyDown keycode=0 flags=- chars=a autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 synth?=true client=com.corel.coreldrawsuite.2025.coreldraw
+[21:28:13.218] keyDown keycode=11 flags=- chars=b autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 synth?=true client=com.corel.coreldrawsuite.2025.coreldraw
+[21:28:13.598] flagsChanged flags=opt keycode=58
+[21:28:13.605] flagsChanged flags=cmd+opt keycode=55
+[21:28:13.941] CMD-combo REACHED handle: keycode=23 flags=cmd+opt client=com.corel.coreldrawsuite.2025.coreldraw
+[21:28:14.161] CMD-combo REACHED handle: keycode=22 flags=cmd+opt client=com.corel.coreldrawsuite.2025.coreldraw
+[21:28:14.864] CMD-combo REACHED handle: keycode=20 flags=cmd+opt client=com.corel.coreldrawsuite.2025.coreldraw
+[21:28:15.310] flagsChanged flags=opt keycode=55
+[21:28:15.333] flagsChanged flags=- keycode=58
+[21:28:16.586] deactivateServer client=com.corel.coreldrawsuite.2025.coreldraw
+[21:28:16.589] activateServer client=com.corel.coreldrawsuite.2025.coreldraw TIS[sourceID=com.mackor.inputmethod.MackorProbe.han2 modeID=com.mackor.inputmethod.MackorProbe.han2]
+[21:28:16.590] setValue MODE-CHANGED -> com.mackor.inputmethod.MackorProbe.han2 client=com.corel.coreldrawsuite.2025.coreldraw
+[21:28:16.794] deactivateServer client=com.corel.coreldrawsuite.2025.coreldraw
+[21:28:16.795] activateServer client=com.corel.coreldrawsuite.2025.coreldraw TIS[sourceID=com.mackor.inputmethod.MackorProbe.han2 modeID=com.mackor.inputmethod.MackorProbe.han2]
+[21:28:16.796] setValue MODE-CHANGED -> com.mackor.inputmethod.MackorProbe.han2 client=com.corel.coreldrawsuite.2025.coreldraw
+[21:28:18.804] deactivateServer client=com.corel.coreldrawsuite.2025.coreldraw
+[21:28:18.812] activateServer client=com.microsoft.VSCode TIS[sourceID=com.mackor.inputmethod.MackorProbe.han2 modeID=com.mackor.inputmethod.MackorProbe.han2]
+[21:28:18.812] setValue MODE-CHANGED -> com.mackor.inputmethod.MackorProbe.han2 client=com.microsoft.VSCode
+[21:28:29.198] deactivateServer client=com.microsoft.VSCode
+[21:28:29.224] activateServer client=com.corel.coreldrawsuite.2025.coreldraw TIS[sourceID=com.mackor.inputmethod.MackorProbe.han2 modeID=com.mackor.inputmethod.MackorProbe.han2]
+[21:28:29.225] setValue MODE-CHANGED -> com.mackor.inputmethod.MackorProbe.han2 client=com.corel.coreldrawsuite.2025.coreldraw
+[21:28:32.902] flagsChanged flags=cmd keycode=55
+[21:28:33.590] flagsChanged flags=- keycode=55

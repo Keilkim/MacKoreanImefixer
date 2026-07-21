@@ -159,13 +159,19 @@ CorelDRAW 외 프로그램 목록(§R2)은 **기능 적용 대상 목록이 아�
 > 비활성화되어 다음 입력을 관찰하지 못한다.** R3-c를 문자 그대로 "Apple 입력 소스로
 > 전환"으로 구현하면 R4(순수 IMK 전환)와 양립할 수 없다.
 >
-> **결정:** Mackor 입력 소스 **하나가 한글 모드와 영문 모드를 모두 소유**한다.
-> R3-c의 "강제 전환"은 `TISSelectInputSource` 호출이 아니라 **Mackor 내부 모드 변수
-> 전환**으로 달성한다. 사용자가 체감하는 효과(다음에 치는 글자가 맞는 언어로 나옴)는
-> 동일하다.
+> **결정 (2026-07-20 실측으로 확정):** Mackor 입력 소스에 **입력 모드를 하나만** 두고
+> 한/영을 **IME 내부 상태**로 처리한다. R3-c의 "강제 전환"은 `TISSelectInputSource`도
+> `IMKTextInput.selectMode`도 아닌 **내부 불리언 전환**이다.
+>
+> 근거 — 두 모드 방식은 실측에서 실패했다. `selectMode`는 모드를 바꾸지 못했고
+> (0/50/250/1000ms 전부 원래 모드 유지), `TISSelectInputSource`는 `-50`을 반환했다.
+> 원인은 두 번째 모드가 `enabled=false`이며 `TISEnableInputSource`가 성공을 반환하고도
+> 실제로 켜지지 않기 때문이다(사용자가 시스템 설정에서 직접 추가해야 함).
+> 반면 **Apple 한국어 IME도 활성 모드가 `2SetKorean` 하나뿐이고 한/영을 내부 처리한다**
+> (실측). 단일 모드가 검증된 구조다.
 >
 > **사용자가 받아들여야 하는 대가:** Apple 두벌식 대신 **Mackor를 입력 소스로 선택**해야
-> 한다. 입력기 목록에서 Mackor 하나만 쓰는 구성이 된다.
+> 한다. 다만 모드를 추가로 켜는 부담은 없다(모드가 하나뿐이므로).
 >
 > **미검증 전제:** "전환 시 IMK가 비활성화된다"는 Apple 문서 기반 추론이며 실측하지
 > 않았다. 구현 착수 전 최소 IMK 프로토타입으로 확인한다. (P0-1 참조)
@@ -329,6 +335,316 @@ AX 프로브 직접 측정 결과:
 → 다만 Chrome은 enhanced UI가 **이미 켜져 있는데도 실패**하므로, 속성만 바꾼다고
    해결되지 않는다. 구조적 한계다.
 
+### P0 프로토타입 실측 (2026-07-20, TextEdit / macOS 26.3.1)
+
+`MackorIMEProbe`를 `~/Library/Input Methods`에 설치·등록하고 합성 키 입력으로 측정.
+
+> **⚠ 2026-07-20 2차 검토로 아래 다수 항목을 철회·강등했다.**
+> 측정 자체에 설계 결함이 있었다. 프로브의 `ProbeModeState.current`가 초기값
+> `han2`에서 **한 번도 갱신되지 않으므로**, 로그의 `selectMode: han2 -> roman`은
+> 실제 시스템 상태가 아니라 **호출 의도를 출력한 문자열**일 뿐이다.
+> 확정으로 기록했던 것을 아래와 같이 정정한다.
+
+| 항목 | 결과 | 근거 |
+|---|---|---|
+| **P0-8 등록 즉시성** | **성립** | `TISRegisterInputSource → 0(OK)`. 재로그인 없이 `han2`·`roman` 두 모드가 TIS 목록에 `IsSelectCapable=true`로 등장, `TISEnableInputSource → 0` |
+| **P0-1 자기 모드 전환** | **미확정 (철회)** | `selectMode` 호출 후 `handle()`이 계속 불린 것은 사실이나, **실제 모드가 바뀌었는지 확인하지 않았다.** 전환 후 `setValue` 통지가 없고, 두 모드의 `KeyboardLayout`이 동일(ABC)이라 출력 문자로도 구분 불가. **D1은 미확정이며 재측정 필요** |
+| **P0-2 모드 통지** | **부분 성립 (강등)** | 확인된 것은 **활성화 시 초기 모드 전달**(`activateServer` 직후 `setValue ...han2`)뿐이다. **시스템발 모드 변경 통지는 미측정** |
+| **P0-4 칩 앵커** | **부분 성립** | TextEdit 한 지점에서 유효 rect `(214.76, 979.0, 1.0, 13.0)` 반환 확인. 위치 정확도·타 앱 일반화는 미확인 |
+| **P0-7 ⌘Z 도달** | **부분 성립** | TextEdit에서 `CMD-combo REACHED handle` 로그 없음 + 앱 자체 Undo 실행 확인. **타 앱 일반화 불가** |
+| **P0-3 조합 경로** | **정상** | `setMarkedText("ㅁ")` → `markedRange=(1,1)`, 표시·커밋 정상 |
+| **P0-5 `replacementRange`** | **판정 철회** | 아래 별항 |
+
+#### 2차 측정 결과 (프로브 개정 후, 구 Mackor 종료 격리 상태)
+
+원시 로그: `MackorIMEProbe/p0-round2-textedit.log`
+
+**① `replacementRange` — 1차 결론 완전 반박. 확정 텍스트 치환은 가능하다.**
+
+```
+BEFORE:  length=2 text=[ab]  sel=(2,0) marked=NSNotFound
+STEP1 setMarkedText("한글", replacementRange:(0,2))  →  text=[한글]   ← 확정 텍스트 대체됨
+STEP2 insertText("한글", replacementRange:(0,2))     →  text=[한글] marked=NSNotFound (확정)
+```
+
+TextEdit에서 `supportsProperty(DocumentAccess) = true`이고
+`validAttributesForMarkedText`에 `NSTextInputReplacementRangeAttributeName`이 포함된다.
+
+**규칙: 먼저 대상 범위에 `setMarkedText`로 조합을 걸어야 한다.** 대조군:
+
+| 호출 | 결과 |
+|---|---|
+| `setMarkedText(범위)` → `insertText(같은 범위)` | **작동** (`ab` → `한글`) |
+| `insertText(범위)` 단독 (선행 조합 없음) | 무시 (`ab` 그대로) |
+| `insertText("", 범위)` — ranged 삭제 | 무시 (`ab` 그대로) |
+
+즉 1차 결론("치환 불가")은 **정공법을 테스트하지 않아 생긴 오판**이었다.
+mozc 방식이 실제로 동작한다. **교정에 합성 백스페이스가 불필요하다**(적어도 TextEdit에서).
+
+**②-정정 D1(모드 전환) — 3차 측정에서 성립 확인.**
+
+2차 실패는 **두 번째 모드가 `enabled=false`였던 것이 원인**이었다. 모드를 켠 뒤
+재측정하니 정상 동작한다:
+
+```
+BEFORE        TIS[sourceID=...roman modeID=...roman]
+setValue MODE-CHANGED -> ...han2        ← 모드 변경 통지 도착 (P0-2 완전 확정)
+AFTER-0ms     TIS = roman                (아직 미반영)
+AFTER-50ms    TIS[sourceID=...han2 modeID=...han2]   ← 실제 전환됨
+AFTER-1000ms  TIS = han2
+keyDown 'b' → handle() 수신 지속, mode=han2          ← IME 비활성화되지 않음
+외부 확인      com.mackor.inputmethod.MackorProbe.han2
+```
+
+**결론: `IMKTextInput.selectMode(모드ID)`로 자기 다른 모드로 전환해도 IME는 살아 있다.
+D1 성립.** 전환은 약 50ms 비동기이므로 즉시 읽으면 옛 값이 나온다(0ms 시점 주의).
+
+**단, 전제 조건이 있다: 대상 모드가 `enabled` 상태여야 한다.**
+`TISEnableInputSource`가 `0`을 반환하고도 실제로 켜지지 않는 경우를 관측했다.
+→ 온보딩에서 두 모드를 모두 켜도록 안내·검증하는 절차가 필요하다.
+켜지지 않은 상태에서는 `selectMode`가 조용히 실패하고 `TISSelectInputSource`는 `-50`.
+
+**설계 선택지가 둘 다 유효하다:**
+
+| 안 | 장점 | 단점 |
+|---|---|---|
+| 두 모드 + `selectMode` | 메뉴바에 한/영 표시가 보임(익숙한 UX) | 두 모드 모두 enabled여야 함(온보딩 부담) |
+| 단일 모드 + 내부 불리언 | 온보딩 부담 없음. Apple 한국어 IME와 동일 구조 | 메뉴바 표시가 없어 상태를 눈으로 못 봄 |
+
+Phase 2에서 확정한다. 현재는 **온보딩 리스크가 작은 단일 모드를 우선 후보**로 두되,
+D1이 성립하므로 두 모드 방식도 배제하지 않는다.
+
+**②(2차, 폐기된 판정) D1 — 실패로 기록했으나 위 3차 측정으로 정정됨.**
+
+| 시도 | 결과 |
+|---|---|
+| `IMKTextInput.selectMode(roman)` | 모드 안 바뀜. 0/50/250/1000ms 전부 `han2` 유지 |
+| `TISSelectInputSource(roman)` | **-50 (paramErr)** |
+| `TISEnableInputSource(roman)` | 0(성공) 반환하지만 **실제 `enabled=false` 유지** |
+
+원인: `roman` 모드가 `enabled=false`다. 비활성 모드는 선택할 수 없고,
+**프로그램적 활성화가 먹지 않는다**(사용자가 시스템 설정에서 직접 추가해야 함).
+
+참고 — Apple 한국어 IME의 실제 구조(실측):
+
+```
+com.apple.inputmethod.Korean.2SetKorean      enabled=true   asciiCapable=false
+com.apple.inputmethod.Korean.3SetKorean      enabled=false
+com.apple.inputmethod.Korean.390Sebulshik    enabled=false
+com.apple.inputmethod.Korean.GongjinCheongRomaja  enabled=false
+```
+
+**Apple은 활성 모드가 하나뿐이고, 한/영 전환은 모드 전환이 아니라 IME 내부 처리다.**
+
+**설계 귀결 (D1 대체안):** 입력 모드를 **하나만** 두고 한/영을 **IME 내부 상태**로
+처리한다. 모드 전환 API에 의존하지 않으므로 D1 문제 자체가 소멸한다. R3-c는
+`TISSelectInputSource`도 `selectMode`도 아닌 **내부 불리언**이 된다.
+사용자가 시스템 설정에서 모드를 추가로 켜야 하는 온보딩 부담도 사라진다.
+
+#### (1차) `replacementRange` 결론 철회 — 실험 설계 오류
+
+이전에 "확정 텍스트를 `replacementRange`로 치환할 수 없다"고 일반 결론을 냈으나
+**철회한다. 정공법을 테스트하지 않았다.**
+
+관측된 사실 자체는 유효하다:
+
+| 호출 | 결과 |
+|---|---|
+| `setMarkedText` → `insertText(범위 NSNotFound)` | 정상 커밋 (`a`+`ㅁ` → `aㅁ`) |
+| 조합 세션 **없이** `insertText("한", range:(1,1))` on `ab` | 아무 일도 안 일어남 |
+| 조합이 **캐럿에** 걸린 상태로 `insertText("한", range:(1,1))` | `ab한` — 지정 범위가 아니라 **marked 자리**에 삽입 |
+
+그러나 이것이 "치환 불가"를 증명하지 않는다. 생산 IME(mozc)의 재변환은
+**대상 범위에 먼저 `setMarkedText(..., replacementRange:)`로 조합을 건 뒤
+같은 범위로 커밋**하는 순서인데, 위 실험은 그 순서를 한 번도 수행하지 않았다.
+세 번째 케이스는 조합이 **다른 위치**에 있었으므로 기존 marked가 우선 커밋된
+정상 동작을 관찰한 것일 가능성이 크다.
+
+**필요한 대조군 (미수행):**
+`supportsProperty(kTSMDocumentSupportDocumentAccessPropertyTag)` /
+`stringFromRange` 전후 비교 / 실제 selection에 대한 insert /
+`setMarkedText(대상범위)` → 같은 범위 커밋 / 별도 `NSTextView` 시험 앱 /
+물리 키 입력 병행.
+
+**따라서 교정 방식(치환 vs 커밋 지연)은 아직 확정하지 않는다.**
+
+### CorelDRAW 실측 (R-1 게이트, 4차) — 원시 로그 `MackorIMEProbe/p0-round4-coreldraw.log`
+
+**결론: IMK는 CorelDRAW에 도달한다. 그러나 문서 상태를 전혀 노출하지 않는다.**
+
+| 항목 | 결과 |
+|---|---|
+| `activateServer client=com.corel.coreldrawsuite.2025.coreldraw` | ✅ **IMK 세션 성립** |
+| 키 입력 `handle()` 도달 (`a`, `b`) | ✅ **도달함** |
+| `supportsProperty(DocumentAccess)` | `true` (자기 신고) |
+| `validAttributesForMarkedText` | `NSTextInputReplacementRangeAttributeName` 포함 |
+| `length()` | **0** — 문서 문자열 읽기 불가 |
+| `selectedRange()` | **NSNotFound** — 대상 범위 계산 불가 |
+| `attributes(forCharacterIndex:lineHeightRectangle:)` | **`(0,0,0,0)`** — 캐럿 위치 없음 |
+
+**즉 `supportsDocumentAccess=true`는 거짓 신고다.** 실제 조회는 전부 실패한다.
+이는 능력 탐지를 API 응답에만 의존하면 안 된다는 적대 검증의 지적을 실증한다 —
+**속성 신고가 아니라 실제 조회 결과로 판정해야 한다.**
+
+**결정적: CorelDRAW는 IMK의 키 소비를 무시한다.**
+
+사용자 실측 — han2 모드에서 `ab` 입력 후 트리거 3개를 누르니 화면에 **`ab∞§£`**.
+`∞`=⌥5, `§`=⌥6, `£`=⌥3이다. 프로브는 이 세 키를 수신해 정상 처리하고
+`handle()`에서 **`true`(소비)를 반환**했는데도(위 MEASURE 로그가 증거) CorelDRAW가
+그 키를 그대로 문서에 입력했다.
+
+**즉 CorelDRAW는 IMK로 키를 보여주기만 하고, 입력기가 키를 억제하거나 텍스트를
+바꾸는 것을 허용하지 않는다.** 한글 조합은 자모 키를 삼키고 조합 결과를 대신 넣는
+방식이므로, 이 환경에서는 **자모가 전부 로마자로 새어 나간다. IMK 경로로 조합 불가.**
+
+**설계 귀결 — CorelDRAW는 IMK로 해결되지 않는다:**
+
+- R2의 원조 대상 앱을 IMK 단독 구조로는 지원할 수 없다
+- **현행 CGEvent 탭 경로를 CorelDRAW류를 위해 유지해야 한다** (하이브리드)
+- 이 경로는 손쉬운 사용 권한이 필요하다 → "IMK 전환 후 권한 불필요"는
+  **rung 1·2 앱에 한정**되는 주장으로 축소한다
+- 이벤트 탭이 CorelDRAW에서 예전에 잘 동작했다는 사용자 증언과 정합한다.
+  현재 안 되는 이유는 IMK와 무관한 `AppMonitor.swift:276`의 scope 결합이다
+
+### 부수 발견 (같은 로그)
+
+**① CapsLock이 모드를 전환한다.** `Info.plist`에 `TICapsLockLanguageSwitchCapable`을
+넣었더니 시스템이 CapsLock으로 한/영을 토글하고 `setValue`로 통지한다:
+
+```
+flagsChanged flags=caps keycode=57
+setValue MODE-CHANGED -> ...roman
+```
+
+→ R3-c의 사용자 수동 전환 경로를 **시스템이 제공**한다. 별도 구현이 불필요하고,
+사용자에게 익숙한 CapsLock 한/영이 그대로 동작한다.
+
+**② ⌘ 조합 도달은 앱마다 다르다.** VS Code에서는 도달했다:
+
+```
+CMD-combo REACHED handle: keycode=0 flags=cmd client=com.microsoft.VSCode
+```
+
+TextEdit에서는 ⌘Z가 도달하지 않았다(앱 Undo가 선점). **일반화 불가**이며,
+undo 1차 경로는 칩 클릭이라는 결론은 유지한다.
+
+**③ VS Code는 키가 정상 도달한다** — Electron이지만 IMK 경로는 살아 있다.
+
+### G0-3 AX 게이트 직접 측정 (2026-07-20, 5차)
+
+도구: `MackorIMEProbe/axgate.swift` — `FocusedInputSafety`의 게이트 판정을 그대로 재현.
+각 앱 10회 반복, 50ms(제품과 동일)와 2s 두 타임아웃 병행.
+
+| 앱 | 포커스 요소 획득 | `AXRole` | 게이트 판정 |
+|---|---|---|---|
+| TextEdit | 10/10 (양 타임아웃) | `AXTextArea` | **통과** — R3 기록 가능 |
+| Google Chrome | 10/10 (양 타임아웃) | `AXWebArea` | **거부** (role 화이트리스트) |
+| CorelDRAW 2025 | 10/10 (양 타임아웃) | `AXUnknown` | **거부** (role 화이트리스트) |
+
+**이 측정이 정정하는 것 두 가지:**
+
+1. **Chrome은 `focusedElement()`가 nil이 아니다.** 요소는 정상 반환되며 role이
+   `AXWebArea`라 화이트리스트(`AXTextField`/`AXTextArea`)에서 거부되는 것이다.
+   앞서 기록한 "`focus token missing focused element`"는 제품이 `systemWide` 요소를
+   쓰는 경로에서 관측된 것으로, 원인 지점이 다르다. (웹페이지 본문 포커스 상태에서
+   측정했으므로, 실제 `<input>` 포커스 시 role이 다를 수 있다 — 미측정.)
+2. **50ms 타임아웃은 이 앱들에서 실패 원인이 아니다.** 50ms와 2s가 동일하게 10/10.
+   "AX 타임아웃이 간헐적 실패의 원인"이라는 가설은 이 세 앱에 한해 **기각**된다.
+
+**확정된 것:** CorelDRAW에서 AX 게이트가 거부되므로 **자동 교정(R3)이 기록조차 되지
+않는다.** 이는 그동안 추론으로만 서술됐던 항목(Phase A 논거 §6-5)의 실측 확정이다.
+CorelDRAW에서 도는 것은 직접 조합(R2)뿐이며, 사용자가 기억하는 예전 동작과 일치한다.
+
+**측정 도구 주의:** `systemWide` 요소 조회는 이 측정 도구가 실행되는 셸 컨텍스트에서
+대상과 무관하게 항상 `-25204`를 반환한다(TextEdit도 0/10). 같은 순간 앱 요소 직접
+조회는 `AXTextArea`를 정상 반환했다. **도구 아티팩트이지 앱의 성질이 아니므로**
+`axgate`는 애플리케이션 요소 경로를 쓴다.
+
+### G0-1 소비 정직성 — CorelDRAW 확정 (2026-07-20, 6차)
+
+앞선 "CorelDRAW가 IMK 소비를 무시한다"는 판정은 **감사 불가**였다(반환값 미기록,
+트리거가 전부 `ctrl+opt`인데 화면 기호는 `opt` 단독 문자). 프로브에
+**반환값 로깅 + 대상 앱 자동 소비**를 넣어 재측정했다.
+
+```
+23:36:17.098  activateServer client=com.corel.coreldrawsuite.2025.coreldraw
+              TIS[sourceID=com.mackor.inputmethod.MackorProbe.han2]   ← 프로브가 활성 입력 소스
+23:36:19.347  RET=true(소비) AUTO-CONSUME [com.corel...] 첫 글자 키 소비 chars=[q]
+```
+
+→ **화면에는 `q`가 나타났다.** (사용자 실측)
+
+대조군 (같은 프로브·같은 코드 경로, 같은 세션):
+
+| 앱 | `RET=true`로 소비한 글자 | 화면 |
+|---|---|---|
+| TextEdit | `q` | **안 나옴** (파일 내용 비어 있음) |
+| CorelDRAW | `q` | **나옴** |
+
+**확정: CorelDRAW는 IMK의 키 소비 결과를 무시한다.** 한글 조합은 자모 키를 삼키고
+조합 결과를 대신 넣는 방식이므로, 키를 억제할 수 없으면 자모가 전부 로마자로 샌다.
+**CorelDRAW류는 IMK로 조합 불가 → 이벤트 탭 경로 유지 필수(하이브리드 확정).**
+
+측정 설계상 유의점(두 번의 무효 측정에서 배운 것):
+- 반환값을 로그에 남기지 않으면 화면 결과와 대응시킬 수 없다 → `RET=` 필수
+- 사람이 트리거 키를 누르는 방식은 무장이 다른 키(백스페이스 등)에 소진되거나
+  의도한 앱이 아닌 곳에서 측정된다 → 대상 앱 자동 소비 + 글자 키 한정
+
+### G0-2 직접 조합 기준선 (TextEdit)
+
+```
+MEASURE directCompose: setMarkedText("ㅎ", NSNotFound) -> marked=(1,1) sel=(1,1)
+AFTER-directCompose: length=2 text=[Qㅎ]
+```
+
+TextEdit에서 마크드 텍스트가 정상 표시된다. CorelDRAW 측정은 미완(소비 무시가
+확정됐으므로 우선순위 하락 — 조합을 표시해도 자모 키 유출이 먼저 발생한다).
+
+### G0-6 flap 실측
+
+같은 세션에서 관측된 연속 전이 간격: `Δ=0ms`, `Δ=1ms`, `Δ=2ms`, `Δ=4ms`, `Δ=10ms`,
+`Δ=13ms` (VS Code·TextEdit·CorelDRAW 전환). 동일 클라이언트의 중복 `deactivateServer`도
+반복 관측된다(`epoch=19 Δ=2458ms` 직후 `Δ=0ms`).
+
+→ 설계 v2가 세션 식별을 bundleID가 아니라 **identity + epoch**로 바꾼 근거가
+실측으로 뒷받침된다. `activate(B)` 뒤에 `deactivate(A)`가 늦게 도착하는 패턴도
+같은 로그에 있다(`23:26:50.301 activate TextEdit` → `.319 deactivate Chrome`).
+
+### A-1 주입 마커 생존 — 실패 확정 (2026-07-20, 7차)
+
+도구: `MackorIMEProbe/inject.swift` — `EventTapManager.QuartzKeyboardOutput`(:54-110)의
+주입 방식을 그대로 복제(`CGEventSource(.privateState)` + `userData = 0x48474C46`,
+`setIntegerValueField(42, 0x48474C46)`, `post(tap: .cgAnnotatedSessionEventTap)`).
+
+> Mackor로 주입을 발생시키는 경로는 막혀 있다. 프로브가 활성 입력 소스이면
+> Mackor의 `inputSourceKind`가 `.unsupported`가 되어(`AppMonitor.swift:44`가 Apple
+> 두벌식을 하드코딩) 탭이 아무것도 주입하지 않는다. 설계 §5-6이 지적한 문제가
+> 측정 자체를 막는 형태로 나타나므로 주입기를 따로 만들었다.
+
+| 이벤트 | 주입 시점 field42 | `handle()`에서 읽은 `rawUserData` |
+|---|---|---|
+| 태깅 주입 (제품과 동일) | **1212632134** | **0** |
+| 무태그 합성 (대조군) | 0 | 0 |
+| 물리 키 경로 (대조군) | — | 0 |
+
+**확정 사실 두 가지:**
+
+1. **주입 이벤트는 IMK `handle()`에 도달한다.** 세 이벤트 모두 도달했다.
+   (그동안 "추정"으로만 서술하던 항목의 실측 확정)
+2. **마커는 왕복에서 소실된다.** 태깅 주입도 `rawUserData=0`이라 무태그·물리와
+   **구분이 불가능하다.** `NSEvent.cgEvent`가 NSEvent로부터 CGEvent를 재구성하며
+   커스텀 필드를 잃는 것으로 보인다.
+
+**영향:** 탭→IMK 방향의 **마커 기반 필터는 불가능**하다. 탭→탭 재진입 가드
+(`EventTapManager.swift:425`)는 CGEvent가 그대로 유지되는 경로이므로 영향받지 않는다
+(현행 제품이 동작하는 것이 그 증거).
+
+**설계 귀결:** 설계 v2가 "1차 방어선은 arbiter, 마커는 심층 방어"로 둔 순서 지정이
+옳았고, 심층 방어가 사라져도 아키텍처는 생존한다. 다만 조건부 항목이 **필수로
+승격**된다 — **injection drain/handoff barrier**(탭 출력 완료를 확인한 뒤에만
+owner 전이)를 Phase C에 반드시 구현한다. 주입 카운터 단독은 진짜 백스페이스를
+삼킬 수 있으므로 barrier가 유일한 안전장치다.
+
 ### 증상 관찰
 
 - 카톡: 잘 동작
@@ -354,17 +670,30 @@ AX 프로브 직접 측정 결과:
 - [x] 전체 테스트 통과 확인 (161 tests, 0 failures)
 - [x] **백업 커밋** (R5) — `a1c5828` + 태그 `pre-imk`, 원격 푸시 완료 (`origin/main` = `d27ea90`)
 - [x] `ARCHITECTURE.md:444` 인증서 기술 정정 (RELEASING.md와 모순 해소)
-- [ ] **P0-1. IMK 프로토타입으로 D1 전제 검증** — 최소 기능 IMK 입력기를 만들어
-      `TISSelectInputSource`로 Apple 입력 소스로 전환했을 때 자기 자신이 비활성화되어
-      입력 관찰이 끊기는지 **실측**한다. 결정 D1의 근거가 문서 기반 추론이므로
-      **구현 착수 전에 반드시 확인한다.**
+- [x] **P0-1. IMK 프로토타입으로 D1 전제 검증** — 3차 측정에서 성립 확인.
+      `selectMode`로 자기 다른 모드 전환 후에도 `handle()` 수신이 이어진다.
+      (2차 실패는 대상 모드가 `enabled=false`였던 것이 원인)
 - [x] **P0-2. R2 대상 프로그램 목록 확보** — 출처 있는 25종 수집 완료 (§R2 표).
       실기기 시험 대상 선정: 필수 5종(R1 표) + 확장(Discord·Notion·Obsidian·터미널 1종)
-- [ ] IMK 마이그레이션 설계 확정 (R4) — P0-1 결과 반영 후
-- [ ] IMK 구현
+- [x] **G0 재측정 팩** — 하이브리드가 실측으로 확정됐다.
+      Corel 소비 무시(6차, 감사 가능) + Chrome AX role 거부(5차) →
+      **양쪽 다 필요 = 하이브리드**. A-1 마커 소실 확정(7차)으로
+      injection barrier가 필수로 승격.
+- [x] **Phase A. R2+R3 공존 복원** — `AppMonitor`의 scope 결합 제거 +
+      공존 상태 백스페이스 토큰 무효화. 테스트 173개 통과. 빌드 1.3(9).
+      **공시: `.allApps`에서 등록된 앱 전부가 직접 조합을 받는다.**
+      앱별 조합 토글은 계속 off 스위치로 유효하다.
+      (이 단계는 CorelDRAW 복구이지 R1 충족이 아니다 — 조합은 여전히 앱 등록을
+      요구하며, R1은 하이브리드의 rung 분류기가 담당한다)
+- [ ] Phase B. `MackorSession` + `EditPlan` 추출, 탭을 `TapRenderer`로
+- [ ] Phase T. 설치 토폴로지 확정 (번들 ID·경로·마이그레이션)
+- [ ] Phase C. `TransportArbiter`(epoch) + IMK 골격 + injection barrier
+- [ ] Phase D+E. IMK 조합 + R3 동시 활성화
+- [ ] Phase F. 토폴로지 전환 + 서명·공증
 - [ ] 권한 반복 가설 검증 — Developer ID 서명본 vs ad-hoc 재설치 비교
-- [ ] R2 대상 프로그램 목록 확인
 - [ ] 릴리스 절차 진행
+- [ ] 별도 PR: `:435` 롤오버 경합 (방향: 무효화가 아니라 즉시 적용)
+- [ ] 별도 PR: 비공존 경로의 후행 마침표 백스페이스 발산
 
 ---
 

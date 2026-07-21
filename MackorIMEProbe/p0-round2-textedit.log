@@ -1,0 +1,60 @@
+[20:25:06.713] IMKServer 기동: name=MackorProbe_Connection id=com.mackor.inputmethod.MackorProbe server=ok
+[20:25:08.720] activateServer client=com.apple.TextEdit TIS[sourceID=com.mackor.inputmethod.MackorProbe.han2 modeID=com.mackor.inputmethod.MackorProbe.han2]
+[20:25:08.721] keyDown keycode=0 flags=- chars=a autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 synth?=true client=com.apple.TextEdit
+[20:25:09.140] keyDown keycode=11 flags=- chars=b autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 synth?=true client=com.apple.TextEdit
+[20:25:09.795] MEASURE snapshot: client=com.apple.TextEdit supportsDocumentAccess=true validAttrs=[NSFont, NSUnderline, NSColor, NSBackgroundColor, NSUnderlineColor, NSMarkedClauseSegment, NSLanguage, NSTextInputReplacementRangeAttributeName, NSGlyphInfo, NSTextAlternatives, NSTextInsertionUndoable, NSAttachment, NSDictationHiliteMarkedText] TIS[sourceID=com.mackor.inputmethod.MackorProbe.han2 modeID=com.mackor.inputmethod.MackorProbe.han2]
+[20:25:09.797]   DOC: length=2 text=[ab] actualRange=(0,2) sel=(2,0) marked=NSNotFound
+[20:25:10.893] MEASURE mozcReconvert (정공법) target=(0,2) client=com.apple.TextEdit
+[20:25:10.894]   BEFORE: length=2 text=[ab] actualRange=(0,2) sel=(2,0) marked=NSNotFound
+[20:25:10.901]   STEP1 setMarkedText(range=(0,2)) -> marked=(2,2) sel=(0,2)
+[20:25:10.902]   AFTER-STEP1: length=2 text=[한글] actualRange=(0,2) sel=(0,2) marked=(2,2)
+[20:25:11.315] deactivateServer client=com.apple.TextEdit
+[20:25:11.318]   STEP2 insertText(range=(0,2)) 완료
+[20:25:11.322]   AFTER-STEP2: length=2 text=[한글] actualRange=(0,2) sel=(2,0) marked=NSNotFound
+[20:25:38.627] activateServer client=com.apple.systempreferences TIS[sourceID=com.mackor.inputmethod.MackorProbe.han2 modeID=com.mackor.inputmethod.MackorProbe.han2]
+[20:25:38.628] setValue MODE-CHANGED -> com.mackor.inputmethod.MackorProbe.han2 client=com.apple.systempreferences
+[20:25:38.647] activateServer client=com.apple.Keyboard-Settings.extension TIS[sourceID=com.mackor.inputmethod.MackorProbe.han2 modeID=com.mackor.inputmethod.MackorProbe.han2]
+[20:25:38.648] setValue MODE-CHANGED -> com.mackor.inputmethod.MackorProbe.han2 client=com.apple.Keyboard-Settings.extension
+[20:25:40.402] activateServer client=com.apple.TextEdit TIS[sourceID=com.mackor.inputmethod.MackorProbe.han2 modeID=com.mackor.inputmethod.MackorProbe.han2]
+[20:25:40.402] setValue MODE-CHANGED -> com.mackor.inputmethod.MackorProbe.han2 client=com.apple.TextEdit
+[20:25:40.427] deactivateServer client=com.apple.TextEdit
+[20:25:40.428] activateServer client=com.apple.TextEdit TIS[sourceID=com.mackor.inputmethod.MackorProbe.han2 modeID=com.mackor.inputmethod.MackorProbe.han2]
+[20:25:40.428] setValue MODE-CHANGED -> com.mackor.inputmethod.MackorProbe.han2 client=com.apple.TextEdit
+[20:25:40.480] deactivateServer client=com.apple.Keyboard-Settings.extension
+[20:25:40.480] deactivateServer client=com.apple.systempreferences
+=== 대조군A: 조합 없이 직접 ranged insert (F4) ===
+[20:25:43.305] keyDown keycode=0 flags=- chars=a autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 synth?=true client=com.apple.TextEdit
+[20:25:43.716] keyDown keycode=11 flags=- chars=b autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 synth?=true client=com.apple.TextEdit
+[20:25:44.380] MEASURE rangedInsert (대조군A) target=(1,1) client=com.apple.TextEdit
+[20:25:44.381]   BEFORE: length=2 text=[ab] actualRange=(0,2) sel=(2,0) marked=NSNotFound
+[20:25:44.382]   AFTER: length=2 text=[ab] actualRange=(0,2) sel=(2,0) marked=NSNotFound
+=== 대조군B: ranged 삭제 (F7) ===
+[20:25:45.984] MEASURE rangedDelete target=(1,1) client=com.apple.TextEdit
+[20:25:45.985]   BEFORE: length=2 text=[ab] actualRange=(0,2) sel=(2,0) marked=NSNotFound
+[20:25:45.987]   AFTER: length=2 text=[ab] actualRange=(0,2) sel=(2,0) marked=NSNotFound
+=== P0-1 재측정: selectMode 실제 전환 여부 ===
+[20:26:10.812] MEASURE selectMode: 내부기록모드=com.mackor.inputmethod.MackorProbe.han2 목표=com.mackor.inputmethod.MackorProbe.roman client=com.apple.TextEdit
+[20:26:10.813]   BEFORE TIS[sourceID=com.mackor.inputmethod.MackorProbe.han2 modeID=com.mackor.inputmethod.MackorProbe.han2]
+[20:26:10.814]   AFTER-0ms TIS[sourceID=com.mackor.inputmethod.MackorProbe.han2 modeID=com.mackor.inputmethod.MackorProbe.han2]
+[20:26:10.866]   AFTER-50ms TIS[sourceID=com.mackor.inputmethod.MackorProbe.han2 modeID=com.mackor.inputmethod.MackorProbe.han2] 내부기록모드=com.mackor.inputmethod.MackorProbe.han2
+[20:26:11.075]   AFTER-250ms TIS[sourceID=com.mackor.inputmethod.MackorProbe.han2 modeID=com.mackor.inputmethod.MackorProbe.han2] 내부기록모드=com.mackor.inputmethod.MackorProbe.han2
+[20:26:11.863]   AFTER-1000ms TIS[sourceID=com.mackor.inputmethod.MackorProbe.han2 modeID=com.mackor.inputmethod.MackorProbe.han2] 내부기록모드=com.mackor.inputmethod.MackorProbe.han2
+  --- 전환 후 타이핑 (handle 지속 확인) ---
+[20:26:13.427] keyDown keycode=8 flags=- chars=c autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 synth?=true client=com.apple.TextEdit
+[20:26:13.952] keyDown keycode=2 flags=- chars=d autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 synth?=true client=com.apple.TextEdit
+=== D1 폴백: TISSelectInputSource로 자기 roman 모드 전환 ===
+[20:26:37.128] keyDown keycode=8 flags=- chars=c autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 synth?=true client=com.apple.TextEdit
+[20:26:37.652] keyDown keycode=2 flags=- chars=d autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 synth?=true client=com.apple.TextEdit
+[20:27:31.072] activateServer client=com.apple.systempreferences TIS[sourceID=com.mackor.inputmethod.MackorProbe.han2 modeID=com.mackor.inputmethod.MackorProbe.han2]
+[20:27:31.073] setValue MODE-CHANGED -> com.mackor.inputmethod.MackorProbe.han2 client=com.apple.systempreferences
+[20:27:31.074] deactivateServer client=com.apple.TextEdit
+[20:27:31.124] activateServer client=com.apple.Keyboard-Settings.extension TIS[sourceID=com.mackor.inputmethod.MackorProbe.han2 modeID=com.mackor.inputmethod.MackorProbe.han2]
+[20:27:31.124] setValue MODE-CHANGED -> com.mackor.inputmethod.MackorProbe.han2 client=com.apple.Keyboard-Settings.extension
+=== D1 재재측정: roman enabled 상태 ===
+[20:27:58.427] deactivateServer client=com.apple.Keyboard-Settings.extension
+[20:27:58.428] activateServer client=com.apple.Keyboard-Settings.extension TIS[sourceID=com.apple.inputmethod.Korean.2SetKorean modeID=com.apple.inputmethod.Korean.2SetKorean]
+[20:27:58.429] commitComposition client=com.apple.Keyboard-Settings.extension
+[20:27:58.431] deactivateServer client=com.apple.Keyboard-Settings.extension
+[20:27:58.432] deactivateServer client=com.apple.Keyboard-Settings.extension
+[20:27:58.434] commitComposition client=com.apple.systempreferences
+[20:27:58.443] deactivateServer client=com.apple.systempreferences

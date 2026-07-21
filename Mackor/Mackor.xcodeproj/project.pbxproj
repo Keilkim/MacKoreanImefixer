@@ -39,6 +39,7 @@
 		B100000D /* FocusedInputSafety.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000C; };
 		B100000E /* CorrectionNoticeController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000D; };
 		B100000F /* CorrectionNoticeControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000007; };
+		B1000010 /* AppMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000005; };
 		C0F00001 /* StructureCorrectionCorpusTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F00002; };
 		E1000001 /* KSX1001Table.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2000001; };
 		E1000011 /* KSX1001Table.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2000001; };
@@ -52,6 +53,12 @@
 		E1000022 /* KSX1001TableTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2000022; };
 		E1000023 /* LayoutCorrectionPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2000023; };
 		E1000024 /* GoldenCorpusParityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2000024; };
+		E1000025 /* AppMonitorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2000025; };
+		E1000030 /* LexicalTiebreaker.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2000030; };
+		E1000031 /* LexicalTiebreaker.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2000030; };
+		E1000032 /* LexicalTiebreakerParityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2000032; };
+		E1000033 /* ko-lexicon.v1.txt in Resources */ = {isa = PBXBuildFile; fileRef = E2000033; };
+		E1000034 /* en-lexicon.v1.txt in Resources */ = {isa = PBXBuildFile; fileRef = E2000034; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -89,6 +96,11 @@
 		E2000022 /* KSX1001TableTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KSX1001TableTests.swift; sourceTree = "<group>"; };
 		E2000023 /* LayoutCorrectionPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LayoutCorrectionPolicyTests.swift; sourceTree = "<group>"; };
 		E2000024 /* GoldenCorpusParityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoldenCorpusParityTests.swift; sourceTree = "<group>"; };
+		E2000025 /* AppMonitorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppMonitorTests.swift; sourceTree = "<group>"; };
+		E2000030 /* LexicalTiebreaker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LexicalTiebreaker.swift; sourceTree = "<group>"; };
+		E2000032 /* LexicalTiebreakerParityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LexicalTiebreakerParityTests.swift; sourceTree = "<group>"; };
+		E2000033 /* ko-lexicon.v1.txt */ = {isa = PBXFileReference; lastKnownFileType = text; name = "ko-lexicon.v1.txt"; path = "../../scripts/lexicon/ko-lexicon.v1.txt"; sourceTree = "<group>"; };
+		E2000034 /* en-lexicon.v1.txt */ = {isa = PBXFileReference; lastKnownFileType = text; name = "en-lexicon.v1.txt"; path = "../../scripts/lexicon/en-lexicon.v1.txt"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -115,6 +127,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				A1000008 /* Assets.xcassets in Resources */,
+				E1000033 /* ko-lexicon.v1.txt in Resources */,
+				E1000034 /* en-lexicon.v1.txt in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -148,6 +162,9 @@
 				E2000002 /* EnglishPhonotactics.swift */,
 				E2000003 /* HangulStructure.swift */,
 				E2000004 /* LayoutCorrectionPolicy.swift */,
+				E2000030 /* LexicalTiebreaker.swift */,
+				E2000033 /* ko-lexicon.v1.txt */,
+				E2000034 /* en-lexicon.v1.txt */,
 				D2000002 /* SparkleUpdateConfiguration.swift */,
 				D2000001 /* UpdaterController.swift */,
 				A200000A /* Assets.xcassets */,
@@ -171,6 +188,8 @@
 				E2000022 /* KSX1001TableTests.swift */,
 				E2000023 /* LayoutCorrectionPolicyTests.swift */,
 				E2000024 /* GoldenCorpusParityTests.swift */,
+				E2000025 /* AppMonitorTests.swift */,
+				E2000032 /* LexicalTiebreakerParityTests.swift */,
 				D2000003 /* SparkleUpdateConfigurationTests.swift */,
 			);
 			path = MackorTests;
@@ -285,6 +304,7 @@
 				E1000002 /* EnglishPhonotactics.swift in Sources */,
 				E1000003 /* HangulStructure.swift in Sources */,
 				E1000004 /* LayoutCorrectionPolicy.swift in Sources */,
+				E1000030 /* LexicalTiebreaker.swift in Sources */,
 				D1000002 /* SparkleUpdateConfiguration.swift in Sources */,
 				D1000001 /* UpdaterController.swift in Sources */,
 			);
@@ -306,6 +326,7 @@
 				B100000A /* InputSourceController.swift in Sources */,
 				B100000B /* EventTapManagerTests.swift in Sources */,
 				B100000C /* EventTapManager.swift in Sources */,
+				B1000010 /* AppMonitor.swift in Sources */,
 				B100000D /* FocusedInputSafety.swift in Sources */,
 				B100000E /* CorrectionNoticeController.swift in Sources */,
 				B100000F /* CorrectionNoticeControllerTests.swift in Sources */,
@@ -314,10 +335,13 @@
 				E1000012 /* EnglishPhonotactics.swift in Sources */,
 				E1000013 /* HangulStructure.swift in Sources */,
 				E1000014 /* LayoutCorrectionPolicy.swift in Sources */,
+				E1000031 /* LexicalTiebreaker.swift in Sources */,
 				E1000021 /* EnglishPhonotacticsTests.swift in Sources */,
 				E1000022 /* KSX1001TableTests.swift in Sources */,
 				E1000023 /* LayoutCorrectionPolicyTests.swift in Sources */,
 				E1000024 /* GoldenCorpusParityTests.swift in Sources */,
+				E1000025 /* AppMonitorTests.swift in Sources */,
+				E1000032 /* LexicalTiebreakerParityTests.swift in Sources */,
 				D1000003 /* SparkleUpdateConfiguration.swift in Sources */,
 				D1000004 /* SparkleUpdateConfigurationTests.swift in Sources */,
 			);
@@ -385,7 +409,7 @@
 				CODE_SIGN_ENTITLEMENTS = Mackor/Mackor.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -413,7 +437,7 @@
 				CODE_SIGN_ENTITLEMENTS = Mackor/Mackor.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_CODE_COVERAGE = NO;
 				ENABLE_DEBUG_DYLIB = NO;

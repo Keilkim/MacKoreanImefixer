@@ -8,7 +8,7 @@ set -Eeuo pipefail
 APP_NAME="Mackor"
 EXPECTED_IDENTIFIER="com.mackor.app"
 VERSION="${VERSION:-1.3}"
-BUILD_NUMBER="${BUILD_NUMBER:-8}"
+BUILD_NUMBER="${BUILD_NUMBER:-9}"
 INSTALL_DIR="/Applications"
 APP_PATH="$INSTALL_DIR/$APP_NAME.app"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -119,6 +119,73 @@ BUILT_IDENTIFIER="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$BUI
 if [ "$BUILT_IDENTIFIER" != "$EXPECTED_IDENTIFIER" ]; then
     fail "빌드 앱 ID가 일치하지 않습니다 (예상 $EXPECTED_IDENTIFIER, 실제 $BUILT_IDENTIFIER)."
 fi
+# Developer ID로 재서명해 손쉬운 사용 권한이 재설치를 넘어 유지되게 합니다.
+#
+# ad-hoc 서명은 빌드 내용이 바뀔 때마다 코드 해시가 달라져 TCC가 다른 앱으로
+# 인식합니다. 그래서 새 빌드를 설치할 때마다 권한을 다시 승인해야 했습니다.
+# 안정적인 Developer ID identity로 서명하면 designated requirement가 동일하게
+# 유지되어 승인이 남습니다.
+#
+# 인증서가 없는 기여자 환경에서는 조용히 건너뛰고 기존 ad-hoc 동작을 유지합니다.
+# 이 재서명은 로컬 개발 설치용이며, 공식 배포 서명·공증은 build-installer.sh가
+# REQUIRE_SIGNING/REQUIRE_NOTARIZATION 경로에서 따로 수행합니다.
+LOCAL_SIGN_IDENTITY="${LOCAL_SIGN_IDENTITY:-$(
+    security find-identity -v -p codesigning 2>/dev/null \
+        | /usr/bin/sed -n 's/.*"\(Developer ID Application: .*\)"/\1/p' \
+        | /usr/bin/head -n 1
+)}"
+
+if [ -n "$LOCAL_SIGN_IDENTITY" ]; then
+    echo "  Developer ID로 재서명 중: $LOCAL_SIGN_IDENTITY"
+    resign_failed=0
+
+    # validate_local_app_graph가 검사하는 것과 **같은 기준**으로 서명합니다.
+    # 검증기는 Contents 아래의 모든 Mach-O 파일을 훑어 Team ID 일치를 요구하므로,
+    # 번들 확장자(.app/.xpc/.framework)만 서명하면 Sparkle의 Autoupdate 같은
+    # 단독 실행 파일이 원래 서명을 유지한 채 남아 검증에서 걸립니다.
+    #
+    # 경로 깊이 역순(깊은 것부터)으로 서명해야 상위 번들의 봉인이 유효해집니다.
+    while IFS= read -r macho; do
+        if ! codesign --force --sign "$LOCAL_SIGN_IDENTITY" --options runtime \
+            --timestamp=none "$macho" > /dev/null 2>&1; then
+            echo "  [경고] 중첩 코드 서명 실패: $macho" >&2
+            resign_failed=1
+        fi
+    done < <(
+        find "$BUILT_APP/Contents" -type f \
+            -exec sh -c 'file -b "$1" | grep -q "Mach-O" && printf "%s\n" "$1"' _ {} \; \
+            | /usr/bin/awk -F/ '{ print NF"\t"$0 }' \
+            | /usr/bin/sort -rn \
+            | /usr/bin/cut -f2-
+    )
+
+    # 중첩 실행 파일을 다시 서명했으므로 이를 담고 있는 번들도 깊은 것부터 다시 봉인합니다.
+    while IFS= read -r -d '' bundle; do
+        codesign --force --sign "$LOCAL_SIGN_IDENTITY" --options runtime \
+            --timestamp=none "$bundle" > /dev/null 2>&1 || true
+    done < <(find "$BUILT_APP/Contents" \
+        \( -name "*.xpc" -o -name "*.app" -o -name "*.framework" \) -depth -print0)
+
+    if [ "$resign_failed" -eq 0 ] \
+        && codesign --force --sign "$LOCAL_SIGN_IDENTITY" --options runtime \
+            --timestamp=none "$BUILT_APP" > /dev/null 2>&1; then
+        echo "  재서명 완료 — 재설치해도 손쉬운 사용 권한이 유지됩니다"
+    else
+        echo "  [경고] Developer ID 재서명 실패. ad-hoc으로 되돌립니다." >&2
+        echo "         재설치 시 손쉬운 사용 권한을 다시 승인해야 할 수 있습니다." >&2
+        # 부분 서명 상태로 두면 검증기가 Team ID 불일치로 설치를 막습니다.
+        # 전체를 ad-hoc으로 통일해 최소한 설치는 진행되게 합니다.
+        while IFS= read -r -d '' bundle; do
+            codesign --force --sign - "$bundle" > /dev/null 2>&1 || true
+        done < <(find "$BUILT_APP/Contents" \
+            \( -name "*.xpc" -o -name "*.app" -o -name "*.framework" \) -depth -print0)
+        codesign --force --sign - "$BUILT_APP" > /dev/null 2>&1 || true
+    fi
+else
+    echo "  Developer ID 인증서 없음 — ad-hoc 서명 유지"
+    echo "  (재설치할 때마다 손쉬운 사용 권한을 다시 승인해야 할 수 있습니다)"
+fi
+
 validate_local_app_graph "$BUILT_APP"
 echo "[2/4] 빌드 완료 (v$BUILT_VERSION, 빌드 $BUILT_BUILD_NUMBER)"
 

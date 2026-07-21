@@ -36,6 +36,238 @@ final class EventTapManagerTests: XCTestCase {
         XCTAssertEqual(switchedDirections, [.latinToKorean])
     }
 
+    /// 키열 사본이 경계마다 비워져야 한다.
+    ///
+    /// 사본은 `processBoundary`가 내부 `defer { reset() }`으로 토큰을 비우는
+    /// 것을 알지 못한다. 그래서 한때 사본이 경계를 넘길 때마다 계속 쌓였고,
+    /// 사본을 쓰는 계층(어휘 tiebreaker·방향 수정)이 전부 길이 대조에서 걸려
+    /// **한 번도 발동하지 못했다.** 에러도 경고도 없이 조용히 아무 일도 하지
+    /// 않았기 때문에 오래 눈치채지 못했다.
+    ///
+    /// 두 번째 토큰이 교정되면 그 시점에 사본 길이가 실제 토큰과 같았다는
+    /// 뜻이므로, 이 테스트가 누수를 잡는다.
+    func testKeystrokeMirrorIsClearedAtEveryBoundary() throws {
+        let output = FakeKeyboardOutput()
+        let manager = makeManager(output: output, lexicalTiebreaker: try makeLexicalTiebreaker())
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        // 첫 토큰을 경계까지 흘려보낸다.
+        type("dkwn", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+        output.actions.removeAll()
+
+        // 두 번째 토큰. 사본이 쌓여 있으면 길이가 어긋나 어휘 계층이 죽는다.
+        type("sork", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(
+            output.actions.contains(.text("내가")),
+            "경계 뒤 사본이 남아 어휘 계층이 발동하지 못했습니다: \(output.actions)"
+        )
+    }
+
+    // MARK: - 낡은 캡처 앵커 (간헐 실패)
+    //
+    // 토큰 시작 시의 AX 읽기가 낡은 캐럿 위치를 돌려주면 산술 검증
+    // (`지금 캐럿 == 캡처 캐럿 + 입력 길이`)이 어긋난다. 재시도해도 다시 읽는
+    // 건 현재 캐럿뿐이라 영영 맞지 않는다 — 사용자가 겪은 "되다가 안 되다가".
+
+    /// 산술 검증이 실패해도, 캐럿 바로 앞 글자가 원문과 같으면 교정해야 한다.
+    /// 그게 지울 대상이 그 자리에 있다는 직접 증거다.
+    func testStaleAnchorStillCorrectsWhenCaretTextMatches() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.currentFocusMatches = false   // 앵커가 낡아 산술은 실패
+        focus.caretTextMatches = true       // 캐럿 앞 글자는 원문과 일치
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("dkwn", into: manager)
+        let boundary = keyDown(0x31)
+        XCTAssertNil(manager.handleKeyDown(boundary))
+        manager.noteSuppressedKeyDown(boundary)
+        XCTAssertNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(
+            output.actions.contains(.text("아주")),
+            "캐럿 앞 글자가 원문과 같은데도 교정을 포기했습니다: \(output.actions)"
+        )
+        XCTAssertTrue(focus.currentFocusOffsets.isEmpty)
+        XCTAssertTrue(focus.didReanchorFocusToken)
+    }
+
+    /// 둘 다 실패하면 교정하지 않아야 한다. 캐럿이 실제로 옮겨간 경우이므로
+    /// 엉뚱한 자리의 글자를 지우는 것보다 안 고치는 편이 낫다.
+    func testCorrectionIsAbandonedWhenNeitherCheckConfirms() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.currentFocusMatches = false
+        focus.caretTextMatches = false
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("dkwn", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertFalse(
+            output.actions.contains(.text("아주")),
+            "확인되지 않았는데 교정했습니다: \(output.actions)"
+        )
+    }
+
+    // MARK: - 포커스 조회의 일시적 실패
+    //
+    // 실측: Chrome의 차가운 첫 AX 조회는 약 57ms 걸려 이벤트 탭 경로의 50ms
+    // 제한을 넘는다. 그 타임아웃을 "이 필드는 교정 금지"로 확정해 버리면
+    // Chrome에서는 자동 교정이 영영 걸리지 않는다 — 실제로 그랬다.
+
+    /// 첫 조회가 일시적으로 실패해도 같은 keyDown의 짧은 재시도로 복구합니다.
+    func testTransientFocusFailureRetriesInsteadOfAbandoningTheToken() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.transientFailuresRemaining = 1   // 첫 키만 타임아웃, 그다음 성공
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("dkwn", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(
+            output.actions.contains(.text("아주")),
+            "일시적 조회 실패 뒤 재시도가 이뤄지지 않았습니다: \(output.actions)"
+        )
+    }
+
+    /// 첫 AX 요청 하나가 예산을 다 써도 첫 글자를 버리지 않고, 다음 글자에서
+    /// 데워진 연결로 성공하면 완전한 토큰을 교정해야 합니다.
+    func testFocusProbeBudgetCarriesTheFirstStrokeIntoTheNextKey() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.transientFailuresRemaining = 1
+        var uptimeReads: [TimeInterval] = [0, 0.101]
+        let manager = makeManager(
+            output: output,
+            focus: focus,
+            monotonicNow: { uptimeReads.isEmpty ? 0.101 : uptimeReads.removeFirst() }
+        )
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("dkwn", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(output.actions.contains(.text("아주")), "첫 d가 유실됐습니다")
+        XCTAssertEqual(focus.tokenRequestCount, 2)
+    }
+
+    /// 계속 실패하는 앱에서는 상한에 닿으면 포기해야 한다. 그러지 않으면 매
+    /// 키마다 AX IPC를 반복해 이벤트 탭이 느려진다.
+    func testPersistentFocusFailureStopsRetryingAfterTheCap() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.transientFailuresRemaining = 99   // 끝까지 실패
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("dkwndkwn", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(output.actions.isEmpty, "실패가 계속되는데 교정을 시도했습니다")
+        XCTAssertLessThanOrEqual(
+            focus.tokenRequestCount, 3,
+            "상한을 넘겨 매 키마다 조회했습니다: \(focus.tokenRequestCount)회"
+        )
+    }
+
+    // MARK: - Layer 1 어휘 tiebreaker 배선
+    //
+    // 규칙만으로는 한국어·영어 두 문법을 모두 만족하는 토큰을 가를 수 없어
+    // 보존한다. 그 분기에서만 사전을 참조해 한쪽만 실단어면 그쪽으로 확정한다.
+    // 아래 테스트가 그 경로가 실제로 이벤트 탭 흐름을 타는지 고정한다.
+
+    /// 사전이 규칙의 보존 판정을 뒤집어 실제 교체까지 이어져야 한다.
+    /// `sork`는 한글로 `내가`인데 영어로는 아무 뜻이 없다.
+    func testLexicalTiebreakerCorrectsAmbiguousTokenEndToEnd() throws {
+        let output = FakeKeyboardOutput()
+        let manager = makeManager(output: output, lexicalTiebreaker: try makeLexicalTiebreaker())
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("sork", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertEqual(output.actions, [
+            .key(0x33, false),
+            .key(0x33, false),
+            .key(0x33, false),
+            .key(0x33, false),
+            .key(0x33, false),
+            .text("내가"),
+            .key(0x31, false),
+        ])
+    }
+
+    /// 영어로도 실제 단어면 보존해야 한다. 여기서 교정하면 영어를 치던
+    /// 사용자의 입력을 뒤집는 오변환이 된다.
+    func testLexicalTiebreakerLeavesGenuineEnglishUntouched() throws {
+        let output = FakeKeyboardOutput()
+        let manager = makeManager(output: output, lexicalTiebreaker: try makeLexicalTiebreaker())
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("work", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(output.actions.isEmpty, "실제 영어 단어를 교정했습니다")
+    }
+
+    /// 사전 자산이 없으면 이 계층 없이 오늘과 동일하게 동작해야 한다.
+    func testLexicalTiebreakerAbsentKeepsRulePreservation() {
+        let output = FakeKeyboardOutput()
+        let manager = makeManager(output: output, lexicalTiebreaker: nil)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("sork", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(output.actions.isEmpty)
+    }
+
+    /// 키열 사본이 백스페이스에서도 엔진과 어긋나지 않아야 한다.
+    /// 어긋나면 검증에서 걸려 교정이 조용히 사라진다.
+    func testLexicalMirrorSurvivesBackspace() throws {
+        let output = FakeKeyboardOutput()
+        let manager = makeManager(output: output, lexicalTiebreaker: try makeLexicalTiebreaker())
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        // 오타를 한 글자 더 친 뒤 지우고 경계를 낸다.
+        type("sorkk", into: manager)
+        _ = manager.handleKeyDown(keyDown(0x33))
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(
+            output.actions.contains(.text("내가")),
+            "백스페이스 뒤 사본이 어긋나 교정이 사라졌습니다: \(output.actions)"
+        )
+    }
+
     func testScreenshotExampleDkwnReplacesWithAju() {
         let output = FakeKeyboardOutput()
         let manager = makeManager(output: output)
@@ -116,6 +348,7 @@ final class EventTapManagerTests: XCTestCase {
     func testImmediateBoundariesPreserveTheirPhysicalModifier() {
         let boundaries: [(UInt16, Bool)] = [
             (0x31, false), // Space
+            (0x31, true),  // Shift+Space도 Space 경계
             (0x2B, false), // ,
             (0x2C, true),  // ?
             (0x12, true),  // !
@@ -399,6 +632,109 @@ final class EventTapManagerTests: XCTestCase {
         ])
     }
 
+    func testSubmitCorrectionReanchorsWhenInitialCaretAnchorIsStale() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.currentFocusMatches = false
+        focus.caretTextMatches = true
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("dkwn", into: manager)
+        XCTAssertNil(manager.handleKeyDown(keyDown(0x24)))
+
+        XCTAssertTrue(output.actions.contains(.text("아주")))
+        XCTAssertEqual(focus.currentFocusOffsets, [4])
+        XCTAssertEqual(focus.caretTextCheckOriginals, ["dkwn"])
+        XCTAssertEqual(focus.caretTextBoundaryOffsets, [0])
+        XCTAssertTrue(focus.didReanchorFocusToken)
+    }
+
+    func testSubmitRequiresExactOriginalEvenWhenCaretOffsetMatches() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.anchoredTextMatches = false
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("gksrmf", into: manager)
+        XCTAssertNil(manager.handleKeyDown(keyDown(0x24)))
+
+        XCTAssertEqual(output.actions, [.key(0x24, false)])
+        XCTAssertEqual(focus.currentFocusOffsets, [6])
+    }
+
+    func testShiftReturnCorrectsThenPreservesShiftOnReinjection() {
+        let output = FakeKeyboardOutput()
+        let manager = makeManager(output: output)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("gksrmf", into: manager)
+        XCTAssertNil(manager.handleKeyDown(keyDown(0x24, shift: true)))
+
+        XCTAssertEqual(Array(output.actions.suffix(2)), [
+            .text("한글"),
+            .key(0x24, true),
+        ])
+    }
+
+    func testLongSubmitCandidatePassesThroughWithoutBlockingTheEventTap() {
+        let output = FakeKeyboardOutput()
+        let manager = makeManager(output: output)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("dksehlsmsrjsep", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x24)))
+        XCTAssertTrue(output.actions.isEmpty)
+    }
+
+    func testSubmitCorrectionDeliversOnlySubmitWhenValidationBudgetExpires() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.currentFocusMatches = false
+        focus.caretTextMatches = true
+        var uptime: TimeInterval = 0
+        focus.onReanchorRequest = { uptime = 0.101 }
+        let manager = makeManager(
+            output: output,
+            focus: focus,
+            monotonicNow: { uptime }
+        )
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("dkwn", into: manager)
+        XCTAssertNil(manager.handleKeyDown(keyDown(0x24)))
+
+        // 검증이 늦어져도 원문은 건드리지 않고 Return은 반드시 전달합니다.
+        XCTAssertEqual(output.actions, [.key(0x24, false)])
+        XCTAssertFalse(focus.didReanchorFocusToken)
+    }
+
+    func testSubmitSkipsExactValidationWhenItsBudgetIsExhausted() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        var uptimeReads: [TimeInterval] = [0, 0, 0.101]
+        let manager = makeManager(
+            output: output,
+            focus: focus,
+            monotonicNow: { uptimeReads.isEmpty ? 0.101 : uptimeReads.removeFirst() }
+        )
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("dkwn", into: manager)
+        XCTAssertNil(manager.handleKeyDown(keyDown(0x24)))
+
+        XCTAssertEqual(output.actions, [.key(0x24, false)])
+        XCTAssertTrue(focus.currentFocusOffsets.isEmpty)
+        XCTAssertTrue(focus.caretTextCheckOriginals.isEmpty)
+    }
+
     func testSubmitAfterTrailingPeriodsPreservesTheWholeBoundarySequence() {
         for submitKeycode: UInt16 in [0x24, 0x4C, 0x30] {
             for periodCount in 1...3 {
@@ -484,8 +820,10 @@ final class EventTapManagerTests: XCTestCase {
         manager.inputSourceKind = .supportedLatin
         manager.isAutoCorrectionEnabled = true
         type("gksrmf", into: manager)
-        XCTAssertNil(manager.handleKeyDown(keyDown(0x24)))
-        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x24)))
+        let submit = keyDown(0x24)
+        XCTAssertNil(manager.handleKeyDown(submit))
+        manager.noteSuppressedKeyDown(submit)
+        XCTAssertNil(manager.handleKeyUp(keyUp(0x24)))
 
         type("gksrmf", into: manager)
         XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
@@ -711,7 +1049,279 @@ final class EventTapManagerTests: XCTestCase {
         XCTAssertEqual(focus.currentFocusOffsets, [7])
     }
 
-    func testNextPhysicalKeyDownCancelsScheduledBoundaryCorrection() {
+    func testShortLatinCorrectionConsumesBoundaryBeforeKeyRolloverCanCancel() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        // 초반에 캡처한 앵커는 낡았지만, 현재 같은 입력란의 exact
+        // text는 올바른 실제 사례를 고정합니다.
+        focus.currentFocusMatches = false
+        focus.caretTextMatches = true
+        var scheduledCorrections: [() -> Void] = []
+        let manager = makeManager(
+            output: output,
+            focus: focus,
+            scheduleBoundaryCorrection: { scheduledCorrections.append($0) }
+        )
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+        var switchedDirections: [CorrectionDirection] = []
+        manager.onInputSourceSwitch = { direction in
+            switchedDirections.append(direction)
+            return nil
+        }
+
+        type("dkwn", into: manager)
+        // 빠른 타이핑의 정상 키 롤오버: Space keyUp보다 다음 글자 keyDown이
+        // 먼저 옵니다. 물리 Space를 억제하고 교정+합성 Space를 한 묶음으로
+        // 끝내면 다음 글자가 예약을 취소할 수 없습니다.
+        let boundary = keyDown(0x31)
+        XCTAssertNil(manager.handleKeyDown(boundary))
+        manager.noteSuppressedKeyDown(boundary)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(Self.keycodes["g"]!)))
+        XCTAssertNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertEqual(output.actions, [
+            .key(0x33, false),
+            .key(0x33, false),
+            .key(0x33, false),
+            .key(0x33, false),
+            .text("아주"),
+            .key(0x31, false),
+        ])
+        XCTAssertTrue(focus.currentFocusOffsets.isEmpty)
+        XCTAssertEqual(focus.caretTextCheckOriginals, ["dkwn"])
+        XCTAssertEqual(focus.caretTextBoundaryOffsets, [0])
+        XCTAssertEqual(switchedDirections, [.latinToKorean])
+        XCTAssertTrue(scheduledCorrections.isEmpty)
+    }
+
+    func testShortLatinCorrectionHasNoPostKeyUpSchedulingWindow() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.caretTextMatches = true
+        var scheduledCorrections: [() -> Void] = []
+        let manager = makeManager(
+            output: output,
+            focus: focus,
+            scheduleBoundaryCorrection: { scheduledCorrections.append($0) }
+        )
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("dkwn", into: manager)
+        let boundary = keyDown(0x31)
+        XCTAssertNil(manager.handleKeyDown(boundary))
+        manager.noteSuppressedKeyDown(boundary)
+        XCTAssertNil(manager.handleKeyUp(keyUp(0x31)))
+        let completedCorrection = output.actions
+
+        // 기존에는 이 keyDown이 keyUp 뒤 20ms 예약을 취소했습니다.
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(Self.keycodes["g"]!)))
+
+        XCTAssertEqual(output.actions, completedCorrection)
+        XCTAssertTrue(output.actions.contains(.text("아주")))
+        XCTAssertTrue(scheduledCorrections.isEmpty)
+    }
+
+    func testPreBoundaryCorrectionFallsBackBeforeMutatingWhenTimeBudgetExpires() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.caretTextMatches = true
+        var uptime: TimeInterval = 0
+        // 대역이 토큰을 돌려준 직후 예산이 끝나는 경계도 첫 Backspace
+        // 직전의 최종 guard가 잡아야 합니다.
+        focus.onReanchorReturn = { uptime = 0.101 }
+        var scheduledCorrections: [() -> Void] = []
+        let manager = makeManager(
+            output: output,
+            focus: focus,
+            monotonicNow: { uptime },
+            scheduleBoundaryCorrection: { scheduledCorrections.append($0) }
+        )
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("dkwn", into: manager)
+        // exact-range 검증이 예산을 넘기면 물리 Space를 통과시키고, 아직
+        // 어떤 삭제도 하지 않은 상태로 기존 keyUp 이후 경로에 맡깁니다.
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+
+        XCTAssertTrue(output.actions.isEmpty)
+        XCTAssertEqual(focus.caretTextCheckOriginals, ["dkwn"])
+        XCTAssertTrue(focus.didReanchorFocusToken)
+        XCTAssertTrue(scheduledCorrections.isEmpty)
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+        XCTAssertEqual(scheduledCorrections.count, 1)
+        XCTAssertTrue(output.actions.isEmpty)
+    }
+
+    func testDirectionEvidenceSkipsOnlyBoundariesAlreadyOnScreen() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.observedDirection = .latinToKorean
+        focus.caretTextMatches = true
+        let manager = makeManager(output: output, focus: focus)
+        // 시스템은 한글로 알지만 화면에는 Latin이 찍힌 상태를 재현합니다.
+        manager.inputSourceKind = .koreanTwoSet
+        manager.isAutoCorrectionEnabled = true
+
+        type("dkwn", into: manager)
+        let boundary = keyDown(0x31)
+        XCTAssertNil(manager.handleKeyDown(boundary))
+        manager.noteSuppressedKeyDown(boundary)
+
+        // 현재 Space는 callback 반환 전이라 화면에 없으므로 0이어야 합니다.
+        XCTAssertEqual(focus.scriptBoundaryOffsets, [0])
+        XCTAssertTrue(output.actions.contains(.text("아주")))
+        XCTAssertNil(manager.handleKeyUp(keyUp(0x31)))
+    }
+
+    func testDirectionEvidenceStillUsesLexicalTiebreaker() throws {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.observedDirection = .latinToKorean
+        focus.caretTextMatches = true
+        let manager = makeManager(
+            output: output,
+            focus: focus,
+            lexicalTiebreaker: try makeLexicalTiebreaker()
+        )
+        // TIS는 한글이지만 대상 앱 화면에는 Latin이 찍힌 상태입니다.
+        manager.inputSourceKind = .koreanTwoSet
+        manager.isAutoCorrectionEnabled = true
+
+        type("sork", into: manager)
+        let boundary = keyDown(0x31)
+        XCTAssertNil(manager.handleKeyDown(boundary))
+        manager.noteSuppressedKeyDown(boundary)
+
+        XCTAssertTrue(output.actions.contains(.text("내가")))
+        XCTAssertNil(manager.handleKeyUp(keyUp(0x31)))
+    }
+
+    func testExpiredDirectionProbeKeepsDecisionForDeferredFallback() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.observedDirection = .latinToKorean
+        var uptime: TimeInterval = 0
+        focus.onScriptRequest = { uptime = 0.101 }
+        var scheduledCorrections: [() -> Void] = []
+        let manager = makeManager(
+            output: output,
+            focus: focus,
+            monotonicNow: { uptime },
+            scheduleBoundaryCorrection: { scheduledCorrections.append($0) }
+        )
+        manager.inputSourceKind = .koreanTwoSet
+        manager.isAutoCorrectionEnabled = true
+
+        type("dkwn", into: manager)
+        // 화면 방향 증거는 끝까지 보존하되, 시간이 끝났으므로 keyDown 안에서
+        // 지우지 않고 decision을 기존 keyUp 이후 경로로 넘깁니다.
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertTrue(output.actions.isEmpty)
+        XCTAssertEqual(focus.scriptBoundaryOffsets, [0])
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+        XCTAssertEqual(scheduledCorrections.count, 1)
+    }
+
+    func testDirectionEvidenceAccountsForTrailingPeriodButNotCurrentSpace() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.observedDirection = .latinToKorean
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .koreanTwoSet
+        manager.isAutoCorrectionEnabled = true
+
+        type("dkwn", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x2F)))
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+
+        // period는 이미 통과했고 Space는 아직이므로 1만 넘깁니다.
+        XCTAssertEqual(focus.scriptBoundaryOffsets, [1])
+    }
+
+    func testSubmitDirectionEvidenceAccountsForTrailingPeriod() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.observedDirection = .latinToKorean
+        let manager = makeManager(output: output, focus: focus)
+        // 시스템은 한글로 알지만 화면에는 Latin이 찍힌 상태를 재현합니다.
+        manager.inputSourceKind = .koreanTwoSet
+        manager.isAutoCorrectionEnabled = true
+
+        type("dkwn", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x2F)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x2F)))
+        XCTAssertNil(manager.handleKeyDown(keyDown(0x24)))
+
+        // period는 이미 통과했고 Return은 아직이므로 1만 넘깁니다.
+        XCTAssertEqual(focus.scriptBoundaryOffsets, [1])
+        XCTAssertEqual(output.actions, [
+            .key(0x33, false),
+            .key(0x33, false),
+            .key(0x33, false),
+            .key(0x33, false),
+            .key(0x33, false),
+            .text("아주"),
+            .key(0x2F, false),
+            .key(0x24, false),
+        ])
+    }
+
+    func testPreBoundaryQuestionMarkPreservesShiftAndSuppressesPhysicalPair() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.caretTextMatches = true
+        var scheduledCorrections: [() -> Void] = []
+        let manager = makeManager(
+            output: output,
+            focus: focus,
+            scheduleBoundaryCorrection: { scheduledCorrections.append($0) }
+        )
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("dho", into: manager)
+        let boundary = keyDown(0x2C, shift: true)
+        XCTAssertNil(manager.handleKeyDown(boundary))
+        manager.noteSuppressedKeyDown(boundary)
+
+        XCTAssertEqual(output.actions, [
+            .key(0x33, false),
+            .key(0x33, false),
+            .key(0x33, false),
+            .text("왜"),
+            .key(0x2C, true),
+        ])
+        XCTAssertNil(manager.handleKeyUp(keyUp(0x2C)))
+        XCTAssertTrue(scheduledCorrections.isEmpty)
+    }
+
+    func testConsumedBoundaryAutorepeatCannotDuplicateSyntheticBoundary() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.caretTextMatches = true
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("dkwn", into: manager)
+        let boundary = keyDown(0x31)
+        XCTAssertNil(manager.handleKeyDown(boundary))
+        manager.noteSuppressedKeyDown(boundary)
+        let completedCorrection = output.actions
+
+        let repeatedBoundary = keyDown(0x31, autorepeat: true)
+        XCTAssertNil(manager.handleKeyDown(repeatedBoundary))
+        manager.noteSuppressedKeyDown(repeatedBoundary)
+
+        XCTAssertEqual(output.actions, completedCorrection)
+        XCTAssertEqual(output.actions.filter { $0 == .key(0x31, false) }.count, 1)
+        XCTAssertNil(manager.handleKeyUp(keyUp(0x31)))
+    }
+
+    func testPreBoundaryFastPathFallsBackWhenExactTextCannotBeConfirmed() {
         let output = FakeKeyboardOutput()
         let focus = FakeFocusInspector()
         var scheduledCorrections: [() -> Void] = []
@@ -723,22 +1333,97 @@ final class EventTapManagerTests: XCTestCase {
         manager.inputSourceKind = .supportedLatin
         manager.isAutoCorrectionEnabled = true
 
-        type("gksrmf", into: manager)
+        type("dkwn", into: manager)
         XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertTrue(output.actions.isEmpty)
         XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
         XCTAssertEqual(scheduledCorrections.count, 1)
-        XCTAssertTrue(output.actions.isEmpty)
 
-        focus.currentFocusMatches = false
         scheduledCorrections.removeFirst()()
+
+        XCTAssertEqual(output.actions, [
+            .key(0x33, false),
+            .key(0x33, false),
+            .key(0x33, false),
+            .key(0x33, false),
+            .key(0x33, false),
+            .text("아주"),
+            .key(0x31, false),
+        ])
+        XCTAssertEqual(focus.currentFocusOffsets, [5])
+        XCTAssertEqual(focus.caretTextCheckOriginals, ["dkwn"])
+        XCTAssertEqual(focus.caretTextBoundaryOffsets, [0])
+    }
+
+    func testPreBoundaryFastPathKeepsLongTokensOnDeferredPath() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.caretTextMatches = true
+        var scheduledCorrections: [() -> Void] = []
+        let manager = makeManager(
+            output: output,
+            focus: focus,
+            scheduleBoundaryCorrection: { scheduledCorrections.append($0) }
+        )
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        // 13타: 동기 경로 상한(8자)을 넘으므로 이벤트 탭 keyDown 안에서
+        // 백스페이스 대기를 수행하지 않습니다.
+        type("dksehlsmsrjsep", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+
+        XCTAssertTrue(output.actions.isEmpty)
+        XCTAssertTrue(focus.currentFocusOffsets.isEmpty)
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
         XCTAssertEqual(scheduledCorrections.count, 1)
-        XCTAssertEqual(focus.currentFocusOffsets, [7])
+    }
 
-        XCTAssertNotNil(manager.handleKeyDown(keyDown(Self.keycodes["a"]!)))
-        scheduledCorrections.removeFirst()()
+    func testPreBoundaryCorrectionUndoBeforePhysicalKeyUpKeepsKeyPairsBalanced() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.caretTextMatches = true
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+        let receipt = InputSourceSwitchReceipt(
+            fromInputSourceID: "com.apple.keylayout.ABC",
+            toInputSourceID: InputSourceController.koreanTwoSetInputSourceID,
+            selectedSourceGeneration: 9
+        )
+        manager.onInputSourceSwitch = { direction in
+            XCTAssertEqual(direction, .latinToKorean)
+            // 운영의 AppMonitor처럼 콜백 안에서 동기로 상태를 갱신합니다.
+            manager.inputSourceKind = .koreanTwoSet
+            manager.isActive = true
+            return receipt
+        }
+        var restoredReceipt: InputSourceSwitchReceipt?
+        manager.onInputSourceRestore = {
+            restoredReceipt = $0
+            return true
+        }
 
-        XCTAssertTrue(output.actions.isEmpty)
-        XCTAssertEqual(focus.currentFocusOffsets, [7])
+        type("dkwn", into: manager)
+        let boundary = keyDown(0x31)
+        XCTAssertNil(manager.handleKeyDown(boundary))
+        manager.noteSuppressedKeyDown(boundary)
+        output.actions.removeAll()
+
+        let undo = keyDown(0x06, flags: .maskCommand)
+        XCTAssertNil(manager.handleKeyDown(undo))
+        manager.noteSuppressedKeyDown(undo)
+        XCTAssertEqual(output.actions, [
+            .key(0x33, false), // 이미 짝이 맞는 합성 Space를 삭제
+            .key(0x33, false),
+            .key(0x33, false),
+            .text("dkwn"),
+            .key(0x31, false),
+        ])
+        XCTAssertEqual(focus.currentFocusOffsets, [3])
+        XCTAssertEqual(restoredReceipt, receipt)
+        // 나중에 도착한 원래 Space keyUp은 앱으로 통과하지 않습니다.
+        XCTAssertNil(manager.handleKeyUp(keyUp(0x31)))
     }
 
     func testMouseDownCancelsScheduledBoundaryCorrectionWithoutSideEffects() {
@@ -870,7 +1555,7 @@ final class EventTapManagerTests: XCTestCase {
         }
     }
 
-    func testChipExpirationLeavesCommandZTransactionActive() throws {
+    func testChipExpirationKeepsOnlyUsableRecoveryPath() throws {
         let output = FakeKeyboardOutput()
         let manager = makeManager(output: output)
         manager.inputSourceKind = .supportedLatin
@@ -890,6 +1575,32 @@ final class EventTapManagerTests: XCTestCase {
 
         XCTAssertNil(manager.handleKeyDown(keyDown(0x06, flags: .maskCommand)))
         XCTAssertEqual(output.actions.last, .key(0x31, false))
+
+        let longOutput = FakeKeyboardOutput()
+        let longManager = makeManager(output: longOutput)
+        longManager.inputSourceKind = .koreanTwoSet
+        longManager.isAutoCorrectionEnabled = true
+        var longRequest: OriginalChoiceRequest?
+        longManager.onOriginalChoiceAvailable = { longRequest = $0 }
+
+        type("semblance", into: longManager)
+        XCTAssertNotNil(longManager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(longManager.handleKeyUp(keyUp(0x31)))
+        let unwrappedLongRequest = try XCTUnwrap(longRequest)
+        XCTAssertTrue(longManager.markOriginalChoiceChipVisible(
+            generation: unwrappedLongRequest.generation
+        ))
+
+        longManager.originalChoiceChipDidExpire(
+            generation: unwrappedLongRequest.generation
+        )
+
+        XCTAssertFalse(longManager.isOriginalChoiceActive(
+            generation: unwrappedLongRequest.generation
+        ))
+        XCTAssertFalse(longManager.restoreOriginalChoice(
+            generation: unwrappedLongRequest.generation
+        ))
     }
 
     func testInputSourceChangeCancelsScheduledBoundaryCorrectionWithoutSideEffects() {
@@ -970,6 +1681,22 @@ final class EventTapManagerTests: XCTestCase {
         focus.currentFocusMatches = false
         XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
         XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+        XCTAssertTrue(output.actions.isEmpty)
+        XCTAssertEqual(focus.currentFocusOffsets, [7, 7, 7])
+    }
+
+    func testDeferredCorrectionRequiresExactOriginalEvenWhenCaretOffsetMatches() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.anchoredTextMatches = false
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("gksrmf", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
         XCTAssertTrue(output.actions.isEmpty)
         XCTAssertEqual(focus.currentFocusOffsets, [7, 7, 7])
     }
@@ -1113,7 +1840,7 @@ final class EventTapManagerTests: XCTestCase {
         XCTAssertEqual(switchedDirections, [.koreanToLatin])
     }
 
-    func testSystemDictionaryBackedKoreanCorrectionsReachThePostBoundaryFlow() {
+    func testRuleDerivedKoreanCorrectionsReachThePostBoundaryFlow() {
         let examples: [(
             physical: String,
             original: String,
@@ -1217,6 +1944,45 @@ final class EventTapManagerTests: XCTestCase {
         XCTAssertTrue(output.actions.isEmpty)
     }
 
+    func testLongCorrectionUndoPassesThroughWithoutSynchronousDeletion() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .koreanTwoSet
+        manager.isAutoCorrectionEnabled = true
+
+        // 고정 규칙 코퍼스의 9자 영어 결과입니다. 교정 자체는 keyUp 뒤 지연
+        // 경로에서 가능하지만 물리 Cmd-Z callback 안에서 9자를 지우지는 않습니다.
+        type("semblance", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+        XCTAssertTrue(output.actions.contains(.text("semblance")))
+        output.actions.removeAll()
+        focus.currentFocusOffsets.removeAll()
+
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x06, flags: .maskCommand)))
+        XCTAssertTrue(output.actions.isEmpty)
+        XCTAssertTrue(focus.currentFocusOffsets.isEmpty)
+    }
+
+    func testLongCorrectionCanStillBeRestoredFromOriginalChoiceChip() throws {
+        let output = FakeKeyboardOutput()
+        let manager = makeManager(output: output)
+        manager.inputSourceKind = .koreanTwoSet
+        manager.isAutoCorrectionEnabled = true
+        var request: OriginalChoiceRequest?
+        manager.onOriginalChoiceAvailable = { request = $0 }
+
+        type("semblance", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+        let unwrapped = try XCTUnwrap(request)
+        output.actions.removeAll()
+
+        XCTAssertTrue(manager.restoreOriginalChoice(generation: unwrapped.generation))
+        XCTAssertTrue(output.actions.contains(.text(unwrapped.original)))
+    }
+
     func testFocusMismatchUndoPassesThroughWithoutPosting() {
         let output = FakeKeyboardOutput()
         let focus = FakeFocusInspector()
@@ -1229,6 +1995,23 @@ final class EventTapManagerTests: XCTestCase {
         output.actions.removeAll()
 
         focus.currentFocusMatches = false
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x06, flags: .maskCommand)))
+        XCTAssertTrue(output.actions.isEmpty)
+    }
+
+    func testUndoRequiresExactReplacementEvenWhenCaretOffsetMatches() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+        type("gksrmf", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+        output.actions.removeAll()
+
+        // 앱이 같은 길이의 다른 문자열로 바꿨다고 가정합니다.
+        focus.anchoredTextMatches = false
         XCTAssertNotNil(manager.handleKeyDown(keyDown(0x06, flags: .maskCommand)))
         XCTAssertTrue(output.actions.isEmpty)
     }
@@ -1346,18 +2129,85 @@ final class EventTapManagerTests: XCTestCase {
         XCTAssertEqual(focus.tokenRequestCount, 0)
     }
 
+    func testKeyDownRefreshesStaleKoreanSourceBeforeDirectComposition() {
+        let output = FakeKeyboardOutput()
+        let manager = makeManager(output: output)
+        manager.inputSourceKind = .koreanTwoSet
+        manager.isActive = true
+        manager.onInputSourceKindRefresh = { .supportedLatin }
+
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(Self.keycodes["d"]!)))
+        XCTAssertTrue(output.actions.isEmpty)
+    }
+
+    func testKeyDownRefreshActivatesDirectCompositionForNewKoreanSource() {
+        let output = FakeKeyboardOutput()
+        let manager = makeManager(output: output)
+        manager.inputSourceKind = .supportedLatin
+        manager.isActive = false
+        manager.onInputSourceKindRefresh = {
+            // 운영의 AppMonitor가 source 갱신과 함께 활성 상태를 발행합니다.
+            manager.isActive = true
+            return .koreanTwoSet
+        }
+
+        XCTAssertNil(manager.handleKeyDown(keyDown(Self.keycodes["d"]!)))
+        XCTAssertEqual(output.actions, [.text("ㅇ")])
+    }
+
+    func testCapsLockTokenIsPreservedEvenWhenShiftIsAlsoPressed() {
+        let output = FakeKeyboardOutput()
+        let manager = makeManager(output: output)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        for character in "dkwn" {
+            _ = manager.handleKeyDown(keyDown(
+                Self.keycodes[character]!,
+                flags: [.maskAlphaShift, .maskShift]
+            ))
+        }
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(
+            Self.spaceKeycode,
+            flags: .maskAlphaShift
+        )))
+        XCTAssertTrue(output.actions.isEmpty)
+    }
+
     private func makeManager(
         output: FakeKeyboardOutput,
         focus: FakeFocusInspector = FakeFocusInspector(),
         now: @escaping () -> Date = { Date(timeIntervalSince1970: 1_000) },
-        scheduleBoundaryCorrection: @escaping (@escaping () -> Void) -> Void = { $0() }
+        monotonicNow: @escaping () -> TimeInterval = {
+            ProcessInfo.processInfo.systemUptime
+        },
+        scheduleBoundaryCorrection: @escaping (@escaping () -> Void) -> Void = { $0() },
+        lexicalTiebreaker: LexicalTiebreaker? = nil
     ) -> EventTapManager {
         EventTapManager(
             keyboardOutput: output,
             focusInspector: focus,
             now: now,
+            monotonicNow: monotonicNow,
             pause: { _ in },
-            scheduleBoundaryCorrection: scheduleBoundaryCorrection
+            scheduleBoundaryCorrection: scheduleBoundaryCorrection,
+            lexicalTiebreaker: lexicalTiebreaker
+        )
+    }
+
+    /// 저장소 원본 사전으로 어휘 계층을 만듭니다. 테스트 번들에는 앱 리소스가
+    /// 없으므로 파일에서 직접 읽습니다.
+    private func makeLexicalTiebreaker() throws -> LexicalTiebreaker {
+        var root = URL(fileURLWithPath: #filePath)
+        for _ in 0..<3 { root.deleteLastPathComponent() }
+        let dir = root.appendingPathComponent("scripts").appendingPathComponent("lexicon")
+        return LexicalTiebreaker(
+            korean: LexicalTiebreaker.parseKoreanLexicon(
+                try String(contentsOf: dir.appendingPathComponent("ko-lexicon.v1.txt"), encoding: .utf8)
+            ),
+            english: LexicalTiebreaker.parseEnglishLexicon(
+                try String(contentsOf: dir.appendingPathComponent("en-lexicon.v1.txt"), encoding: .utf8)
+            )
         )
     }
 
@@ -1370,6 +2220,93 @@ final class EventTapManagerTests: XCTestCase {
             _ = manager.handleKeyDown(keyDown(keycode))
         }
     }
+
+    // MARK: - 공존 상태 (직접 조합 + 자동 교정 동시 활성)
+    //
+    // AutoCorrectionScope가 .allApps일 때 조합이 꺼지던 결합을 제거하면서
+    // 두 기능이 같은 앱에서 함께 켜지는 상태가 일상적으로 도달 가능해졌다.
+    // 아래 세 테스트가 그 상태의 불변식을 고정한다.
+
+    /// 공존 상태에서 자모 키 하나는 조합 출력을 **정확히 한 번만** 낸다.
+    /// 자동 교정 엔진의 record는 순수 부기라 화면에 아무것도 쓰지 않는다.
+    func testCoexistenceJamoProducesSingleCompositionOutput() {
+        let output = FakeKeyboardOutput()
+        let manager = makeManager(output: output)
+        manager.inputSourceKind = .koreanTwoSet
+        manager.isActive = true
+        manager.isAutoCorrectionEnabled = true
+
+        let down = keyDown(Self.keycodes["g"]!)   // ㅎ
+        XCTAssertNil(manager.handleKeyDown(down), "자모 키는 차단되어야 한다")
+        XCTAssertEqual(output.actions, [.text("ㅎ")], "조합 출력이 정확히 한 번")
+    }
+
+    /// 공존 상태에서도 우리가 주입한 이벤트는 기록도 조합도 하지 않는다.
+    func testCoexistenceIgnoresInjectedEvents() {
+        let output = FakeKeyboardOutput()
+        let manager = makeManager(output: output)
+        manager.inputSourceKind = .koreanTwoSet
+        manager.isActive = true
+        manager.isAutoCorrectionEnabled = true
+
+        let injected = keyDown(Self.keycodes["g"]!)
+        EventTapManager.tagAsInjected(injected)
+        XCTAssertNotNil(manager.handleKeyDown(injected), "주입 이벤트는 통과")
+        XCTAssertTrue(output.actions.isEmpty, "주입 이벤트로는 아무것도 출력하지 않는다")
+
+        // 트래커 상태도 오염되지 않았는지: 다음 물리 자모가 새 음절로 시작한다
+        XCTAssertNil(manager.handleKeyDown(keyDown(Self.keycodes["g"]!)))
+        XCTAssertEqual(output.actions, [.text("ㅎ")])
+    }
+
+    /// 공존 상태에서 백스페이스가 섞이면 그 토큰의 자동 교정을 포기한다.
+    ///
+    /// 엔진은 스트로크 하나를 지우고 남은 키열을 재생해 원문을 만들지만
+    /// 화면 트래커는 커밋된 음절을 다시 열지 못해 두 모델이 갈라진다.
+    /// 어긋난 채로 교정하면 백스페이스 수가 모자라 문자가 유출되므로,
+    /// 교정을 발사하지 않는 것이 올바른 동작이다.
+    func testCoexistenceBackspaceInvalidatesCorrectionForToken() {
+        // 조합 자체도 백스페이스를 내보내므로(ㅎ+ㅐ→해는 delete 1) 출력의
+        // 백스페이스 개수로는 교정 여부를 가릴 수 없다. onOriginalChoiceAvailable은
+        // 교정이 실제로 적용될 때만 호출되므로 이것이 정확한 판별자다.
+        func correctionFired(withBackspace: Bool) -> Bool {
+            let output = FakeKeyboardOutput()
+            var scheduled: [() -> Void] = []
+            let manager = makeManager(
+                output: output,
+                scheduleBoundaryCorrection: { scheduled.append($0) }
+            )
+            manager.inputSourceKind = .koreanTwoSet
+            manager.isActive = true
+            manager.isAutoCorrectionEnabled = true
+            var request: OriginalChoiceRequest?
+            manager.onOriginalChoiceAvailable = { request = $0 }
+
+            _ = manager.handleKeyDown(keyDown(Self.keycodes["g"]!))
+            _ = manager.handleKeyDown(keyDown(Self.keycodes["e"]!))
+            if withBackspace {
+                _ = manager.handleKeyDown(keyDown(0x33))   // 여기서 두 모델이 갈라진다
+            }
+            for character in "ood" {
+                _ = manager.handleKeyDown(keyDown(Self.keycodes[character]!))
+            }
+            _ = manager.handleKeyDown(keyDown(Self.spaceKeycode))
+            _ = manager.handleKeyUp(keyUp(Self.spaceKeycode))
+            for work in scheduled { work() }
+            return request != nil
+        }
+
+        XCTAssertFalse(
+            correctionFired(withBackspace: true),
+            "백스페이스가 섞인 토큰은 교정하지 않는다 — 화면과 원문의 글자 수가 어긋난다"
+        )
+        XCTAssertTrue(
+            correctionFired(withBackspace: false),
+            "대조군: 백스페이스가 없으면 같은 흐름에서 교정이 정상 발사된다"
+        )
+    }
+
+    private static let spaceKeycode: UInt16 = 0x31
 
     private func keyDown(
         _ keycode: UInt16,
@@ -1426,15 +2363,72 @@ private final class FakeKeyboardOutput: EventTapKeyboardOutputting {
 
 private final class FakeFocusInspector: EventTapFocusInspecting {
     let token = FocusedInputSafety.FocusToken(syntheticSelectionLocation: 0)
+    let reanchoredToken = FocusedInputSafety.FocusToken(syntheticSelectionLocation: 0)
     var tokenAvailable = true
     var currentFocusMatches = true
+    var anchoredTextMatches = true
     var currentFocusMatchResponses: [Bool] = []
     var tokenRequestCount = 0
     var currentFocusOffsets: [Int] = []
+    /// 이 횟수만큼 조회가 *일시적으로* 실패한 뒤 성공합니다. Chrome처럼 차가운
+    /// 첫 조회가 타임아웃 나는 앱을 흉내 냅니다.
+    var transientFailuresRemaining = 0
+    /// 캡처 앵커가 낡아 산술 검증이 실패해도, 캐럿 앞 글자 대조는 통과하는 상황.
+    var caretTextMatches = false
+    var caretTextCheckOriginals: [String] = []
+    var caretTextBoundaryOffsets: [Int] = []
+    var didReanchorFocusToken = false
+    var onReanchorRequest: (() -> Void)?
+    var onReanchorReturn: (() -> Void)?
+    var observedDirection: CorrectionDirection?
+    var scriptBoundaryOffsets: [Int] = []
+    var onScriptRequest: (() -> Void)?
 
     func automaticCorrectionFocusToken() -> FocusedInputSafety.FocusToken? {
         tokenRequestCount += 1
         return tokenAvailable ? token : nil
+    }
+
+    func probeAutomaticCorrectionFocus() -> FocusedInputSafety.FocusProbe {
+        if transientFailuresRemaining > 0 {
+            transientFailuresRemaining -= 1
+            tokenRequestCount += 1
+            return .unavailable
+        }
+        guard let token = automaticCorrectionFocusToken() else { return .ineligible }
+        return .eligible(token)
+    }
+
+    func reanchoredFocusToken(
+        _ token: FocusedInputSafety.FocusToken,
+        original: String,
+        boundaryUTF16Count: Int,
+        shouldContinue: () -> Bool
+    ) -> FocusedInputSafety.FocusToken? {
+        caretTextCheckOriginals.append(original)
+        caretTextBoundaryOffsets.append(boundaryUTF16Count)
+        onReanchorRequest?()
+        guard shouldContinue(), caretTextMatches else { return nil }
+        didReanchorFocusToken = true
+        onReanchorReturn?()
+        return reanchoredToken
+    }
+
+    func anchoredOriginalFocusToken(
+        _ token: FocusedInputSafety.FocusToken,
+        original: String,
+        boundaryUTF16Count: Int,
+        shouldContinue: () -> Bool
+    ) -> FocusedInputSafety.FocusToken? {
+        guard shouldContinue() else { return nil }
+        let focusMatches = isCurrentFocus(
+                token,
+                utf16Offset: original.utf16.count + boundaryUTF16Count
+        )
+        guard focusMatches, shouldContinue(), anchoredTextMatches else {
+            return nil
+        }
+        return token
     }
 
     func isCurrentFocus(
@@ -1443,9 +2437,21 @@ private final class FakeFocusInspector: EventTapFocusInspecting {
     ) -> Bool {
         currentFocusOffsets.append(utf16Offset)
         guard tokenAvailable else { return false }
+        if didReanchorFocusToken { return true }
         if !currentFocusMatchResponses.isEmpty {
             return currentFocusMatchResponses.removeFirst()
         }
         return currentFocusMatches
+    }
+
+    func scriptBeforeCaret(
+        _ token: FocusedInputSafety.FocusToken,
+        boundaryUTF16Count: Int,
+        shouldContinue: () -> Bool
+    ) -> CorrectionDirection? {
+        guard shouldContinue() else { return nil }
+        scriptBoundaryOffsets.append(boundaryUTF16Count)
+        onScriptRequest?()
+        return observedDirection
     }
 }

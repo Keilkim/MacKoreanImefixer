@@ -1,0 +1,12 @@
+[23:42:38.969] commitComposition client=com.google.Chrome
+[23:42:38.971] activateServer client=com.google.Chrome epoch=10 Δ=183735ms TIS[sourceID=com.mackor.inputmethod.MackorProbe.han2 modeID=com.mackor.inputmethod.MackorProbe.han2]
+[23:42:38.971] setValue MODE-CHANGED -> com.mackor.inputmethod.MackorProbe.han2 client=com.google.Chrome
+[23:42:42.429] activateServer client=com.apple.TextEdit epoch=11 Δ=3458ms TIS[sourceID=com.mackor.inputmethod.MackorProbe.han2 modeID=com.mackor.inputmethod.MackorProbe.han2]
+[23:42:42.429] setValue MODE-CHANGED -> com.mackor.inputmethod.MackorProbe.han2 client=com.apple.TextEdit
+[23:42:42.467] deactivateServer client=com.google.Chrome epoch=11 Δ=39ms
+[23:42:42.475] deactivateServer client=com.apple.TextEdit epoch=11 Δ=8ms
+[23:42:42.477] activateServer client=com.apple.TextEdit epoch=12 Δ=2ms TIS[sourceID=com.mackor.inputmethod.MackorProbe.han2 modeID=com.mackor.inputmethod.MackorProbe.han2]
+[23:42:42.478] setValue MODE-CHANGED -> com.mackor.inputmethod.MackorProbe.han2 client=com.apple.TextEdit
+[23:42:57.379] RET=false(통과) keyDown keycode=12 flags=- chars=[q] autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 rawUserData=0 synth?=false client=com.apple.TextEdit
+[23:42:58.482] RET=false(통과) keyDown keycode=13 flags=- chars=[w] autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 rawUserData=0 synth?=false client=com.apple.TextEdit
+[23:42:59.601] RET=false(통과) keyDown keycode=14 flags=- chars=[e] autorepeat=false mode=com.mackor.inputmethod.MackorProbe.han2 rawUserData=0 synth?=false client=com.apple.TextEdit

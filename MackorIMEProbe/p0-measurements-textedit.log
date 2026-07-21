@@ -1,0 +1,67 @@
+[19:34:14.961] IMKServer 기동: name=MackorProbe_Connection id=com.mackor.inputmethod.MackorProbe server=ok
+[19:34:14.978] activateServer client=com.apple.TextEdit
+[19:34:14.979] setValue tag=1768778093 value=Optional(com.mackor.inputmethod.MackorProbe.han2) client=com.apple.TextEdit
+===== MEASURE TextEdit 19:34:35 =====
+[19:34:36.041] keyDown keycode=0 flags=- chars=a autorepeat=false client=com.apple.TextEdit
+[19:34:36.456] keyDown keycode=11 flags=- chars=b autorepeat=false client=com.apple.TextEdit
+[19:34:37.200] MEASURE replacementRange: insertText("한", range=(1,1)) client=com.apple.TextEdit (직전 글자가 한으로 바뀌면 지원, 뒤에 덧붙으면 무시=미지원)
+[19:34:38.170] MEASURE markedProbe: setMarkedText("ㅁ") -> markedRange=(2,1) selectedRange=(2,1) client=com.apple.TextEdit (화면에 ㅁ가 보이고 유지되는지 눈으로도 확인)
+[19:34:39.139] MEASURE markedProbe: committed via insertText client=com.apple.TextEdit
+[19:34:39.938] MEASURE caretRect: index=0 rect=(214.76011657714844, 979.0, 1.0, 13.0) client=com.apple.TextEdit
+[19:34:41.756] MEASURE selectMode: com.mackor.inputmethod.MackorProbe.han2 -> com.mackor.inputmethod.MackorProbe.roman client=com.apple.TextEdit (이후 keyDown 로그 지속 여부 = P0-1 판정)
+[19:34:42.916] keyDown keycode=8 flags=- chars=c autorepeat=false client=com.apple.TextEdit
+[19:34:43.302] keyDown keycode=2 flags=- chars=d autorepeat=false client=com.apple.TextEdit
+===== P0-5 재측정 (TextEdit) =====
+[19:39:44.767] keyDown keycode=0 flags=- chars=a autorepeat=false client=com.apple.TextEdit
+[19:39:45.199] keyDown keycode=11 flags=- chars=b autorepeat=false client=com.apple.TextEdit
+[19:39:45.815] MEASURE replacementRange: insertText("한", range=(3,1)) client=com.apple.TextEdit (직전 글자가 한으로 바뀌면 지원, 뒤에 덧붙으면 무시=미지원)
+[19:39:47.274] deactivateServer client=com.apple.TextEdit
+[19:39:47.528] activateServer client=com.apple.TextEdit
+[19:39:47.528] setValue tag=1768778093 value=Optional(com.mackor.inputmethod.MackorProbe.han2) client=com.apple.TextEdit
+[19:40:10.780] deactivateServer client=com.apple.TextEdit
+[19:40:10.851] activateServer client=com.apple.systempreferences
+[19:40:10.851] setValue tag=1768778093 value=Optional(com.mackor.inputmethod.MackorProbe.han2) client=com.apple.systempreferences
+[19:40:12.692] activateServer client=com.apple.TextEdit
+[19:40:12.693] setValue tag=1768778093 value=Optional(com.mackor.inputmethod.MackorProbe.han2) client=com.apple.TextEdit
+[19:40:12.715] deactivateServer client=com.apple.TextEdit
+[19:40:12.716] activateServer client=com.apple.TextEdit
+[19:40:12.717] setValue tag=1768778093 value=Optional(com.mackor.inputmethod.MackorProbe.han2) client=com.apple.TextEdit
+[19:40:12.755] deactivateServer client=com.apple.systempreferences
+===== P0-5 클린 재측정 =====
+[19:40:15.523] keyDown keycode=0 flags=- chars=a autorepeat=false client=com.apple.TextEdit
+[19:40:16.040] keyDown keycode=11 flags=- chars=b autorepeat=false client=com.apple.TextEdit
+[19:40:16.788] MEASURE replacementRange: insertText("한", range=(1,1)) client=com.apple.TextEdit (직전 글자가 한으로 바뀌면 지원, 뒤에 덧붙으면 무시=미지원)
+[19:40:41.260] deactivateServer client=com.apple.TextEdit
+[19:40:41.271] activateServer client=com.apple.systempreferences
+[19:40:41.272] setValue tag=1768778093 value=Optional(com.mackor.inputmethod.MackorProbe.han2) client=com.apple.systempreferences
+[19:40:43.152] activateServer client=com.apple.TextEdit
+[19:40:43.152] setValue tag=1768778093 value=Optional(com.mackor.inputmethod.MackorProbe.han2) client=com.apple.TextEdit
+[19:40:43.171] deactivateServer client=com.apple.TextEdit
+[19:40:43.172] activateServer client=com.apple.TextEdit
+[19:40:43.173] setValue tag=1768778093 value=Optional(com.mackor.inputmethod.MackorProbe.han2) client=com.apple.TextEdit
+[19:40:43.190] deactivateServer client=com.apple.systempreferences
+===== P0-3 marked+commit 경로 =====
+[19:40:45.992] keyDown keycode=0 flags=- chars=a autorepeat=false client=com.apple.TextEdit
+[19:40:46.637] MEASURE markedProbe: setMarkedText("ㅁ") -> markedRange=(1,1) selectedRange=(1,1) client=com.apple.TextEdit (화면에 ㅁ가 보이고 유지되는지 눈으로도 확인)
+[19:40:47.770] MEASURE markedProbe: committed via insertText client=com.apple.TextEdit
+[19:41:14.043] deactivateServer client=com.apple.TextEdit
+[19:41:14.053] activateServer client=com.apple.systempreferences
+[19:41:14.054] setValue tag=1768778093 value=Optional(com.mackor.inputmethod.MackorProbe.han2) client=com.apple.systempreferences
+[19:41:15.926] activateServer client=com.apple.TextEdit
+[19:41:15.926] setValue tag=1768778093 value=Optional(com.mackor.inputmethod.MackorProbe.han2) client=com.apple.TextEdit
+[19:41:15.944] deactivateServer client=com.apple.TextEdit
+[19:41:15.945] activateServer client=com.apple.TextEdit
+[19:41:15.946] setValue tag=1768778093 value=Optional(com.mackor.inputmethod.MackorProbe.han2) client=com.apple.TextEdit
+[19:41:15.965] deactivateServer client=com.apple.systempreferences
+===== P0-5b: 조합 세션 활성 중 replacementRange =====
+[19:41:18.781] keyDown keycode=0 flags=- chars=a autorepeat=false client=com.apple.TextEdit
+[19:41:19.290] keyDown keycode=11 flags=- chars=b autorepeat=false client=com.apple.TextEdit
+[19:41:19.840] MEASURE markedProbe: setMarkedText("ㅁ") -> markedRange=(2,1) selectedRange=(2,1) client=com.apple.TextEdit (화면에 ㅁ가 보이고 유지되는지 눈으로도 확인)
+[19:41:20.939] MEASURE replacementRange: insertText("한", range=(1,1)) client=com.apple.TextEdit (직전 글자가 한으로 바뀌면 지원, 뒤에 덧붙으면 무시=미지원)
+[19:41:54.336] commitComposition client=com.apple.TextEdit
+[19:41:54.339] deactivateServer client=com.apple.TextEdit
+[19:41:54.342] deactivateServer client=com.apple.TextEdit
+[19:41:55.441] activateServer client=com.apple.systempreferences
+[19:41:55.441] commitComposition client=com.apple.systempreferences
+[19:41:55.442] deactivateServer client=com.apple.systempreferences
+[19:41:55.442] deactivateServer client=com.apple.systempreferences

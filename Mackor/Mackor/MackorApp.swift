@@ -68,13 +68,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
            - 전체 Mac: 모든 앱과 브라우저 웹사이트에서 자동 교정
            - 선택한 앱만: 앱 이름의 하위 메뉴에서 자동 교정 켜기
 
-        3. 선택한 앱만 사용할 때 대상 앱 등록
+        3. 한글 조합 보정 또는 선택 앱 자동 교정 대상 등록
            메뉴바 "Mackor" 클릭 → ＋ 앱 추가
            또는 해당 앱을 열고 → ＋ 현재 앱 추가
 
         4. 선택한 앱의 하위 메뉴에서 사용할 기능 선택
            - 한글 조합 보정
-           - 한/영 오입력 자동 보정 (실험적)
+           - 선택한 앱만 모드: 한/영 오입력 자동 보정 (실험적)
 
         [한/영 오입력 예시]
         gksrmf → 한글
@@ -88,9 +88,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         - 공백·,·?·!에서 평가하며 마침표는 URL 보호를 위해 잠시 유예합니다
         - 영문 입력 소스에서 실제 Shift로 친 ALL CAPS 단어는 보존합니다
         - 보정 뒤 시스템 한/영 입력 소스도 의도한 언어로 바뀝니다
-        - 비밀번호·주소·검색·보안 입력 필드에서는 작동하지 않습니다
-        - 지원하는 입력란에서는 보정 직후 원래 입력을 4초간 클릭해 복원할 수 있습니다
-        - 원문 칩이 없더라도 6초 안에 ⌘Z로 되돌릴 수 있습니다
+        - 검색 입력란은 지원하며 비밀번호·주소·보안 입력 필드에서는 작동하지 않습니다
+        - 지원하는 입력란에서는 보정 직후 원래 입력을 4~6초간 클릭해 복원할 수 있습니다
+        - 결과 8자 이하의 짧은 보정은 원문 칩이 없어도 6초 안에 ⌘Z로 되돌릴 수 있습니다
         - 입력 내용은 저장하거나 외부로 전송하지 않습니다
         - 메뉴바에서 활성화/비활성화 가능
         """
@@ -120,26 +120,10 @@ class AppCoordinator: ObservableObject {
     @Published private(set) var launchAtLoginRequiresApproval: Bool = false
     @Published private(set) var unreadReleaseVersion: String?
 
-    /// 현재 포커스된 앱의 번들 ID
-    @Published var frontAppBundleID: String?
-
-    var isAnyCorrectionActive: Bool {
-        isActive || isAutoCorrectionActive
-    }
-
     func setup() {
         appMonitor.targetAppManager = targetAppManager
         refreshLaunchAtLoginStatus()
         refreshReleaseNotesState()
-        FocusedInputSafety.prepare()
-
-        // 메뉴가 중첩 ObservableObject의 변경도 즉시 다시 그리도록 전달합니다.
-        appMonitor.objectWillChange
-            .sink { [weak self] _ in self?.objectWillChange.send() }
-            .store(in: &cancellables)
-        targetAppManager.objectWillChange
-            .sink { [weak self] _ in self?.objectWillChange.send() }
-            .store(in: &cancellables)
 
         let started = eventTapManager.start()
         hasAccessibility = started
@@ -246,11 +230,23 @@ class AppCoordinator: ObservableObject {
                 self?.correctionNoticeController.hide()
             }
         }
+        // 교정 뒤 입력 소스를 한글로 전환합니다.
+        //
+        // 한때 이 전환이 첫 단어만 바뀌고 뒤가 다 죽는 원인이었습니다. 시스템
+        // (TIS)은 한글로 바뀌는데 앱은 계속 라틴을 찍는 경우가 있고, 그때
+        // Mackor가 TIS를 믿고 이후 토큰을 반대 방향으로 판정했기 때문입니다.
+        //
+        // 이제는 방향을 믿음이 아니라 **화면에 찍힌 글자**로 확정하므로
+        // (`EventTapManager.directionCorrectedDecision`) 이 전환이 판정을
+        // 어긋내지 못합니다. 그래서 편의 기능을 되살립니다.
         eventTapManager.onInputSourceSwitch = { [weak self] direction in
             self?.appMonitor.switchInputSource(for: direction)
         }
         eventTapManager.onInputSourceRestore = { [weak self] receipt in
             self?.appMonitor.restoreInputSource(receipt) ?? false
+        }
+        eventTapManager.onInputSourceKindRefresh = { [weak self] in
+            self?.appMonitor.refreshInputSourceKind() ?? .unsupported
         }
 
         // 포커스 앱 추적
@@ -259,17 +255,10 @@ class AppCoordinator: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                self.eventTapManager.resetComposition()
-                self.correctionNoticeController.hide()
-                self.frontAppBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
-                // 탭이 무효화된 채로 남으면 메뉴바는 켜져 있는데 어떤 앱에서도
-                // 키를 관찰하지 못합니다. 앱 전환은 입력 직전에 반드시 발생하므로
-                // 여기서 상태를 확인해 필요하면 재생성합니다.
-                if self.hasAccessibility, !self.eventTapManager.isEventTapHealthy {
-                    self.hasAccessibility = self.eventTapManager.start()
-                }
+            // NotificationCenter가 main queue에서 동기로 호출합니다. 다시 Task로
+            // 미루면 새 앱의 첫 keyDown이 이전 앱의 조합 상태를 먼저 볼 수 있습니다.
+            MainActor.assumeIsolated {
+                self?.handleApplicationActivation()
             }
         }
         for notificationName in [
@@ -281,25 +270,69 @@ class AppCoordinator: ObservableObject {
                 object: nil,
                 queue: .main
             ) { [weak self] _ in
-                Task { @MainActor [weak self] in
+                MainActor.assumeIsolated {
                     self?.eventTapManager.resetComposition()
                     self?.correctionNoticeController.hide()
                 }
             }
         }
-        frontAppBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        startTapWatchdog()
+    }
 
-        if !hasAccessibility {
-            permissionPollingTask?.cancel()
-            permissionPollingTask = Task { @MainActor [weak self] in
-                while !Task.isCancelled {
-                    try? await Task.sleep(nanoseconds: 5_000_000_000)
-                    guard !Task.isCancelled, let self else { return }
-                    guard !self.eventTapManager.isEventTapHealthy else { return }
-                    if self.eventTapManager.start() {
-                        self.hasAccessibility = true
-                        return
-                    }
+    /// 앱 전환 알림과 같은 main-queue 턴에서 입력 상태를 먼저 폐기합니다.
+    /// 첫 keyDown보다 늦어지면 이전 앱의 조합 문자를 새 입력란에서 지울 수 있습니다.
+    private func handleApplicationActivation() {
+        eventTapManager.resetComposition()
+        correctionNoticeController.hide()
+        // 전환 직후 첫 AX 읽기는 낡은 캐럿 위치를 돌려줄 수 있습니다. 실제 입력이
+        // 오기 전에 버리는 읽기로 캐시를 갱신합니다.
+        FocusedInputSafety.warmFocusCache()
+
+        // 무효화된 탭은 앱 전환 시 즉시 재생성해 다음 입력을 놓치지 않습니다.
+        guard !eventTapManager.isEventTapHealthy else { return }
+        if EventTapManager.checkAccessibilityPermission(prompt: false) {
+            hasAccessibility = eventTapManager.start()
+        } else {
+            hasAccessibility = false
+        }
+    }
+
+    /// 탭 상태를 주기적으로 감시합니다.
+    ///
+    /// 실행 중 손쉬운 사용 권한을 회수하면 탭 포트가 죽지만 시스템은
+    /// `tapDisabledByTimeout`/`tapDisabledByUserInput` 콜백을 보내주지 않을 수 있습니다.
+    /// 그러면 무효화된 헤드 삽입 세션 탭이 입력 경로에 남아 **맥 전체 입력이 멈춥니다.**
+    ///
+    /// 이전 구현은 (1) 시작 시 권한이 없을 때만 폴링을 걸고 (2) 한 번 건강해지면
+    /// 영구 종료했으며 (3) 그 밖의 복구는 `didActivateApplication`(앱 전환)에만
+    /// 묶여 있었습니다. 권한을 가진 채 시작한 뒤 회수당하면 폴링이 아예 돌지 않고,
+    /// 복구하려면 앱을 전환해야 하는데 입력이 이미 얼어 전환할 수 없는 교착이었습니다.
+    ///
+    /// 그래서 권한 유무와 무관하게 **항상·계속** 감시하고, 죽은 포트를 발견하면
+    /// 재생성보다 **정리(`stop()`)를 먼저** 해 입력 경로부터 풀어줍니다.
+    ///
+    /// 주의: 이 감시는 메인 액터에서 돌므로 메인 스레드가 막힌 경우(교정 중
+    /// `usleep`·AX IPC)에는 스스로 뜨지 못합니다. 그 경로는 탭을 전용 스레드로
+    /// 옮기는 후속 단계에서 다룹니다.
+    private func startTapWatchdog() {
+        permissionPollingTask?.cancel()
+        permissionPollingTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                guard !Task.isCancelled, let self else { return }
+                guard !self.eventTapManager.isEventTapHealthy else { continue }
+
+                // 죽은 능동 탭을 먼저 떼어내 입력 경로를 푼다. 권한이 회수된
+                // 상태라면 재생성은 실패하지만, 정리만으로도 멈춤은 풀린다.
+                // 탭을 만든 적이 없으면(권한 없이 실행 중) 떼어낼 것도 없다.
+                if self.eventTapManager.eventTap != nil {
+                    self.eventTapManager.stop()
+                }
+
+                if EventTapManager.checkAccessibilityPermission(prompt: false) {
+                    self.hasAccessibility = self.eventTapManager.start()
+                } else {
+                    self.hasAccessibility = false
                 }
             }
         }
@@ -311,7 +344,14 @@ class AppCoordinator: ObservableObject {
             hasAccessibility = started
             if started { return }
         }
-        guard EventTapManager.checkAccessibilityPermission() else {
+        // `prompt: false`로 **확인만** 합니다.
+        //
+        // 여기서 prompt를 켜면 macOS가 자체 권한 창을 띄우는데, 이 함수는 이미
+        // 우리 안내 창("설정을 마무리해 주세요")에서 사용자가 버튼을 누른 뒤에
+        // 불립니다. 그래서 창이 연달아 두 번 떴습니다 — 사용자가 반복해서
+        // 불편을 호소한 지점입니다. 우리 창이 이유와 개인정보 처리까지 설명하고
+        // 곧바로 시스템 설정을 열어 주므로 macOS 기본 창은 중복입니다.
+        guard EventTapManager.checkAccessibilityPermission(prompt: false) else {
             hasAccessibility = false
             return
         }
@@ -459,14 +499,14 @@ struct MenuContent: View {
             Text("– 권한 없어 보정 중지")
         } else if !appMonitor.isEnabled {
             Text("– Mackor 전체 꺼짐")
+        } else if coordinator.isActive && coordinator.isAutoCorrectionActive {
+            Text("✓ 한글 조합 · 한/영 자동 보정")
         } else if isAllAppsAutoCorrection {
             if coordinator.isAutoCorrectionActive {
                 Text("✓ 전체 Mac 한/영 자동 보정 작동 중")
             } else {
                 Text("✓ 전체 Mac 한/영 자동 보정 활성")
             }
-        } else if coordinator.isActive && coordinator.isAutoCorrectionActive {
-            Text("✓ 한글 조합 · 한/영 자동 보정")
         } else if coordinator.isAutoCorrectionActive {
             Text("✓ 한/영 자동 보정 대기 중")
         } else if coordinator.isActive {
@@ -500,7 +540,10 @@ struct MenuContent: View {
             Text("모든 앱과 브라우저의 모든 웹사이트에 적용")
                 .font(.caption2)
                 .foregroundColor(.secondary)
-            Text("비밀번호·주소·검색·보안 입력 필드는 제외")
+            Text("검색 입력란은 지원하며 비밀번호·주소·보안 필드는 제외")
+                .font(.caption2)
+                .foregroundColor(.secondary)
+            Text("앱별 한글 조합 보정 대상은 아래에서 별도로 관리")
                 .font(.caption2)
                 .foregroundColor(.secondary)
         } else {
@@ -511,77 +554,72 @@ struct MenuContent: View {
 
         Divider()
 
-        if isAllAppsAutoCorrection {
-            Text("전체 Mac 모드에서는 앱을 추가할 필요가 없습니다.")
-                .font(.caption2)
-                .foregroundColor(.secondary)
+        Text(isAllAppsAutoCorrection ? "한글 조합 대상 앱:" : "대상 앱:")
+            .font(.caption)
+        if targetAppManager.targetApps.isEmpty {
+            Text("  (없음)").foregroundColor(.secondary)
         } else {
-            // 대상 앱 목록은 ‘선택한 앱만’ 범위에서만 관리합니다. 저장된
-            // 목록은 그대로 유지되므로 범위를 되돌리면 다시 나타납니다.
-            Text("대상 앱:").font(.caption)
-            if targetAppManager.targetApps.isEmpty {
-                Text("  (없음)").foregroundColor(.secondary)
-            } else {
-                ForEach(targetAppManager.targetApps) { app in
-                    let isFocused = coordinator.frontAppBundleID == app.bundleID
+            ForEach(targetAppManager.targetApps) { app in
+                let isFocused = appMonitor.frontAppBundleID == app.bundleID
 
-                    Menu {
-                        Toggle("한글 조합 보정", isOn: Binding(
-                            get: { app.hangulCompositionEnabled },
-                            set: {
-                                targetAppManager.setHangulCompositionEnabled(
-                                    $0,
-                                    bundleID: app.bundleID
-                                )
-                            }
-                        ))
+                Menu {
+                    Toggle("한글 조합 보정", isOn: Binding(
+                        get: { app.hangulCompositionEnabled },
+                        set: {
+                            targetAppManager.setHangulCompositionEnabled(
+                                $0,
+                                bundleID: app.bundleID
+                            )
+                        }
+                    ))
 
+                    if !isAllAppsAutoCorrection {
                         Toggle("한/영 오입력 자동 보정 (실험적)", isOn: Binding(
                             get: { app.autoCorrectionEnabled },
                             set: { setAutoCorrection($0, for: app) }
                         ))
-
-                        Divider()
-
-                        Button("목록에서 제거", role: .destructive) {
-                            targetAppManager.removeApp(bundleID: app.bundleID)
-                        }
-                    } label: {
-                        HStack {
-                            if isFocused {
-                                Text("● \(app.name)")
-                                    .foregroundColor(.blue)
-                            } else {
-                                Text("  \(app.name)")
-                            }
-                            Spacer()
-                            Text(
-                                app.autoCorrectionEnabled
-                                    ? "조합 · 자동"
-                                    : (app.hangulCompositionEnabled ? "조합" : "꺼짐")
-                            )
-                                .foregroundColor(.secondary)
-                                .font(.caption2)
-                        }
                     }
-                    .accessibilityLabel("\(app.name) 보정 설정")
-                    .accessibilityHint("한글 조합 및 한영 오입력 자동 보정 설정을 엽니다")
-                }
-            }
 
-            Button("＋ 앱 추가...") {
-                targetAppManager.showAppPicker()
-            }
+                    Divider()
 
-            // 현재 활성 앱 바로 추가
-            if let frontApp = NSWorkspace.shared.frontmostApplication,
-               let bid = frontApp.bundleIdentifier,
-               let name = frontApp.localizedName,
-               !targetAppManager.isTargetApp(bundleID: bid, appName: name),
-               bid != Bundle.main.bundleIdentifier {
-                Button("＋ 현재 앱 추가 (\(name))") {
-                    targetAppManager.addApp(bundleID: bid, name: name)
+                    Button("목록에서 제거", role: .destructive) {
+                        targetAppManager.removeApp(bundleID: app.bundleID)
+                    }
+                } label: {
+                    HStack {
+                        if isFocused {
+                            Text("● \(app.name)")
+                                .foregroundColor(.blue)
+                        } else {
+                            Text("  \(app.name)")
+                        }
+                        Spacer()
+                        Text(appStatusText(app))
+                            .foregroundColor(.secondary)
+                            .font(.caption2)
+                    }
                 }
+                .accessibilityLabel("\(app.name) 보정 설정")
+                .accessibilityHint(
+                    isAllAppsAutoCorrection
+                        ? "한글 조합 보정 설정을 엽니다"
+                        : "한글 조합 및 한영 오입력 자동 보정 설정을 엽니다"
+                )
+            }
+        }
+
+        Button("＋ 앱 추가...") {
+            targetAppManager.showAppPicker()
+        }
+
+        // 현재 활성 앱 바로 추가
+        if let frontApp = NSWorkspace.shared.frontmostApplication,
+           let bid = frontApp.bundleIdentifier,
+           let name = frontApp.localizedName,
+           !targetAppManager.isTargetApp(bundleID: bid, appName: name),
+           bid != Bundle.main.bundleIdentifier {
+            Button("＋ 현재 앱 추가 (\(name))") {
+                targetAppManager.addApp(bundleID: bid, name: name)
             }
         }
 
@@ -590,7 +628,7 @@ struct MenuContent: View {
         Text("공백·,·?·!에서 평가하고 마침표는 URL 보호를 위해 유예합니다.")
             .font(.caption2)
             .foregroundColor(.secondary)
-        Text("지원 입력란에서는 원래 입력만 최대 4초 표시합니다.")
+        Text("지원 입력란에서는 원래 입력만 4~6초 표시합니다.")
             .font(.caption2)
             .foregroundColor(.secondary)
         Text("입력 내용은 저장하거나 전송하지 않습니다.")
@@ -659,6 +697,19 @@ struct MenuContent: View {
         .keyboardShortcut("q", modifiers: .command)
     }
 
+    private func appStatusText(_ app: TargetAppManager.TargetApp) -> String {
+        if isAllAppsAutoCorrection {
+            return app.hangulCompositionEnabled ? "조합 켬" : "조합 꺼짐"
+        }
+        if app.hangulCompositionEnabled && app.autoCorrectionEnabled {
+            return "조합 · 자동"
+        }
+        if app.autoCorrectionEnabled {
+            return "자동"
+        }
+        return app.hangulCompositionEnabled ? "조합" : "꺼짐"
+    }
+
     private func showUninstallConfirm() {
         let alert = NSAlert()
         alert.messageText = "Mackor을 삭제하시겠습니까?"
@@ -715,7 +766,7 @@ struct MenuContent: View {
         if enabled {
             let alert = NSAlert()
             alert.messageText = "\(app.name) 전체에서 자동 교정을 켤까요?"
-            alert.informativeText = "웹사이트·탭·문서별 설정이 아니라 이 앱 전체에 적용됩니다. 브라우저라면 모든 웹사이트가 같은 설정을 사용합니다. Secure Input, 비밀번호·검색·주소 필드와 역할 또는 커서 위치를 확인할 수 없는 필드에서는 작동하지 않습니다."
+            alert.informativeText = "웹사이트·탭·문서별 설정이 아니라 이 앱 전체에 적용됩니다. 브라우저라면 모든 웹사이트가 같은 설정을 사용합니다. 검색 입력란은 지원하며 Secure Input, 비밀번호·주소 필드와 역할 또는 커서 위치를 확인할 수 없는 필드에서는 작동하지 않습니다."
             alert.alertStyle = .informational
             alert.addButton(withTitle: "켜기")
             alert.addButton(withTitle: "취소")
@@ -734,7 +785,7 @@ struct MenuContent: View {
         if scope == .allApps {
             let alert = NSAlert()
             alert.messageText = "전체 Mac에서 자동 교정을 켤까요?"
-            alert.informativeText = "모든 앱과 브라우저의 모든 웹사이트에 적용됩니다. Secure Input과 비밀번호·주소·검색 필드 및 역할이나 커서 위치를 안전하게 확인할 수 없는 입력란에서는 작동하지 않습니다."
+            alert.informativeText = "모든 앱과 브라우저의 모든 웹사이트에 적용됩니다. 검색 입력란은 지원하며 Secure Input과 비밀번호·주소 필드 및 역할이나 커서 위치를 안전하게 확인할 수 없는 입력란에서는 작동하지 않습니다."
             alert.alertStyle = .informational
             alert.addButton(withTitle: "전체 Mac에 적용")
             alert.addButton(withTitle: "취소")

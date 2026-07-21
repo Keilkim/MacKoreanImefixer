@@ -28,8 +28,9 @@ final class CorrectionNoticeController: NSObject {
             && !panel.ignoresMouseEvents
     }
 
-    /// Called only when the UI lifetime ends naturally. Hiding the chip does not
-    /// invalidate the separate six-second Command-Z transaction.
+    /// Called only when the UI lifetime ends naturally. Short corrections keep
+    /// their separate six-second Command-Z transaction; longer corrections have
+    /// no event-tap shortcut and can discard their transaction here.
     var onExpiration: ((UInt64) -> Void)?
 
     /// How strongly to advertise the recovery affordance.

@@ -1,0 +1,5 @@
+ad9eae9a8ca99bec78611a2c009d22793204221a0b4e671ecc2dc7906b063c29  scripts/lexicon/ko-lexicon.v1.txt
+66305b795899909bddfa33158dc9180944b3c15ff4c94b3f3b0a8ac0d309f0e1  scripts/lexicon/en-lexicon.v1.txt
+871514a0971da878c8269169c151686ea1ed2947f85297afbb4f7579effe27cd  scripts/lexicon/make_lexicon.py
+396bc1becfc24ba1b687ddb997288089ff8ffa591db71ef3c9ed5c597eb21011  scripts/lexicon/tiebreak.py
+2c2f8c754150ace2196ffeeba3f5d7ff713603741d11eb24a8d8b8784a906d20  Corpus/lexical/v1/tiebreaker.tsv

@@ -8,24 +8,78 @@ protocol EventTapKeyboardOutputting {
 }
 
 protocol EventTapFocusInspecting {
-    func automaticCorrectionFocusToken() -> FocusedInputSafety.FocusToken?
-    func isCurrentFocus(
+    /// 조회 실패와 확정 거부를 구분해 돌려줍니다.
+    func probeAutomaticCorrectionFocus() -> FocusedInputSafety.FocusProbe
+    /// 캡처한 토큰 시작점, 현재 캐럿, 원문 문자열이 모두 일치할 때만
+    /// 해당 시작점에 앵커링된 토큰을 돌려줍니다.
+    func anchoredOriginalFocusToken(
         _ token: FocusedInputSafety.FocusToken,
-        utf16Offset: Int
-    ) -> Bool
+        original: String,
+        boundaryUTF16Count: Int,
+        shouldContinue: () -> Bool
+    ) -> FocusedInputSafety.FocusToken?
+    /// 캡처 앵커를 쓰지 않고, 현재 포커스된 같은 입력란의 캐럿
+    /// 바로 앞 글자가 원문과 같은지 확인한 뒤 원문 시작점으로
+    /// 다시 앵커링한 포커스 토큰을 돌려줍니다.
+    func reanchoredFocusToken(
+        _ token: FocusedInputSafety.FocusToken,
+        original: String,
+        boundaryUTF16Count: Int,
+        shouldContinue: () -> Bool
+    ) -> FocusedInputSafety.FocusToken?
+    /// 화면에 실제로 찍힌 글자로 판단한 방향. 못 읽으면 nil.
+    func scriptBeforeCaret(
+        _ token: FocusedInputSafety.FocusToken,
+        boundaryUTF16Count: Int,
+        shouldContinue: () -> Bool
+    ) -> CorrectionDirection?
 }
 
 private struct AccessibilityEventTapFocusInspector: EventTapFocusInspecting {
-    func automaticCorrectionFocusToken() -> FocusedInputSafety.FocusToken? {
-        FocusedInputSafety.automaticCorrectionFocusToken()
+    func probeAutomaticCorrectionFocus() -> FocusedInputSafety.FocusProbe {
+        FocusedInputSafety.probeAutomaticCorrectionFocus()
     }
 
-    func isCurrentFocus(
+    func anchoredOriginalFocusToken(
         _ token: FocusedInputSafety.FocusToken,
-        utf16Offset: Int
-    ) -> Bool {
-        FocusedInputSafety.isCurrentFocus(token, utf16Offset: utf16Offset)
+        original: String,
+        boundaryUTF16Count: Int,
+        shouldContinue: () -> Bool
+    ) -> FocusedInputSafety.FocusToken? {
+        FocusedInputSafety.anchoredOriginalFocusToken(
+            token,
+            original: original,
+            boundaryUTF16Count: boundaryUTF16Count,
+            shouldContinue: shouldContinue
+        )
     }
+
+    func reanchoredFocusToken(
+        _ token: FocusedInputSafety.FocusToken,
+        original: String,
+        boundaryUTF16Count: Int,
+        shouldContinue: () -> Bool
+    ) -> FocusedInputSafety.FocusToken? {
+        FocusedInputSafety.reanchoredFocusToken(
+            token,
+            original: original,
+            boundaryUTF16Count: boundaryUTF16Count,
+            shouldContinue: shouldContinue
+        )
+    }
+
+    func scriptBeforeCaret(
+        _ token: FocusedInputSafety.FocusToken,
+        boundaryUTF16Count: Int,
+        shouldContinue: () -> Bool
+    ) -> CorrectionDirection? {
+        FocusedInputSafety.scriptBeforeCaret(
+            token,
+            boundaryUTF16Count: boundaryUTF16Count,
+            shouldContinue: shouldContinue
+        )
+    }
+
 }
 
 /// Presentation data for the best-effort original-only recovery chip. The
@@ -113,6 +167,24 @@ class EventTapManager {
     private var runLoopSource: CFRunLoopSource?
     private let tracker = HangulCompositionTracker()
     private let autoCorrectionEngine: WrongLayoutCorrectionEngine
+
+    /// Layer 1 어휘 판정기. 자산이 없으면 `nil`이고, 그때는 이 계층 없이
+    /// 오늘과 동일하게 동작합니다.
+    private let lexicalTiebreaker: LexicalTiebreaker?
+
+    /// 현재 토큰의 키열 사본.
+    ///
+    /// 엔진은 보존 판정 시 `nil`만 돌려주고 키열을 즉시 폐기하므로(설계상
+    /// 의도), 어휘 계층이 볼 후보가 남지 않습니다. 엔진은 동결 대상이라
+    /// 노출 표면을 추가할 수 없어 여기서 사본을 둡니다.
+    ///
+    /// 사본은 발산할 수 있습니다 — 엔진에는 입력 소스 변경·유휴 시간 초과처럼
+    /// 밖에서 관측할 수 없는 내부 리셋이 있습니다. 그래서 사본을 **신뢰하지 않고**
+    /// 사용 직전에 엔진의 진단과 대조해 검증합니다(`lexicalCandidate`).
+    /// 어긋나면 아무것도 하지 않으므로, 발산은 기회를 놓칠 뿐 오교정을 만들지
+    /// 못합니다.
+    private var lexicalKeystrokeMirror: [PhysicalKeystroke] = []
+
     private var _isActive: Bool = false
     private var _isAutoCorrectionEnabled: Bool = false
     private var automaticCorrectionFieldAllowed: Bool?
@@ -124,10 +196,12 @@ class EventTapManager {
     private var undoExpirationWorkItem: DispatchWorkItem?
     private var suppressedPhysicalKeyUps: Set<UInt16> = []
     private var suppressedPhysicalRepeatKeyDowns: Set<UInt16> = []
+    private var automaticCorrectionProbeAttempts = 0
     private var preserveUndoAcrossNextInputSourceChange = false
     private let keyboardOutput: EventTapKeyboardOutputting
     private let focusInspector: EventTapFocusInspecting
     private let now: () -> Date
+    private let monotonicNow: () -> TimeInterval
     private let pause: (useconds_t) -> Void
     private let scheduleBoundaryCorrection: (@escaping () -> Void) -> Void
     private var boundaryCorrectionGeneration: UInt64 = 0
@@ -138,6 +212,7 @@ class EventTapManager {
     var onCorrectionUndone: (() -> Void)?
     var onInputSourceSwitch: ((CorrectionDirection) -> InputSourceSwitchReceipt?)?
     var onInputSourceRestore: ((InputSourceSwitchReceipt) -> Bool)?
+    var onInputSourceKindRefresh: (() -> InputSourceKind)?
 
     /// 우리가 주입한 이벤트를 식별하기 위한 마커값
     private static let injectionMarker: Int64 = 0x48474C46  // "HGLF"
@@ -150,6 +225,17 @@ class EventTapManager {
     private static let commandZKeycode: UInt16 = 0x06
     private static let undoLifetime: TimeInterval = 6
     private static let maximumBoundaryFocusCheckAttempts = 3
+    /// 경계 keyDown 안에서 교정과 경계 재입력을 끝낼 때는 이벤트 탭을
+    /// 오래 붙잡지 않도록 짧은 토큰으로 제한합니다. 삭제당 3ms 대기를
+    /// 포함해 고정 대기는 최대 27ms입니다.
+    private static let maximumSynchronousCorrectionCharacters = 8
+    /// 이벤트 탭 안에서 연속 AX 요청에 쓰는 soft 예산입니다. 이미 시작한 AX
+    /// 요청은 끝까지 기다리지만, 만료 뒤 새 요청이나 삭제는 시작하지 않습니다.
+    /// 일반 경계는 지연 경로로 돌아가고 제출 경계는 제출 키만 전달합니다.
+    private static let synchronousAXTimeBudget: TimeInterval = 0.1
+    /// 한 키 안에서 포커스 조회를 다시 시도할 최대 횟수. 실패한 조회가
+    /// AX 연결을 데우므로 보통 2회째에 성공합니다.
+    private static let maximumFocusProbeAttempts = 3
 
     /// 앱에 실제로 입력된 경계 하나입니다. 현재 지원 경계는 모두 ASCII 한
     /// 문자지만, AX caret 계산(UTF-16)과 Backspace 횟수(Character)는 서로
@@ -183,6 +269,13 @@ class EventTapManager {
         }
     }
 
+    private enum ImmediateBoundaryDisposition {
+        case passThrough
+        /// 교정과 합성 경계를 이미 전달했으므로 물리 keyDown/keyUp을
+        /// 모두 억제해야 합니다.
+        case suppressPhysicalEvent
+    }
+
     private enum TokenCaptureState {
         case idle
         case collecting(letterStrokeCount: Int)
@@ -199,9 +292,9 @@ class EventTapManager {
         let inputSourceSwitchReceipt: InputSourceSwitchReceipt?
     }
 
-    /// 원래 문자와 한글 IME의 marked text는 공백/문장부호 keyDown을 대상
-    /// 앱이 처리한 뒤에야 모두 확정됩니다. 그 전에는 AX 커서가 아직 단어
-    /// 끝을 가리키지 않을 수 있으므로 양방향 교정을 대응 keyUp까지 보류합니다.
+    /// 한글 IME의 marked text는 공백/문장부호 keyDown을 대상 앱이 처리한
+    /// 뒤에야 확정됩니다. exact text를 경계 전에 확인할 수 없는 Latin
+    /// 교정도 같은 경로를 쓰므로, 이 경우는 대응 keyUp까지 보류합니다.
     private struct PendingBoundaryCorrection {
         let decision: CorrectionDecision
         let boundarySequence: BoundarySequence
@@ -225,12 +318,13 @@ class EventTapManager {
         let precedingBoundaryStrokes: [BoundaryStroke]
         let submitStroke: BoundaryStroke
         let focusToken: FocusedInputSafety.FocusToken
+        let validationDeadline: TimeInterval
     }
 
     private enum OriginalChoiceState {
         case none
         case chipVisible(generation: UInt64)
-        case shortcutOnly(generation: UInt64)
+        case shortcutOnly
     }
 
     /// 조합을 확정시키는 키들 (방향키, 엔터 등)
@@ -282,9 +376,13 @@ class EventTapManager {
         // 실패해도 입력을 막지 않습니다.
         KSX1001Table.prepare()
         autoCorrectionEngine = WrongLayoutCorrectionEngine()
+        // 사전은 앱 번들에서 읽습니다. 없으면 nil이고, 그때는 어휘 계층 없이
+        // 규칙만으로 오늘과 동일하게 동작합니다.
+        lexicalTiebreaker = LexicalTiebreaker(bundle: .main)
         keyboardOutput = QuartzKeyboardOutput()
         focusInspector = AccessibilityEventTapFocusInspector()
         now = Date.init
+        monotonicNow = { ProcessInfo.processInfo.systemUptime }
         pause = { microseconds in
             _ = usleep(microseconds)
         }
@@ -300,13 +398,19 @@ class EventTapManager {
         keyboardOutput: EventTapKeyboardOutputting,
         focusInspector: EventTapFocusInspecting,
         now: @escaping () -> Date,
+        monotonicNow: @escaping () -> TimeInterval = {
+            ProcessInfo.processInfo.systemUptime
+        },
         pause: @escaping (useconds_t) -> Void,
-        scheduleBoundaryCorrection: @escaping (@escaping () -> Void) -> Void = { $0() }
+        scheduleBoundaryCorrection: @escaping (@escaping () -> Void) -> Void = { $0() },
+        lexicalTiebreaker: LexicalTiebreaker? = LexicalTiebreaker(bundle: .main)
     ) {
         autoCorrectionEngine = WrongLayoutCorrectionEngine()
+        self.lexicalTiebreaker = lexicalTiebreaker
         self.keyboardOutput = keyboardOutput
         self.focusInspector = focusInspector
         self.now = now
+        self.monotonicNow = monotonicNow
         self.pause = pause
         self.scheduleBoundaryCorrection = scheduleBoundaryCorrection
     }
@@ -321,7 +425,7 @@ class EventTapManager {
     /// nil 검사만으로는 이 상태를 정상으로 오인하므로 포트 유효성까지 확인합니다.
     var isEventTapHealthy: Bool {
         guard let tap = eventTap else { return false }
-        return CFMachPortIsValid(tap)
+        return CFMachPortIsValid(tap) && CGEvent.tapIsEnabled(tap: tap)
     }
 
     func start() -> Bool {
@@ -361,22 +465,60 @@ class EventTapManager {
             CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         }
         CGEvent.tapEnable(tap: tap, enable: true)
+        // 앱이 막 뜬 직후의 첫 AX 읽기는 낡은 캐럿 위치를 돌려줄 수 있습니다.
+        // 실제 입력이 오기 전에 미리 한 번 버리는 읽기로 캐시를 갱신합니다.
+        FocusedInputSafety.warmFocusCache()
         print("[Mackor] Event tap 시작됨.")
         return true
     }
 
     func stop() {
-        if let tap = eventTap {
+        // 정리 순서가 중요합니다. 무효화된(권한 회수된) 포트가 런루프에 소스로
+        // 남아 있으면 헤드 삽입 세션 탭이 시스템 입력 경로를 계속 막을 수 있습니다.
+        // tapEnable(false) → 소스 무효화·제거 → 포트 무효화 → nil 순으로 완전히
+        // 떼어냅니다. 죽은 포트에도 CFMachPortInvalidate는 안전하게 동작합니다.
+        if let tap = eventTap, CFMachPortIsValid(tap) {
             CGEvent.tapEnable(tap: tap, enable: false)
         }
         if let source = runLoopSource {
+            CFRunLoopSourceInvalidate(source)
             CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
+        }
+        if let tap = eventTap {
+            CFMachPortInvalidate(tap)
         }
         eventTap = nil
         runLoopSource = nil
         resetTransientState()
-        clearSuppressedKeyUps()
         print("[Mackor] Event tap 중지됨.")
+    }
+
+    /// 시스템이 탭을 비활성화했을 때(`tapDisabledByTimeout`/`tapDisabledByUserInput`)
+    /// 콜백에서 호출합니다.
+    ///
+    /// 포트가 아직 살아 있으면 일시적 비활성화이므로 재활성화합니다. 포트가
+    /// 무효화됐다면(손쉬운 사용 권한 회수 등) 재활성화는 죽은 포트로의 헛된 CGS
+    /// 왕복일 뿐이고, 무효화된 탭을 런루프에 남겨 시스템 입력을 막을 수 있으므로
+    /// 즉시 정리합니다. 정리 뒤에는 `MackorApp.startTapWatchdog()`의 주기 감시가
+    /// 권한을 확인해 새 탭을 만들어 복구합니다.
+    ///
+    /// 단, 시스템이 이 콜백을 **보내주지 않는** 경우(권한 회수로 포트가 그냥 죽는
+    /// 경우)가 있으므로 이 경로만으로는 감지가 보장되지 않습니다. 그래서 주기
+    /// 감시가 별도로 필요합니다.
+    func handleSystemTapDisabled() {
+        resetComposition()
+        guard let tap = eventTap else { return }
+        if CFMachPortIsValid(tap) {
+            CGEvent.tapEnable(tap: tap, enable: true)
+        } else {
+            // 이 콜백은 탭 자신의 런루프 소스가 서비스하는 중이므로, 여기서 곧바로
+            // 그 소스를 무효화·제거하면 재진입이 된다. 정리는 다음 런루프 턴으로
+            // 미뤄 현재 콜백이 완전히 반환된 뒤 안전하게 수행한다.
+            print("[Mackor] 탭 포트가 무효화되어 정리합니다(권한 회수 등).")
+            DispatchQueue.main.async { [weak self] in
+                self?.stop()
+            }
+        }
     }
 
     // MARK: - 이벤트 처리
@@ -418,13 +560,20 @@ class EventTapManager {
     }
 
     func handleKeyDown(_ event: CGEvent) -> CGEvent? {
-        // 두 기능이 모두 비활성 상태면 통과
-        guard isActive || isAutoCorrectionEnabled else { return event }
-
         // 우리가 주입한 이벤트면 통과
         if EventTapManager.isInjected(event) {
             return event
         }
+
+        // TIS 알림보다 다음 keyDown이 먼저 올 수 있으므로 캐시만 믿지 않습니다.
+        // 소스 전환 직후 첫 글자를 이전 자판으로 조합하는 race를 막습니다.
+        if let currentKind = onInputSourceKindRefresh?(),
+           currentKind != inputSourceKind {
+            inputSourceKind = currentKind
+        }
+
+        // 두 기능이 모두 비활성 상태면 통과
+        guard isActive || isAutoCorrectionEnabled else { return event }
 
         let keycode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
         let flags = event.flags
@@ -474,12 +623,17 @@ class EventTapManager {
             for: keycode,
             shift: shiftPressed
         ) {
-            processImmediateBoundary(
+            let disposition = processImmediateBoundary(
                 boundary,
                 stroke: boundaryStroke
             )
             commitCompositionIfNeeded()
-            return event
+            switch disposition {
+            case .passThrough:
+                return event
+            case .suppressPhysicalEvent:
+                return nil
+            }
         }
 
         // Return/Enter/Tab. 교정할 것이 있을 때만 키를 붙잡습니다. 그 외에는
@@ -506,6 +660,28 @@ class EventTapManager {
 
         // 백스페이스
         if keycode == EventTapManager.backspaceKeycode {
+            // 직접 조합과 자동 교정이 함께 켜진 앱에서는 백스페이스가 두 모델을
+            // 어긋나게 만든다. 엔진은 스트로크 하나를 지운 뒤 남은 키열을 새
+            // 트래커로 재생해 decision.original을 만들지만(HangulStructure.evaluate),
+            // 화면의 트래커는 이미 커밋한 음절을 다시 열지 못한다.
+            // 예: g, e, Backspace, o, o, d
+            //   화면  ㅎㄷ → BS → ㅎ → ㅎㅐㅐㅇ  (4자)
+            //   엔진  g,o,o,d 재생 → 해ㅐㅇ        (3자)
+            // 이 상태로 교정을 발사하면 백스페이스 수가 하나 모자라 유출 문자가
+            // 교정 단어에 붙는다. 그래서 이 토큰의 교정은 포기한다.
+            // 교정 기회만 잃고 텍스트는 손상되지 않는다.
+            // (근본 해결은 트래커/엔진의 스냅샷 공유 — 별도 단계)
+            if isAutoCorrectionEnabled, shouldDirectlyComposeCurrentInput {
+                invalidateAutomaticCorrectionTokenUntilBoundary()
+                guard shouldDirectlyComposeCurrentInput else { return event }
+                let result = tracker.processBackspace()
+                if result.passthrough {
+                    return event
+                }
+                executeResult(result)
+                return nil
+            }
+
             if isAutoCorrectionEnabled, processTrailingPeriodBackspace() {
                 // 화면의 마지막 period는 원래 Backspace가 지우도록 그대로
                 // 통과시킵니다. 엔진의 마지막 letter stroke는 건드리지 않습니다.
@@ -516,6 +692,9 @@ class EventTapManager {
                 switch tokenCaptureState {
                 case .collecting(let letterStrokeCount):
                     autoCorrectionEngine.processBackspace()
+                    if !lexicalKeystrokeMirror.isEmpty {
+                        lexicalKeystrokeMirror.removeLast()
+                    }
                     if letterStrokeCount <= 1 {
                         tokenCaptureState = .idle
                         clearAutomaticCorrectionFocus()
@@ -578,31 +757,76 @@ class EventTapManager {
             }
 
             if !isAlreadyDiscarding, automaticCorrectionFieldAllowed == nil {
-                let focusToken = focusInspector.automaticCorrectionFocusToken()
-                automaticCorrectionFocusToken = focusToken
-                automaticCorrectionFieldAllowed = focusToken != nil
+                // 조회가 *실패*한 것과 이 필드가 *교정 대상이 아닌* 것은 다릅니다.
+                //
+                // 실측: Chrome의 차가운 첫 조회는 약 57ms 걸려 이 경로의 50ms
+                // 제한을 넘습니다. 그 타임아웃을 "교정 금지"로 확정해 버리면
+                // Chrome에서는 자동 교정이 영영 걸리지 않습니다. 실제로 그랬습니다.
+                //
+                // 실패한 조회 자체가 AX 연결을 데우므로 예산 안에서는 곧바로
+                // 재시도합니다. 예산을 넘기면 키열만 보존하고 다음 글자에서 남은
+                // 횟수를 사용합니다. 이렇게 해야 첫 글자를 잃지 않으면서도 멈춘
+                // 앱의 AX IPC가 한 keyDown을 오래 붙잡지 않습니다.
+                let focusProbeDeadline = monotonicNow()
+                    + EventTapManager.synchronousAXTimeBudget
+                var probe = focusInspector.probeAutomaticCorrectionFocus()
+                automaticCorrectionProbeAttempts += 1
+                while case .unavailable = probe,
+                      automaticCorrectionProbeAttempts
+                        < EventTapManager.maximumFocusProbeAttempts,
+                      monotonicNow() < focusProbeDeadline {
+                    // 실패한 조회 자체가 AX 연결을 데우므로 다음 시도는
+                    // 데워진 경로(실측 중앙값 0.4ms)로 곧장 돌아옵니다.
+                    probe = focusInspector.probeAutomaticCorrectionFocus()
+                    automaticCorrectionProbeAttempts += 1
+                }
+                switch probe {
+                case .eligible(let token):
+                    automaticCorrectionFocusToken = token
+                    automaticCorrectionFieldAllowed = true
+                case .ineligible:
+                    automaticCorrectionFocusToken = nil
+                    automaticCorrectionFieldAllowed = false
+                case .unavailable:
+                    automaticCorrectionFocusToken = nil
+                    // 현재 키에서는 AX 예산만큼만 기다립니다. 시도 횟수가
+                    // 남았다면 키열은 메모리에만 보존하고 다음 글자에서 다시
+                    // 확인합니다. exact-text 검증 전에는 화면을 바꾸지 않습니다.
+                    if automaticCorrectionProbeAttempts
+                        >= EventTapManager.maximumFocusProbeAttempts {
+                        automaticCorrectionFieldAllowed = false
+                    }
+                }
             }
 
-            if !isAlreadyDiscarding, automaticCorrectionFieldAllowed == true {
+            if !isAlreadyDiscarding, automaticCorrectionFieldAllowed != false {
                 // false는 overflow/지원하지 않는 토큰으로 이번 후보가 폐기됐다는
                 // 뜻입니다. AX 필드 안전성은 그대로이므로 직접 조합은 경계까지
                 // 유지해 입력 방식이 단어 중간에 바뀌지 않게 합니다.
-                // Caps Lock은 영문 자판에서만 확실하게 대문자를 만듭니다. 그
-                // 경우 후보의 대소문자를 화면과 일치시켜야 Undo가 원문을 그대로
-                // 되돌릴 수 있고, 전대문자 토큰은 정책의 약어 규칙이 보존합니다.
-                // 한글 자판에서는 Caps Lock이 IME 출력에 어떻게 반영되는지
-                // 보장할 수 없으므로 기존대로 토큰을 폐기합니다.
+                // 한 bool로는 Latin 대소문자(Caps XOR Shift)와 두벌식의 물리
+                // Shift(ㅂ/ㅃ)를 동시에 표현할 수 없습니다. Caps가 섞인 토큰은
+                // 잘못된 후보를 만들지 않도록 보수적으로 건너뜁니다.
                 let capsLockIsAmbiguous = capsLockPressed
-                    && inputSourceKind != .supportedLatin
                 if capsLockIsAmbiguous {
                     invalidateAutomaticCorrectionTokenUntilBoundary()
                 } else {
-                    let effectiveShift = shiftPressed
-                        || (capsLockPressed && inputSourceKind == .supportedLatin)
+                    let keystroke = PhysicalKeystroke(
+                        keycode: keycode,
+                        shift: shiftPressed
+                    )
                     let wasRecorded = autoCorrectionEngine.record(
-                        PhysicalKeystroke(keycode: keycode, shift: effectiveShift),
+                        keystroke,
                         inputSource: inputSourceKind
                     )
+                    // 엔진이 버퍼에 넣었을 때만 사본에도 넣습니다. 넣지 않았다면
+                    // 엔진이 토큰을 리셋했거나 폐기한 것이므로 사본도 비웁니다.
+                    // 보수적으로 비우는 쪽이 안전합니다 — 사본이 비면 아래 검증에서
+                    // 길이가 어긋나 어휘 계층이 그냥 동작하지 않을 뿐입니다.
+                    if wasRecorded {
+                        lexicalKeystrokeMirror.append(keystroke)
+                    } else {
+                        lexicalKeystrokeMirror.removeAll(keepingCapacity: true)
+                    }
                     if wasRecorded {
                         switch tokenCaptureState {
                         case .idle:
@@ -671,7 +895,7 @@ class EventTapManager {
         }
     }
 
-    func clearSuppressedKeyUps() {
+    private func clearSuppressedKeyUps() {
         suppressedPhysicalKeyUps.removeAll(keepingCapacity: true)
         suppressedPhysicalRepeatKeyDowns.removeAll(keepingCapacity: true)
     }
@@ -684,7 +908,7 @@ class EventTapManager {
     ) -> (CorrectionBoundary, BoundaryStroke)? {
         let boundary: CorrectionBoundary
         switch (keycode, shift) {
-        case (0x31, false):       // Space
+        case (0x31, _):           // Space (Shift가 겹쳐도 같은 경계)
             boundary = .space
         case (0x2B, false),       // ,
              (0x2C, true),        // ? (Shift+/)
@@ -717,14 +941,21 @@ class EventTapManager {
         )
     }
 
-    /// Return/Enter/Tab 인지. Shift+Tab 은 역방향 포커스 이동이라 제외합니다.
+    /// Return/Enter/Tab인지 판별합니다. Shift+Return/Enter는 줄바꿈 경계로
+    /// 처리하되 Shift+Tab은 역방향 포커스 이동이라 제외합니다.
     private func submitBoundaryStroke(
         for keycode: UInt16,
         shift: Bool
     ) -> BoundaryStroke? {
-        guard !shift else { return nil }
         switch keycode {
-        case 0x24, 0x4C, 0x30:  // Return, 숫자패드 Enter, Tab
+        case 0x24, 0x4C:  // Return, 숫자패드 Enter
+            return BoundaryStroke(
+                keycode: keycode,
+                shift: shift,
+                producedCharacterCount: 1,
+                producedUTF16Count: 1
+            )
+        case 0x30 where !shift:  // Tab
             return BoundaryStroke(
                 keycode: keycode,
                 shift: false,
@@ -741,6 +972,8 @@ class EventTapManager {
     private func makeSubmitCorrection(
         stroke: BoundaryStroke
     ) -> PendingSubmitCorrection? {
+        let validationDeadline = monotonicNow()
+            + EventTapManager.synchronousAXTimeBudget
         let hasEligibleToken: Bool
         let precedingBoundaryStrokes: [BoundaryStroke]
         switch tokenCaptureState {
@@ -761,15 +994,34 @@ class EventTapManager {
            hasEligibleToken,
            automaticCorrectionFieldAllowed == true,
            focusToken != nil {
-            decision = autoCorrectionEngine.processBoundary(.submit)
+            // 제출 키 자체는 아직 앱에 도착하지 않았지만, 앞서 통과시킨
+            // 후행 마침표는 화면에 있으므로 그 길이만큼 건너뛰어 토큰의
+            // 마지막 글자를 방향 증거로 읽습니다.
+            let precedingBoundaryUTF16Count = precedingBoundaryStrokes.reduce(0) {
+                $0 + $1.producedUTF16Count
+            }
+            let readUptime = monotonicNow
+            decision = resolveBoundary(
+                .submit,
+                boundaryUTF16Count: precedingBoundaryUTF16Count,
+                shouldContinue: {
+                    readUptime() <= validationDeadline
+                }
+            )
         } else {
             autoCorrectionEngine.reset()
+            lexicalKeystrokeMirror.removeAll(keepingCapacity: true)
             decision = nil
         }
         tokenCaptureState = .idle
         clearAutomaticCorrectionFocus()
 
-        guard let decision, let focusToken else { return nil }
+        guard let decision,
+              let focusToken,
+              decision.originalCharacterCount
+                <= EventTapManager.maximumSynchronousCorrectionCharacters else {
+            return nil
+        }
         EventTapManager.diagnostic(
             "submit boundary direction=\(decision.direction) "
                 + "originalUTF16=\(decision.original.utf16.count) "
@@ -779,7 +1031,8 @@ class EventTapManager {
             decision: decision,
             precedingBoundaryStrokes: precedingBoundaryStrokes,
             submitStroke: stroke,
-            focusToken: focusToken
+            focusToken: focusToken,
+            validationDeadline: validationDeadline
         )
     }
 
@@ -804,20 +1057,52 @@ class EventTapManager {
         }
         let expectedOffset = pending.decision.original.utf16.count
             + precedingBoundaryUTF16Count
-        guard focusInspector.isCurrentFocus(
+        let readUptime = monotonicNow
+        let shouldContinue = { readUptime() <= pending.validationDeadline }
+        let correctionFocusToken: FocusedInputSafety.FocusToken
+        guard shouldContinue() else {
+            EventTapManager.diagnostic("submit direction check exceeded time budget")
+            return
+        }
+        let anchoredToken = focusInspector.anchoredOriginalFocusToken(
             pending.focusToken,
-            utf16Offset: expectedOffset
-        ) else {
+            original: pending.decision.original,
+            boundaryUTF16Count: precedingBoundaryUTF16Count,
+            shouldContinue: shouldContinue
+        )
+        guard shouldContinue() else {
+            EventTapManager.diagnostic("submit validation exceeded time budget")
+            return
+        }
+        if let anchoredToken {
+            correctionFocusToken = anchoredToken
+        } else if let reanchoredToken = focusInspector.reanchoredFocusToken(
+            pending.focusToken,
+            original: pending.decision.original,
+            boundaryUTF16Count: precedingBoundaryUTF16Count,
+            shouldContinue: shouldContinue
+        ) {
+            // 토큰 시작 때 읽은 캐럿 앵커가 낡았더라도, 같은 입력란의
+            // 현재 캐럿 앞 exact text가 원문과 같으면 안전하게 계속합니다.
+            correctionFocusToken = reanchoredToken
+        } else {
             EventTapManager.diagnostic(
                 "submit focus mismatch expectedOffset=\(expectedOffset)"
             )
             return
         }
+        guard shouldContinue() else {
+            EventTapManager.diagnostic("submit reanchor exceeded time budget")
+            return
+        }
 
-        applySubmitCorrection(pending)
+        applySubmitCorrection(pending, focusToken: correctionFocusToken)
     }
 
-    private func applySubmitCorrection(_ pending: PendingSubmitCorrection) {
+    private func applySubmitCorrection(
+        _ pending: PendingSubmitCorrection,
+        focusToken: FocusedInputSafety.FocusToken
+    ) {
         let decision = pending.decision
         if !pending.precedingBoundaryStrokes.isEmpty {
             deleteBoundarySequence(BoundarySequence(
@@ -834,44 +1119,23 @@ class EventTapManager {
             sendKeyEvent(keycode: stroke.keycode, shift: stroke.shift)
         }
 
-        preserveUndoAcrossNextInputSourceChange = true
-        let inputSourceSwitchReceipt = onInputSourceSwitch?(decision.direction)
-        preserveUndoAcrossNextInputSourceChange = false
-
         // 제출 키는 호출자가 주입하므로 경계 배열에 포함해 Undo 산술을 맞춥니다.
         let boundarySequence = BoundarySequence(
             strokes: pending.precedingBoundaryStrokes + [pending.submitStroke]
         )
-        originalChoiceGeneration &+= 1
-        let generation = originalChoiceGeneration
-        undoTransaction = UndoTransaction(
-            decision: decision,
+        finalizeCorrection(
+            decision,
             boundarySequence: boundarySequence,
-            focusToken: pending.focusToken,
-            generation: generation,
-            createdAt: now(),
-            inputSourceSwitchReceipt: inputSourceSwitchReceipt
-        )
-        originalChoiceState = .shortcutOnly(generation: generation)
-        scheduleUndoExpiration(for: generation)
-        // 제출 뒤에는 원문 칩의 앵커를 잡을 수 없는 경우가 많습니다. UI 계층이
-        // 정확한 범위를 다시 확인하고 실패하면 조용히 칩을 띄우지 않습니다.
-        onOriginalChoiceAvailable?(
-            OriginalChoiceRequest(
-                original: decision.original,
-                replacement: decision.replacement,
-                generation: generation,
-                focusToken: pending.focusToken,
-                boundaryUTF16Count: boundarySequence.producedUTF16Count,
-                tier: decision.tier
-            )
+            focusToken: focusToken
         )
     }
 
     private func processImmediateBoundary(
         _ boundary: CorrectionBoundary,
         stroke: BoundaryStroke
-    ) {
+    ) -> ImmediateBoundaryDisposition {
+        let fastPathDeadline = monotonicNow()
+            + EventTapManager.synchronousAXTimeBudget
         let sequence: BoundarySequence
         let hasEligibleToken: Bool
         switch tokenCaptureState {
@@ -892,16 +1156,52 @@ class EventTapManager {
            hasEligibleToken,
            automaticCorrectionFieldAllowed == true,
            focusToken != nil {
-            decision = autoCorrectionEngine.processBoundary(boundary)
+            // 현재 keyDown은 아직 앱에 도착하지 않았습니다. 화면 문자를
+            // 읽을 때는 이미 통과한 후행 마침표만 넘겨야 토큰 끝에 닿습니다.
+            let precedingBoundaryUTF16Count = sequence.producedUTF16Count
+                - stroke.producedUTF16Count
+            let readUptime = monotonicNow
+            decision = resolveBoundary(
+                boundary,
+                boundaryUTF16Count: precedingBoundaryUTF16Count,
+                shouldContinue: {
+                    readUptime() <= fastPathDeadline
+                }
+            )
         } else {
             // 실제 경계는 discard 상태도 끝냅니다.
             autoCorrectionEngine.reset()
+            lexicalKeystrokeMirror.removeAll(keepingCapacity: true)
             decision = nil
         }
         tokenCaptureState = .idle
         clearAutomaticCorrectionFocus()
 
-        guard let decision, let focusToken else { return }
+        guard let decision, let focusToken else { return .passThrough }
+        if let correctionFocusToken = preBoundaryCorrectionFocusToken(
+            decision,
+            sequence: sequence,
+            focusToken: focusToken,
+            deadline: fastPathDeadline
+        ) {
+            EventTapManager.diagnostic(
+                "pre-boundary direction=\(decision.direction) "
+                    + "originalUTF16=\(decision.original.utf16.count) "
+                    + "trigger=\(sequence.triggerKeycode)"
+            )
+            // 진단 출력까지 포함해 검증 예산을 다시 확인합니다. 이 guard를
+            // 지난 뒤에만 첫 Backspace를 보내므로 테스트 대역이나 느린 로그
+            // 출력이 있어도 만료 뒤 부분 교정은 시작하지 않습니다.
+            if monotonicNow() <= fastPathDeadline {
+                applyCorrection(
+                    decision,
+                    boundarySequence: sequence,
+                    focusToken: correctionFocusToken
+                )
+                return .suppressPhysicalEvent
+            }
+        }
+
         EventTapManager.diagnostic(
             "defer direction=\(decision.direction) "
                 + "originalUTF16=\(decision.original.utf16.count) "
@@ -914,6 +1214,43 @@ class EventTapManager {
                 boundarySequence: sequence,
                 focusToken: focusToken
             )
+        )
+        return .passThrough
+    }
+
+    /// 짧은 Latin 원문은 경계 keyDown이 앱에 도착하기 전에 고칠 수 있습니다.
+    ///
+    /// Latin 문자는 marked-text 확정을 기다릴 필요가 없고 현재 물리 경계가 아직
+    /// 앱에 전달되지 않았으므로, 여기서 고치면 `Space down → 다음 글자 down →
+    /// Space up` 키 롤오버와 keyUp 뒤 20ms 예약 경합이 모두 사라집니다. 반대로
+    /// 한글 IME 출력, 이미 통과한 후행 마침표, 긴 토큰은 기존 keyUp 이후 경로를
+    /// 유지합니다.
+    ///
+    /// 현재 포커스된 입력란이 캡처 시점과 같고, 캐럿 앞 exact text가
+    /// 원문과 같을 때만 실행합니다. 초반의 낡은 캡처 캐럿 위치는 쓰지
+    /// 않습니다. exact 확인을 할 수 없으면 지연 경로가 다시 검증합니다.
+    private func preBoundaryCorrectionFocusToken(
+        _ decision: CorrectionDecision,
+        sequence: BoundarySequence,
+        focusToken: FocusedInputSafety.FocusToken,
+        deadline: TimeInterval
+    ) -> FocusedInputSafety.FocusToken? {
+        let isWithinLatencyLimit = decision.originalCharacterCount
+            <= EventTapManager.maximumSynchronousCorrectionCharacters
+        guard decision.direction == .latinToKorean,
+              !shouldDirectlyComposeCurrentInput,
+              sequence.strokes.count == 1,
+              isWithinLatencyLimit else {
+            return nil
+        }
+        let readUptime = monotonicNow
+        let shouldContinue = { readUptime() <= deadline }
+        guard shouldContinue() else { return nil }
+        return focusInspector.reanchoredFocusToken(
+            focusToken,
+            original: decision.original,
+            boundaryUTF16Count: 0,
+            shouldContinue: shouldContinue
         )
     }
 
@@ -982,8 +1319,8 @@ class EventTapManager {
         executeResult(tracker.processNonJamo())
     }
 
-    /// 직접 조합은 사용자가 명시적으로 등록한 문제 앱에서만 사용합니다.
-    /// 전체 Mac 자동 교정은 정상 앱의 macOS 네이티브 IME를 그대로 둡니다.
+    /// 직접 조합은 자동 교정 범위와 무관하게 사용자가 명시적으로 등록한 문제
+    /// 앱에서만 사용합니다. 그 밖의 앱은 macOS 네이티브 IME를 그대로 둡니다.
     private var shouldDirectlyComposeCurrentInput: Bool {
         isActive && inputSourceKind == .koreanTwoSet
     }
@@ -1028,14 +1365,41 @@ class EventTapManager {
         // 일치하기 전에는 어떤 삭제나 입력 소스 변경도 수행하지 않습니다.
         let expectedOffset = pending.decision.original.utf16.count
             + pending.boundarySequence.producedUTF16Count
-        let focusMatches = focusInspector.isCurrentFocus(
+        let anchoredToken = focusInspector.anchoredOriginalFocusToken(
             pending.focusToken,
-            utf16Offset: expectedOffset
+            original: pending.decision.original,
+            boundaryUTF16Count: pending.boundarySequence.producedUTF16Count,
+            shouldContinue: { true }
         )
+        // 캡처 시점 앵커가 낡으면 위 산술은 어긋납니다(실측: 실제 캐럿 0인데
+        // initial=32). 재시도해도 다시 읽는 건 현재 캐럿뿐이고 틀린 쪽은 앵커라
+        // 영영 맞지 않습니다 — 사용자가 겪는 "되다가 안 되다가"의 원인입니다.
+        //
+        // 그래서 앵커를 쓰지 않는 직접 증거로 한 번 더 확인합니다. 지금 캐럿
+        // 바로 앞의 실제 글자가 원문과 같으면 지울 대상이 정확히 그 자리에
+        // 있다는 뜻이므로 안전합니다. 산술보다 강한 보장입니다.
+        var reanchored = false
+        let correctionFocusToken: FocusedInputSafety.FocusToken?
+        if let anchoredToken {
+            correctionFocusToken = anchoredToken
+        } else if let reanchoredToken = focusInspector.reanchoredFocusToken(
+                pending.focusToken,
+                original: pending.decision.original,
+                boundaryUTF16Count: pending.boundarySequence.producedUTF16Count,
+                shouldContinue: { true }
+        ) {
+            correctionFocusToken = reanchoredToken
+            reanchored = true
+        } else {
+            correctionFocusToken = nil
+        }
         EventTapManager.diagnostic(
-            "deferred focus match=\(focusMatches) expectedOffset=\(expectedOffset) attempt=\(attempt)"
+            "deferred focus match=\(correctionFocusToken != nil) "
+                + "expectedOffset=\(expectedOffset) attempt=\(attempt)"
+                + "\(reanchored ? " reanchored=true" : "") "
+                + FocusedInputSafety.diagnosticContext()
         )
-        guard focusMatches else {
+        guard let correctionFocusToken else {
             return false
         }
 
@@ -1046,7 +1410,7 @@ class EventTapManager {
         applyCorrection(
             pending.decision,
             boundarySequence: pending.boundarySequence,
-            focusToken: pending.focusToken
+            focusToken: correctionFocusToken
         )
         return true
     }
@@ -1065,6 +1429,21 @@ class EventTapManager {
         pause(3000)
         reinjectBoundarySequence(boundarySequence)
 
+        finalizeCorrection(
+            decision,
+            boundarySequence: boundarySequence,
+            focusToken: focusToken
+        )
+    }
+
+    /// 모든 교정 경로의 후처리를 한 곳에 모읍니다. 입력 소스 콜백이
+    /// 동기로 상태를 리셋해도, 완료된 교정의 Undo 트랜잭션은 그 뒤에
+    /// 등록하므로 유실되지 않습니다.
+    private func finalizeCorrection(
+        _ decision: CorrectionDecision,
+        boundarySequence: BoundarySequence,
+        focusToken: FocusedInputSafety.FocusToken
+    ) {
         preserveUndoAcrossNextInputSourceChange = true
         let inputSourceSwitchReceipt = onInputSourceSwitch?(decision.direction)
         preserveUndoAcrossNextInputSourceChange = false
@@ -1080,8 +1459,11 @@ class EventTapManager {
             inputSourceSwitchReceipt: inputSourceSwitchReceipt
         )
         undoTransaction = transaction
-        originalChoiceState = .shortcutOnly(generation: generation)
+        originalChoiceState = .shortcutOnly
         scheduleUndoExpiration(for: generation)
+        // 제출 뒤에는 원문 칩의 화면 앵커를 잡을 수 없는 경우가 많습니다.
+        // UI 계층이 정확한 범위를 다시 확인하고 실패하면 조용히 칩을 띄우지
+        // 않으므로 일반 경계와 제출 경계를 같은 루틴으로 처리해도 안전합니다.
         onOriginalChoiceAvailable?(
             OriginalChoiceRequest(
                 original: decision.original,
@@ -1126,13 +1508,27 @@ class EventTapManager {
             return false
         }
 
-        guard let transaction = undoTransaction,
+        guard let transaction = undoTransaction else { return false }
+
+        // 물리 Cmd-Z는 event-tap keyDown 안에서 실행됩니다. 긴 결과를 여기서
+        // 여러 번 지우면 시스템 timeout으로 전체 입력이 멎을 수 있으므로 앱의
+        // 원래 Undo로 넘깁니다. generation이 있는 호출은 이미 UI 버튼에서 온
+        // 것으로 event-tap callback 밖이므로 원문 칩 복원은 계속 지원합니다.
+        guard expectedGeneration != nil
+                || transaction.decision.replacementCharacterCount
+                    <= EventTapManager.maximumSynchronousCorrectionCharacters else {
+            clearUndoTransaction(notify: true)
+            return false
+        }
+
+        guard
               now().timeIntervalSince(transaction.createdAt) <= EventTapManager.undoLifetime,
-              focusInspector.isCurrentFocus(
+              focusInspector.anchoredOriginalFocusToken(
                   transaction.focusToken,
-                  utf16Offset: transaction.decision.replacement.utf16.count
-                    + transaction.boundarySequence.producedUTF16Count
-              ) else {
+                  original: transaction.decision.replacement,
+                  boundaryUTF16Count: transaction.boundarySequence.producedUTF16Count,
+                  shouldContinue: { true }
+              ) != nil else {
             clearUndoTransaction(notify: true)
             return false
         }
@@ -1185,10 +1581,18 @@ class EventTapManager {
     func originalChoiceChipDidExpire(generation: UInt64) {
         guard case .chipVisible(let activeGeneration) = originalChoiceState,
               activeGeneration == generation,
-              undoTransaction?.generation == generation else {
+              let transaction = undoTransaction,
+              transaction.generation == generation else {
             return
         }
-        originalChoiceState = .shortcutOnly(generation: generation)
+        if transaction.decision.replacementCharacterCount
+            <= EventTapManager.maximumSynchronousCorrectionCharacters {
+            originalChoiceState = .shortcutOnly
+        } else {
+            // 긴 결과는 물리 Cmd-Z를 앱에 넘기므로 칩이 사라진 뒤에는
+            // 복구 수단이 없습니다. 쓸 수 없는 트랜잭션을 남기지 않습니다.
+            clearUndoTransaction(notify: false)
+        }
     }
 
     /// Cancels only the matching generation. A stale panel action must never
@@ -1232,12 +1636,212 @@ class EventTapManager {
 
     private func resetAutomaticCorrectionToken() {
         autoCorrectionEngine.reset()
+        lexicalKeystrokeMirror.removeAll(keepingCapacity: true)
         tokenCaptureState = .idle
         clearAutomaticCorrectionFocus()
     }
 
+    /// 경계에서 규칙 엔진에 판정을 맡기고, 규칙이 가르지 못했을 때만
+    /// 어휘 계층(Layer 1)에 한 번 더 묻습니다.
+    ///
+    /// 규칙이 이미 교정하거나 다른 이유로 보존한 토큰은 건드리지 않습니다.
+    /// 오직 `ambiguousBothValid` — 한국어·영어 두 문법을 모두 만족해 키열만으로는
+    /// 구분할 수 없던 경우 — 만 대상입니다.
+    private func resolveBoundary(
+        _ boundary: CorrectionBoundary,
+        boundaryUTF16Count: Int,
+        shouldContinue: () -> Bool
+    ) -> CorrectionDecision? {
+        let keystrokes = lexicalKeystrokeMirror
+        // `processBoundary`는 내부에서 `defer { reset() }`으로 토큰을 비웁니다.
+        // 사본도 같이 비우지 않으면 경계를 넘길 때마다 계속 쌓여, 길이 대조가
+        // 항상 어긋나고 이 아래의 방향 수정·어휘 판정이 영영 발동하지 못합니다.
+        // 실제로 그 상태였습니다 — 진단의 token length가 문장 전체로 자랐습니다.
+        lexicalKeystrokeMirror.removeAll(keepingCapacity: true)
+
+        if let decision = autoCorrectionEngine.processBoundary(boundary) {
+            return decision
+        }
+        // 현재 TIS 방향에서 사전만으로 확정할 수 있으면 AX 조회 없이 끝냅니다.
+        // 특히 짧은 첫 단어가 cold AX 비용 때문에 지연 경로로 밀리는 일을 줄입니다.
+        if let decision = lexicalDecision(boundary: boundary, keystrokes: keystrokes) {
+            return decision
+        }
+
+        // 방향을 **믿음이 아니라 증거로** 다시 확인합니다.
+        //
+        // 엔진은 "지금 입력 소스가 무엇인가"로 방향을 정하는데, 그 믿음은
+        // 어긋날 수 있습니다 — 시스템(TIS)은 한글이라는데 앱은 계속 라틴을
+        // 찍는 경우가 실제로 있습니다. 그러면 영자판으로 친 `dkwn`을
+        // 한글자판으로 친 것으로 오판해 `아주` 교정을 통째로 놓칩니다.
+        //
+        // 화면에 찍힌 글자는 증거입니다. 캐럿 앞 글자가 라틴인데 엔진이
+        // 한글자판이라 믿었다면, 올바른 방향으로 동결 정책을 다시 돌립니다.
+        if let decision = directionCorrectedDecision(
+            boundary: boundary,
+            keystrokes: keystrokes,
+            boundaryUTF16Count: boundaryUTF16Count,
+            shouldContinue: shouldContinue
+        ) {
+            return decision
+        }
+
+        // 보존된 토큰도 반드시 흔적을 남깁니다.
+        //
+        // 지금까지 보존은 로그를 전혀 남기지 않았습니다. 그런데 사용자가
+        // "안 된다"고 겪는 상황의 대부분이 바로 이 보존입니다. 그래서 교정
+        // 시도만 세면 성공률이 좋아 보이는데 실제 체감은 정반대인, 지표와
+        // 현실이 어긋나는 상태였습니다. 무엇이 왜 안 바뀌었는지가 보여야
+        // 다음을 고칠 수 있습니다.
+        EventTapManager.diagnostic(
+            "preserved "
+                + "rule=\(autoCorrectionEngine.lastDiagnostic.map { "\($0.rule)" } ?? "노판정") "
+                + "len=\(autoCorrectionEngine.lastDiagnostic?.tokenLength ?? keystrokes.count) "
+                + FocusedInputSafety.diagnosticContext()
+        )
+        return nil
+    }
+
+    /// 화면에 실제로 찍힌 글자로 방향을 확정하고, 엔진이 반대로 판정했다면
+    /// 올바른 방향으로 동결 정책을 다시 돌립니다.
+    ///
+    /// 사본이 발산했을 수 있으므로 여기서도 길이를 대조합니다. 증거를 못 읽거나
+    /// 엔진 판정과 방향이 같으면 아무것도 하지 않습니다.
+    private func directionCorrectedDecision(
+        boundary: CorrectionBoundary,
+        keystrokes: [PhysicalKeystroke],
+        boundaryUTF16Count: Int,
+        shouldContinue: () -> Bool
+    ) -> CorrectionDecision? {
+        guard let diagnostic = autoCorrectionEngine.lastDiagnostic,
+              diagnostic.boundary == boundary,
+              diagnostic.tokenLength == keystrokes.count,
+              !keystrokes.isEmpty,
+              let focusToken = automaticCorrectionFocusToken,
+              shouldContinue(),
+              // 현재 경계 keyDown은 아직 앱에 도착하지 않았습니다. 다만
+              // `token...period...Space` 흐름의 period처럼 이미 통과한 경계는
+              // 그 길이만큼 넘겨야 토큰의 마지막 글자에 닿습니다.
+              let observed = focusInspector.scriptBeforeCaret(
+                focusToken,
+                boundaryUTF16Count: boundaryUTF16Count,
+                shouldContinue: shouldContinue
+              ),
+              observed != diagnostic.direction else {
+            return nil
+        }
+
+        let source: InputSourceKind = observed == .latinToKorean
+            ? .supportedLatin
+            : .koreanTwoSet
+        switch LayoutCorrectionPolicy.evaluate(
+            keystrokes: keystrokes,
+            inputSource: source
+        ) {
+        case .correct(let tier, let original, let replacement, let rule):
+            guard original != replacement else { return nil }
+            EventTapManager.diagnostic(
+                "direction corrected believed=\(diagnostic.direction) observed=\(observed) "
+                    + "rule=\(rule) len=\(keystrokes.count) "
+                    + FocusedInputSafety.diagnosticContext()
+            )
+            return CorrectionDecision(
+                original: original,
+                replacement: replacement,
+                direction: observed,
+                tier: tier,
+                rule: rule,
+                diagnostic: CorrectionDiagnostic(
+                    direction: observed,
+                    tier: tier,
+                    rule: rule,
+                    tokenLength: keystrokes.count,
+                    boundary: boundary
+                )
+            )
+
+        case .preserve(.ambiguousBothValid):
+            // TIS와 화면 방향이 어긋난 경우에도 일반 경로와 같은 고정 어휘
+            // tiebreaker를 거쳐야 합니다. 그렇지 않으면 `sork`처럼 규칙만으로
+            // 양쪽이 가능한 첫 단어만 조용히 빠집니다.
+            guard observed == .latinToKorean else { return nil }
+            return lexicalCorrection(boundary: boundary, keystrokes: keystrokes)
+
+        case .preserve:
+            return nil
+        }
+    }
+
+    /// 규칙이 보존한 토큰을 어휘로 다시 판정합니다.
+    ///
+    /// 키열 사본은 발산할 수 있으므로 **신뢰하지 않고 검증**합니다. 사본으로
+    /// 동결된 정책을 다시 돌려, 엔진이 방금 낸 진단과 규칙·길이가 모두 일치할
+    /// 때만 어휘를 조회합니다. 하나라도 어긋나면 사본이 실제 토큰이 아니라는
+    /// 뜻이므로 아무것도 하지 않습니다 — 발산은 기회를 놓칠 뿐 오교정을
+    /// 만들지 못합니다.
+    private func lexicalDecision(
+        boundary: CorrectionBoundary,
+        keystrokes: [PhysicalKeystroke]
+    ) -> CorrectionDecision? {
+        guard let diagnostic = autoCorrectionEngine.lastDiagnostic,
+              diagnostic.rule == .ambiguousBothValid,
+              diagnostic.boundary == boundary,
+              // 어휘 계층은 영자판으로 친 한국어에만 적용합니다. 한글자판 쪽은
+              // 실측 결과 이 분기에 도달하는 토큰이 하나도 없습니다.
+              diagnostic.direction == .latinToKorean,
+              diagnostic.tokenLength == keystrokes.count,
+              !keystrokes.isEmpty else {
+            return nil
+        }
+
+        // 사본으로 동결 정책을 재실행해 같은 판정이 나오는지 확인합니다.
+        guard case .preserve(.ambiguousBothValid) = LayoutCorrectionPolicy.evaluate(
+            keystrokes: keystrokes,
+            inputSource: .supportedLatin
+        ) else {
+            return nil
+        }
+
+        return lexicalCorrection(boundary: boundary, keystrokes: keystrokes)
+    }
+
+    /// 이미 `ambiguousBothValid`임을 검증한 물리 키열에만 고정 어휘를 적용합니다.
+    private func lexicalCorrection(
+        boundary: CorrectionBoundary,
+        keystrokes: [PhysicalKeystroke]
+    ) -> CorrectionDecision? {
+        guard let tiebreaker = lexicalTiebreaker,
+              let latin = LayoutCorrectionPolicy.latinCandidate(for: keystrokes),
+              let korean = tiebreaker.resolve(latin: latin),
+              latin != korean else {
+            return nil
+        }
+
+        EventTapManager.diagnostic(
+            "lexical tiebreak direction=latinToKorean len=\(keystrokes.count)"
+        )
+
+        // tier는 medium입니다. 반대 읽기가 구조적으로 가능했다는 뜻이고,
+        // 원문 칩을 강조 표시해 되돌리기 쉽게 만듭니다.
+        return CorrectionDecision(
+            original: latin,
+            replacement: korean,
+            direction: .latinToKorean,
+            tier: .medium,
+            rule: .ambiguousBothValid,
+            diagnostic: CorrectionDiagnostic(
+                direction: .latinToKorean,
+                tier: .medium,
+                rule: .ambiguousBothValid,
+                tokenLength: keystrokes.count,
+                boundary: boundary
+            )
+        )
+    }
+
     private func invalidateAutomaticCorrectionTokenUntilBoundary() {
         autoCorrectionEngine.invalidateCurrentTokenUntilBoundary()
+        lexicalKeystrokeMirror.removeAll(keepingCapacity: true)
         tokenCaptureState = .discardUntilBoundary
         clearAutomaticCorrectionFocus()
     }
@@ -1245,6 +1849,7 @@ class EventTapManager {
     private func clearAutomaticCorrectionFocus() {
         automaticCorrectionFieldAllowed = nil
         automaticCorrectionFocusToken = nil
+        automaticCorrectionProbeAttempts = 0
     }
 
     private func resetAutomaticCorrectionState() {
@@ -1261,6 +1866,8 @@ class EventTapManager {
     private func resetTransientState() {
         tracker.reset()
         resetAutomaticCorrectionState()
+        // 앱 전환 뒤 이전 keyDown의 keyUp이나 자동반복을 잘못 삼키지 않습니다.
+        clearSuppressedKeyUps()
     }
 
     // MARK: - 결과 실행 (백스페이스 + 문자 전송)
@@ -1315,7 +1922,12 @@ class EventTapManager {
 
     // MARK: - 권한 확인
 
-    static func checkAccessibilityPermission(prompt: Bool = true) -> Bool {
+    /// 손쉬운 사용 권한 상태를 확인합니다.
+    ///
+    /// `prompt`를 켜면 macOS가 자체 권한 창을 띄웁니다. Mackor는 이유와 개인정보
+    /// 처리를 설명하는 자체 안내 창을 쓰고 시스템 설정도 직접 열어 주므로,
+    /// **기본값은 확인만 하는 `false`**입니다. 켜면 창이 두 번 뜹니다.
+    static func checkAccessibilityPermission(prompt: Bool = false) -> Bool {
         let options = [kAXTrustedCheckOptionPrompt.takeRetainedValue(): prompt] as CFDictionary
         return AXIsProcessTrustedWithOptions(options)
     }
@@ -1330,15 +1942,11 @@ private func eventTapCallback(
     userInfo: UnsafeMutableRawPointer?
 ) -> Unmanaged<CGEvent>? {
 
-    // 시스템에 의해 tap이 비활성화된 경우 재활성화
+    // 시스템이 tap을 비활성화한 경우: 포트가 살았으면 재활성화, 무효화됐으면 정리.
     if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
         if let userInfo = userInfo {
             let manager = Unmanaged<EventTapManager>.fromOpaque(userInfo).takeUnretainedValue()
-            manager.resetComposition()
-            manager.clearSuppressedKeyUps()
-            if let tap = manager.eventTap {
-                CGEvent.tapEnable(tap: tap, enable: true)
-            }
+            manager.handleSystemTapDisabled()
         }
         return Unmanaged.passUnretained(event)
     }
