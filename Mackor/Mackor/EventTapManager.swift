@@ -1202,10 +1202,12 @@ class EventTapManager {
         // 게시한 삭제가 반영됐는지 확인한 뒤에만 교정문을 내보냅니다. 흡수됐다면
         // 원문 위에 덧붙어 화면을 파괴하므로 아무것도 내보내지 않습니다. 제출은
         // 이미 지나간 사건이라(다음 필드로 넘어갈 수 있음) 지연 검증기를 두지
-        // 않고 그 자리에서 포기합니다 — 최종 화면은 원문+제출키(사용자가 친 그대로).
+        // 않고, 짧은 콜백 내 사다리(+8/+16ms — 기존 수용된 대기 등급)로만
+        // 비행 중인 삭제를 기다린 뒤 포기합니다. 포기 시 최종 화면은
+        // 원문+제출키(사용자가 친 그대로)가 목표입니다.
         let readUptime = monotonicNow
         let deletionShouldContinue = { readUptime() <= pending.validationDeadline }
-        guard focusInspector.deletionLanded(
+        guard awaitDeletionEvidence(
             focusToken,
             original: decision.original,
             shouldContinue: deletionShouldContinue
@@ -1557,6 +1559,36 @@ class EventTapManager {
         )
     }
 
+    /// 게시한 삭제의 반영을 콜백 안에서 짧게 기다립니다(+8/+16ms 재시도).
+    ///
+    /// 첫 프로브(+3ms)는 게시한 백스페이스가 아직 처리 전인 경우가 흔해
+    /// notLanded/ambiguous가 비행 중을 뜻할 수 있습니다. 즉시 포기하면 곧
+    /// 착지할 삭제가 원문을 지운 뒤 방출이 보류돼 단어가 사라집니다. 지연
+    /// 검증기를 둘 수 없는 제출·undo 경로는 이 사다리로 통상 앱의 이벤트
+    /// 처리(1~2 프레임)를 기다립니다. 대기 총량은 기존 수용된 콜백 내 대기
+    /// 등급(27ms 백스페이스 열)과 같습니다.
+    private func awaitDeletionEvidence(
+        _ focusToken: FocusedInputSafety.FocusToken,
+        original: String,
+        shouldContinue: () -> Bool
+    ) -> FocusedInputSafety.DeletionEvidence {
+        var evidence = focusInspector.deletionLanded(
+            focusToken,
+            original: original,
+            shouldContinue: shouldContinue
+        )
+        for retryPause: useconds_t in [8_000, 16_000] where evidence != .landed {
+            guard shouldContinue() else { break }
+            pause(retryPause)
+            evidence = focusInspector.deletionLanded(
+                focusToken,
+                original: original,
+                shouldContinue: shouldContinue
+            )
+        }
+        return evidence
+    }
+
     /// 지연 경로 전용. 원문을 지운 뒤 **삭제가 실제로 반영됐는지 확인**하고서만
     /// 교정문을 내보냅니다. 흡수됐다면 원문 위에 덧붙어 화면을 파괴하므로
     /// 내보내지 않습니다. 게시한 CGEvent는 회수 불가라, 아직 반영 전(ambiguous)일
@@ -1582,13 +1614,15 @@ class EventTapManager {
                 boundarySequence: boundarySequence,
                 focusToken: focusToken
             )
-        case .notLanded:
-            // 원문이 화면에 무사(흡수 확정). 아무것도 내보내지 않으면 완전 no-op.
-            EventTapManager.diagnostic("deferred deletion notLanded — abort, original intact")
-        case .ambiguous:
-            // 캐럿이 아직 앵커로 안 돌아옴 — 게시한 삭제가 비행 중일 수 있습니다.
-            // 콜백 안에서 usleep으로 기다리면 메인 런루프(탭 소스)를 막아 시스템
-            // 입력이 멈추므로, 비동기 검증기로 넘겨 asyncAfter로 재확인합니다.
+        case .notLanded, .ambiguous:
+            // 첫 프로브 시점(+3ms)에는 게시한 백스페이스가 아직 처리 전인 경우가
+            // 흔해, "원문이 아직 보인다(notLanded)"만으로는 흡수와 비행 중을
+            // 구분할 수 없습니다. 여기서 즉시 포기하면 곧 착지할 삭제가 원문을
+            // 지운 뒤 교정문이 안 나가 **단어가 사라집니다**(실사용 확인 —
+            // ㅈㄷ 소실). 두 경우 모두 검증기로 넘겨 재확인하고, 소진될 때까지
+            // 원문이 계속 보일 때만 진짜 흡수로 확정합니다. 콜백 안에서
+            // usleep으로 기다리면 메인 런루프(탭 소스)를 막아 시스템 입력이
+            // 멈추므로 asyncAfter로만 재확인합니다.
             scheduleDeletionVerifier(
                 decision,
                 boundarySequence: boundarySequence,
@@ -1625,9 +1659,11 @@ class EventTapManager {
                     boundarySequence: boundarySequence,
                     focusToken: focusToken
                 )
-            case .notLanded:
-                EventTapManager.diagnostic("deletion verifier notLanded — abort, original intact")
-            case .ambiguous:
+            case .notLanded, .ambiguous:
+                // notLanded도 재시도 대상입니다 — 느린 앱은 검증기 회차에도
+                // 아직 백스페이스를 처리 전일 수 있습니다. 소진(~300ms)까지
+                // 원문이 계속 보이면 그때 진짜 흡수로 확정하고 포기합니다 —
+                // 그 시점의 화면은 원문 그대로이므로 완전한 no-op입니다.
                 guard attempt < EventTapManager.maximumDeletionVerifierAttempts else {
                     EventTapManager.diagnostic("deletion verifier exhausted — abort, no emission")
                     return
@@ -1752,7 +1788,7 @@ class EventTapManager {
         // 않습니다. 트랜잭션은 지워(칩 내림) 재시도로 두 번째 백스페이스 일제
         // 사격이 교정 밖 텍스트까지 지우는 것을 막고, Cmd-Z는 소비해 앱 undo와
         // 겹치지 않게 합니다.
-        guard focusInspector.deletionLanded(
+        guard awaitDeletionEvidence(
             transaction.focusToken,
             original: transaction.decision.replacement,
             shouldContinue: { true }

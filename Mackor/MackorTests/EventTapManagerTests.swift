@@ -499,12 +499,14 @@ final class EventTapManagerTests: XCTestCase {
         )
     }
 
-    /// 흡수 확정(notLanded)이면 원문이 화면에 무사하므로 방출하지 않고, 검증기도
-    /// 예약하지 않는다(완전 no-op). 손상을 무동작으로 바꾸는 핵심 경로.
-    func testDeferredNotLandedAbortsWithoutEmittingOrScheduling() {
+    /// 첫 프로브의 notLanded는 흡수가 아니라 **비행 중**일 수 있다(백스페이스가
+    /// 아직 처리 전). 즉시 포기하면 곧 착지할 삭제 뒤에 방출이 보류돼 단어가
+    /// 사라진다(실사용 확인 — ㅈㄷ 소실). notLanded도 검증기로 넘어가 삭제가
+    /// 착지하면 교정을 완성해야 한다.
+    func testDeferredNotLandedIsRetriedAndRescuedWhenDeletionLands() {
         let output = FakeKeyboardOutput()
         let focus = FakeFocusInspector()
-        focus.deletionEvidenceResponses = [.notLanded]
+        focus.deletionEvidenceResponses = [.notLanded, .landed]
         var scheduled: [() -> Void] = []
         let manager = makeManager(
             output: output,
@@ -517,14 +519,20 @@ final class EventTapManagerTests: XCTestCase {
         type("gksrmf", into: manager)
         _ = manager.handleKeyDown(keyDown(0x31))
         _ = manager.handleKeyUp(keyUp(0x31))
-        scheduled.removeFirst()()
+        scheduled.removeFirst()()   // 백스페이스 + 첫 프로브 notLanded → 검증기 예약
 
         XCTAssertFalse(
             output.actions.contains(.text("한글")),
-            "흡수 확정인데 교정문을 방출했습니다: \(output.actions)"
+            "착지 확인 전에 방출했습니다: \(output.actions)"
         )
-        XCTAssertEqual(output.actions, Array(repeating: .key(0x33, false), count: 7))
-        XCTAssertTrue(scheduled.isEmpty, "notLanded는 검증기를 예약하지 않아야 합니다")
+        XCTAssertEqual(scheduled.count, 1, "notLanded는 검증기로 넘어가야 합니다")
+
+        scheduled.removeFirst()()   // 검증기 .landed → 교정 완성
+
+        XCTAssertTrue(
+            output.actions.contains(.text("한글")),
+            "뒤늦게 착지한 삭제 뒤 교정이 완성되지 않았습니다(단어 소실): \(output.actions)"
+        )
     }
 
     /// 검증기 대기 중 사용자가 다음 키를 치면(generation 증가) 검증기가 취소돼
@@ -562,7 +570,9 @@ final class EventTapManagerTests: XCTestCase {
     func testSubmitRefusesEmissionWhenDeletionUnconfirmed() {
         let output = FakeKeyboardOutput()
         let focus = FakeFocusInspector()
-        focus.deletionEvidenceResponses = [.notLanded]
+        // 콜백 내 사다리(최대 3회 프로브)가 전부 미확인이어야 보류가 확정된다 —
+        // 한 번만 notLanded면 재시도가 착지를 발견해 정상 방출한다.
+        focus.deletionEvidenceResponses = [.notLanded, .notLanded, .notLanded]
         let manager = makeManager(output: output, focus: focus)
         manager.inputSourceKind = .supportedLatin
         manager.isAutoCorrectionEnabled = true
@@ -587,7 +597,8 @@ final class EventTapManagerTests: XCTestCase {
     func testUndoWithheldAndClearedWhenDeletionUnconfirmed() {
         let output = FakeKeyboardOutput()
         let focus = FakeFocusInspector()
-        focus.deletionEvidenceResponses = [.landed, .notLanded]  // 교정은 착지, undo는 미확인
+        // 교정은 착지, undo는 사다리 3회 전부 미확인이어야 보류가 확정된다.
+        focus.deletionEvidenceResponses = [.landed, .notLanded, .notLanded, .notLanded]
         var scheduled: [() -> Void] = []
         let manager = makeManager(
             output: output,
