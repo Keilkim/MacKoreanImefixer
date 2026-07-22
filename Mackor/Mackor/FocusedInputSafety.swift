@@ -99,16 +99,6 @@ enum FocusedInputSafety {
         case ineligibleTransientSelection
     }
 
-    /// 게시한 Backspace의 삭제 반영 여부. 자세한 의미는 `deletionLanded` 참조.
-    enum DeletionEvidence {
-        /// 삭제가 반영됨 — 교정문을 내보내도 안전.
-        case landed
-        /// 원문이 아직 그대로 — 흡수됐거나 미처리. 방출하지 않으면 no-op.
-        case notLanded
-        /// 판단 불가(포커스 이동·IPC 실패·캐럿 불일치). 방출 금지.
-        case ambiguous
-    }
-
     static func probeAutomaticCorrectionFocus() -> FocusProbe {
         guard !IsSecureEventInputEnabled() else {
             diagnostic("focus token rejected secure event input")
@@ -453,98 +443,6 @@ enum FocusedInputSafety {
             element: element,
             initialSelection: CFRange(location: start, length: 0)
         )
-    }
-
-    /// 게시한 Backspace가 실제로 삭제까지 반영됐는지 **3값**으로 판정합니다.
-    ///
-    /// 교정은 원문을 지운 뒤 교정문을 넣습니다. 그런데 게시한 CGEvent가
-    /// IME 조합(마크드 텍스트)이나 선택 영역에 흡수되면 원문이 남은 채 교정문이
-    /// 덧붙어 화면이 파괴됩니다(확인된 "솓the"). 그래서 교정문을 내보내기 전에
-    /// 여기서 삭제 반영을 확인합니다.
-    ///
-    /// 캐럿 위치만으로는 부족합니다 — 한글 조합 중 많은 앱이 캐럿을 조합
-    /// 시작점(=앵커)으로 보고해, 원문이 그대로인데도 `캐럿==앵커`가 성립합니다.
-    /// 그래서 캐럿과 함께 **앵커 앞 원문 범위의 실제 글자**를 원문과 대조합니다.
-    ///
-    /// - `.landed`: 캐럿==앵커(len 0) 이고 앵커 위치의 글자가 더는 원문이 아님
-    ///   → 삭제 반영됨. 교정문을 내보내도 안전.
-    /// - `.notLanded`: 앵커 위치가 아직 원문 그대로 → 흡수됐거나 미처리. 원문이
-    ///   화면에 무사하므로 아무것도 내보내지 않으면 완전 no-op.
-    /// - `.ambiguous`: 포커스 이동·IPC 실패·캐럿이 앵커도 아님. 방출 금지.
-    ///
-    /// 읽는 범위는 앵커 앞 원문 길이뿐이며 주변 문장이나 필드 전체 값은 읽지
-    /// 않습니다(reanchoredFocusToken과 같은 범위 정책).
-    static func deletionLanded(
-        _ token: FocusToken,
-        original: String,
-        shouldContinue: () -> Bool = { true }
-    ) -> DeletionEvidence {
-        guard shouldContinue(),
-              !IsSecureEventInputEnabled(),
-              let element = token.element,
-              let currentElement = focusedElement(),
-              CFEqual(element, currentElement) else {
-            diagnostic("deletion gate ambiguous — changed focus or secure input")
-            return .ambiguous
-        }
-        guard shouldContinue() else {
-            diagnostic("deletion gate ambiguous — budget after focus lookup")
-            return .ambiguous
-        }
-        var selectionValue: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(
-            element,
-            kAXSelectedTextRangeAttribute as CFString,
-            &selectionValue
-        ) == .success,
-        let selectionValue,
-        let caret = selectedTextRange(from: selectionValue) else {
-            diagnostic("deletion gate ambiguous — could not read caret")
-            return .ambiguous
-        }
-        let anchor = token.initialSelection.location
-        guard caret.length == 0, caret.location == anchor else {
-            // 캐럿이 앵커로 돌아오지 않음(부분 삭제 등). 방출하지 않습니다.
-            diagnostic(
-                "deletion gate ambiguous — caret=\(caret.location) "
-                    + "len=\(caret.length) anchor=\(anchor)"
-            )
-            return .ambiguous
-        }
-        guard shouldContinue() else {
-            diagnostic("deletion gate ambiguous — budget after caret lookup")
-            return .ambiguous
-        }
-        let originalCount = original.utf16.count
-        guard originalCount > 0 else {
-            diagnostic("deletion gate ambiguous — empty original")
-            return .ambiguous
-        }
-        var range = CFRange(location: anchor, length: originalCount)
-        guard let rangeValue = AXValueCreate(.cfRange, &range) else {
-            return .ambiguous
-        }
-        // 캐럿이 앵커로 돌아온 것(위 guard 통과) 자체가 삭제 착지의 1차 증거입니다.
-        // 흡수돼 삭제가 안 됐다면 캐럿은 앵커가 아니라 원문 뒤에 남아 위에서 이미
-        // .ambiguous로 걸립니다. 문자열 읽기는 오직 "앵커에서 원문이 아직 그대로
-        // 읽히는가"를 확인해 방출을 **거부**하는 용도입니다(캐럿을 조합 시작점으로
-        // 보고하는 마크드-텍스트 앱 방어). 읽기가 실패하면(범위 밖 = 방금 친 단어가
-        // 필드 끝이라 삭제됨) 원문이 거기 없다는 뜻이므로 착지로 봅니다 — 이걸
-        // .ambiguous로 두면 끝-필드 교정(가장 흔한 경우)이 영영 확정되지 못해
-        // 삭제만 되고 교정문이 안 나가 단어가 사라졌습니다.
-        var stringValue: CFTypeRef?
-        let readOK = AXUIElementCopyParameterizedAttributeValue(
-            element,
-            kAXStringForRangeParameterizedAttribute as CFString,
-            rangeValue,
-            &stringValue
-        ) == .success
-        if readOK, let text = stringValue as? String, text == original {
-            diagnostic("deletion gate notLanded — original still present anchor=\(anchor)")
-            return .notLanded
-        }
-        diagnostic("deletion gate landed — anchor=\(anchor) readOK=\(readOK)")
-        return .landed
     }
 
     /// 화면에 **실제로 찍힌** 글자가 한글인지 라틴인지 확인합니다.

@@ -33,13 +33,6 @@ protocol EventTapFocusInspecting {
         boundaryUTF16Count: Int,
         shouldContinue: () -> Bool
     ) -> CorrectionDirection?
-    /// 게시한 Backspace가 삭제까지 반영됐는지 3값으로 판정합니다. 교정문을
-    /// 내보내기 전에 확인해, 흡수된 삭제 위에 방출해 화면을 파괴하는 것을 막습니다.
-    func deletionLanded(
-        _ token: FocusedInputSafety.FocusToken,
-        original: String,
-        shouldContinue: () -> Bool
-    ) -> FocusedInputSafety.DeletionEvidence
 }
 
 private struct AccessibilityEventTapFocusInspector: EventTapFocusInspecting {
@@ -83,18 +76,6 @@ private struct AccessibilityEventTapFocusInspector: EventTapFocusInspecting {
         FocusedInputSafety.scriptBeforeCaret(
             token,
             boundaryUTF16Count: boundaryUTF16Count,
-            shouldContinue: shouldContinue
-        )
-    }
-
-    func deletionLanded(
-        _ token: FocusedInputSafety.FocusToken,
-        original: String,
-        shouldContinue: () -> Bool
-    ) -> FocusedInputSafety.DeletionEvidence {
-        FocusedInputSafety.deletionLanded(
-            token,
-            original: original,
             shouldContinue: shouldContinue
         )
     }
@@ -266,10 +247,6 @@ class EventTapManager {
     /// 거부되면 그때 굳힙니다. 선택은 이 키가 곧 지우므로 대개 두 번째 키에서
     /// 빈 캐럿으로 바뀌어 교정됩니다.
     private static let maximumSoftProbeRefusalKeys = 2
-    /// 게시한 삭제가 아직 반영 전(ambiguous)일 때, 비동기 검증기가 재확인하는
-    /// 최대 횟수. 스케줄러가 프로덕션에서 20ms 간격이므로 ~300ms 창입니다.
-    /// 이 창 안에 반영되면 뒤늦게라도 교정하고, 넘으면 교정을 포기합니다(방출 없음).
-    private static let maximumDeletionVerifierAttempts = 15
 
     /// 앱에 실제로 입력된 경계 하나입니다. 현재 지원 경계는 모두 ASCII 한
     /// 문자지만, AX caret 계산(UTF-16)과 Backspace 횟수(Character)는 서로
@@ -1199,22 +1176,6 @@ class EventTapManager {
             sendKeyEvent(keycode: EventTapManager.backspaceKeycode, shift: false)
             pause(3000)
         }
-        // 게시한 삭제가 반영됐는지 확인한 뒤에만 교정문을 내보냅니다. 흡수됐다면
-        // 원문 위에 덧붙어 화면을 파괴하므로 아무것도 내보내지 않습니다. 제출은
-        // 이미 지나간 사건이라(다음 필드로 넘어갈 수 있음) 지연 검증기를 두지
-        // 않고, 짧은 콜백 내 사다리(+8/+16ms — 기존 수용된 대기 등급)로만
-        // 비행 중인 삭제를 기다린 뒤 포기합니다. 포기 시 최종 화면은
-        // 원문+제출키(사용자가 친 그대로)가 목표입니다.
-        let readUptime = monotonicNow
-        let deletionShouldContinue = { readUptime() <= pending.validationDeadline }
-        guard awaitDeletionEvidence(
-            focusToken,
-            original: decision.original,
-            shouldContinue: deletionShouldContinue
-        ) == .landed else {
-            EventTapManager.diagnostic("submit correction withheld — deletion not confirmed")
-            return
-        }
         sendUnicodeText(decision.replacement)
         pause(3000)
         for stroke in pending.precedingBoundaryStrokes {
@@ -1507,24 +1468,24 @@ class EventTapManager {
 
         pendingCorrectionState = .applying
         // 대상 앱이 이미 원문과 모든 경계 문자를 처리했으므로 경계를 역순으로
-        // 지운 뒤 원문을 지우고, 삭제 반영을 확인한 뒤에만 교정문을 넣습니다.
-        // 현재 generation을 검증기에 넘겨, 이후 사용자 입력이 오면 취소되게 합니다.
+        // 지운 뒤 원문을 지우고 교정문을 넣습니다.
         deleteBoundarySequence(pending.boundarySequence)
-        applyDeferredBoundaryCorrection(
+        applyCorrection(
             pending.decision,
             boundarySequence: pending.boundarySequence,
-            focusToken: correctionFocusToken,
-            generation: boundaryCorrectionGeneration
+            focusToken: correctionFocusToken
         )
         return true
     }
 
-    /// 즉시(fast) 경로 전용. 게이트를 두지 않습니다 — 이 경로는 direction이
-    /// latinToKorean 전용이라 원문이 라틴이고, 한글 IME의 마크드-텍스트 흡수
-    /// 기전이 성립하지 않습니다. 또 물리 경계가 앱에 전달되지 않아(억제됨)
-    /// 게시한 백스페이스·교정문이 같은 큐로 순서대로 착지합니다. 삭제 착지
-    /// 게이트는 지연/제출/undo 경로에만 적용합니다(그쪽은 원문이 한글일 수 있고
-    /// 경계가 이미 화면에 있어 흡수 손상이 실재).
+    /// 원문을 지우고 교정문을 넣습니다.
+    ///
+    /// 삭제 착지를 AX로 확인하는 게이트는 두지 않습니다. Mackor이 게시한
+    /// 백스페이스와 교정문은 같은 큐로 순서대로 앱에 전달되므로, 정상적으로
+    /// 삭제가 되는 앱에서는 지우고→타이핑 순서가 보장됩니다. 게이트는 백스페이스가
+    /// 흡수되는 드문 경우(IME 마크드 텍스트)를 잡으려 했으나, 그 확인을 AX에
+    /// 의존하는 바람에 AX가 느린/불완전한 앱(VS Code 등 Electron)에서 오히려
+    /// 멀쩡한 교정을 죽여(단어 소실·연쇄) 순해악이었습니다. 제거합니다.
     private func applyCorrection(
         _ decision: CorrectionDecision,
         boundarySequence: BoundarySequence,
@@ -1557,126 +1518,6 @@ class EventTapManager {
             boundarySequence: boundarySequence,
             focusToken: focusToken
         )
-    }
-
-    /// 게시한 삭제의 반영을 콜백 안에서 짧게 기다립니다(+8/+16ms 재시도).
-    ///
-    /// 첫 프로브(+3ms)는 게시한 백스페이스가 아직 처리 전인 경우가 흔해
-    /// notLanded/ambiguous가 비행 중을 뜻할 수 있습니다. 즉시 포기하면 곧
-    /// 착지할 삭제가 원문을 지운 뒤 방출이 보류돼 단어가 사라집니다. 지연
-    /// 검증기를 둘 수 없는 제출·undo 경로는 이 사다리로 통상 앱의 이벤트
-    /// 처리(1~2 프레임)를 기다립니다. 대기 총량은 기존 수용된 콜백 내 대기
-    /// 등급(27ms 백스페이스 열)과 같습니다.
-    private func awaitDeletionEvidence(
-        _ focusToken: FocusedInputSafety.FocusToken,
-        original: String,
-        shouldContinue: () -> Bool
-    ) -> FocusedInputSafety.DeletionEvidence {
-        var evidence = focusInspector.deletionLanded(
-            focusToken,
-            original: original,
-            shouldContinue: shouldContinue
-        )
-        for retryPause: useconds_t in [8_000, 16_000] where evidence != .landed {
-            guard shouldContinue() else { break }
-            pause(retryPause)
-            evidence = focusInspector.deletionLanded(
-                focusToken,
-                original: original,
-                shouldContinue: shouldContinue
-            )
-        }
-        return evidence
-    }
-
-    /// 지연 경로 전용. 원문을 지운 뒤 **삭제가 실제로 반영됐는지 확인**하고서만
-    /// 교정문을 내보냅니다. 흡수됐다면 원문 위에 덧붙어 화면을 파괴하므로
-    /// 내보내지 않습니다. 게시한 CGEvent는 회수 불가라, 아직 반영 전(ambiguous)일
-    /// 때는 포기하지 않고 비동기 검증기로 이관해 반영을 기다립니다.
-    private func applyDeferredBoundaryCorrection(
-        _ decision: CorrectionDecision,
-        boundarySequence: BoundarySequence,
-        focusToken: FocusedInputSafety.FocusToken,
-        generation: UInt64
-    ) {
-        for _ in 0..<decision.originalCharacterCount {
-            sendKeyEvent(keycode: EventTapManager.backspaceKeycode, shift: false)
-            pause(3000)
-        }
-        switch focusInspector.deletionLanded(
-            focusToken,
-            original: decision.original,
-            shouldContinue: { true }
-        ) {
-        case .landed:
-            emitReplacement(
-                decision,
-                boundarySequence: boundarySequence,
-                focusToken: focusToken
-            )
-        case .notLanded, .ambiguous:
-            // 첫 프로브 시점(+3ms)에는 게시한 백스페이스가 아직 처리 전인 경우가
-            // 흔해, "원문이 아직 보인다(notLanded)"만으로는 흡수와 비행 중을
-            // 구분할 수 없습니다. 여기서 즉시 포기하면 곧 착지할 삭제가 원문을
-            // 지운 뒤 교정문이 안 나가 **단어가 사라집니다**(실사용 확인 —
-            // ㅈㄷ 소실). 두 경우 모두 검증기로 넘겨 재확인하고, 소진될 때까지
-            // 원문이 계속 보일 때만 진짜 흡수로 확정합니다. 콜백 안에서
-            // usleep으로 기다리면 메인 런루프(탭 소스)를 막아 시스템 입력이
-            // 멈추므로 asyncAfter로만 재확인합니다.
-            scheduleDeletionVerifier(
-                decision,
-                boundarySequence: boundarySequence,
-                focusToken: focusToken,
-                generation: generation,
-                attempt: 0
-            )
-        }
-    }
-
-    /// ambiguous(비행 중) 삭제를 asyncAfter로 재확인합니다. generation이 바뀌면
-    /// (사용자가 키·클릭·입력 소스를 바꿈) 즉시 취소해 **늦은 방출을 금지**합니다 —
-    /// 이미 다음 입력으로 넘어간 화면에 교정문을 내보내면 그게 손상입니다.
-    private func scheduleDeletionVerifier(
-        _ decision: CorrectionDecision,
-        boundarySequence: BoundarySequence,
-        focusToken: FocusedInputSafety.FocusToken,
-        generation: UInt64,
-        attempt: Int
-    ) {
-        scheduleBoundaryCorrection { [weak self] in
-            guard let self,
-                  self.boundaryCorrectionGeneration == generation else {
-                return
-            }
-            switch self.focusInspector.deletionLanded(
-                focusToken,
-                original: decision.original,
-                shouldContinue: { true }
-            ) {
-            case .landed:
-                self.emitReplacement(
-                    decision,
-                    boundarySequence: boundarySequence,
-                    focusToken: focusToken
-                )
-            case .notLanded, .ambiguous:
-                // notLanded도 재시도 대상입니다 — 느린 앱은 검증기 회차에도
-                // 아직 백스페이스를 처리 전일 수 있습니다. 소진(~300ms)까지
-                // 원문이 계속 보이면 그때 진짜 흡수로 확정하고 포기합니다 —
-                // 그 시점의 화면은 원문 그대로이므로 완전한 no-op입니다.
-                guard attempt < EventTapManager.maximumDeletionVerifierAttempts else {
-                    EventTapManager.diagnostic("deletion verifier exhausted — abort, no emission")
-                    return
-                }
-                self.scheduleDeletionVerifier(
-                    decision,
-                    boundarySequence: boundarySequence,
-                    focusToken: focusToken,
-                    generation: generation,
-                    attempt: attempt + 1
-                )
-            }
-        }
     }
 
     /// 모든 교정 경로의 후처리를 한 곳에 모읍니다. 입력 소스 콜백이
@@ -1782,22 +1623,6 @@ class EventTapManager {
         for _ in 0..<transaction.decision.replacementCharacterCount {
             sendKeyEvent(keycode: EventTapManager.backspaceKeycode, shift: false)
             pause(3000)
-        }
-        // 교정문 삭제가 반영됐는지 확인한 뒤에만 원문을 되돌립니다. 흡수됐다면
-        // 교정문이 남은 채 원문이 덧붙어 화면을 파괴하므로 원문을 내보내지
-        // 않습니다. 트랜잭션은 지워(칩 내림) 재시도로 두 번째 백스페이스 일제
-        // 사격이 교정 밖 텍스트까지 지우는 것을 막고, Cmd-Z는 소비해 앱 undo와
-        // 겹치지 않게 합니다.
-        guard awaitDeletionEvidence(
-            transaction.focusToken,
-            original: transaction.decision.replacement,
-            shouldContinue: { true }
-        ) == .landed else {
-            EventTapManager.diagnostic("undo withheld — replacement deletion not confirmed")
-            resetAutomaticCorrectionToken()
-            tracker.reset()
-            clearUndoTransaction(notify: true)
-            return true
         }
         sendUnicodeText(transaction.decision.original)
         pause(3000)
