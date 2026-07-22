@@ -190,6 +190,171 @@ final class EventTapManagerTests: XCTestCase {
         )
     }
 
+    // MARK: - "첫 단어만 안 바뀐다" — 두 가설의 판별 실험
+    //
+    // 재현(3회, 모두 Safari 주소창): 같은 필드에서 **첫 토큰만** 교정되지 않고
+    // 그 뒤 토큰은 전부 정상. "아주 좋아"를 치면 "dkwn 좋아"가 남는다.
+    //
+    // 가설 A — 일시적 선택 영역. 주소창을 클릭하면 URL 전체가 선택된다.
+    //   head-insert 탭이라 첫 keyDown은 앱이 선택을 접기 전에 도착하고, 그
+    //   조회만 `.ineligible`을 받는다. 재시도가 없으므로 그 토큰이 통째로 죽는다.
+    // 가설 B — 차가운 AX가 시도 예산을 소진. 시도 횟수가 키가 아니라 토큰
+    //   단위라, 키마다 한 번씩 실패하면 세 번째 키에서 상한에 닿아 확정 거부된다.
+    //
+    // 아래 세 테스트는 *의도한* 동작을 고정한다 — 어느 쪽이든 첫 단어는 교정돼야
+    // 한다. 실패하는 쪽이 실제 원인이다. 마지막 대조군은 HEAD에서 통과해야
+    // 하며, 그것이 깨지면 원인은 제품이 아니라 이 하네스 사용법이다.
+
+    /// 가설 A. 첫 조회만 낡은 선택 영역을 읽어 거부돼도, 그 단어는 교정돼야 한다.
+    ///
+    /// 알려진 미해결 버그(감사 #10): 첫 키의 `.ineligible`(선택 영역 있음)을
+    /// 영구 거부로 래치해 그 단어를 통째로 버린다. 선택은 그 키가 곧 지울
+    /// *직전 상태*의 증거일 뿐인데 확정 거부로 취급한다. 근본 수정은 선택-전용
+    /// 거부를 `.transientSelection` 같은 별도 상태로 나눠 다음 키에서 다시 묻는
+    /// 것. 고쳐지면 이 기대 실패가 풀려 테스트가 알려준다. 감싼 것을 벗겨라.
+    func testTransientSelectionOnFirstKeyStillCorrectsThatWord() {
+        XCTExpectFailure(
+            "미해결: 선택 영역이 첫 키에서 토큰을 통째로 죽인다 (감사 #10)"
+        )
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.ineligibleProbesRemaining = 1   // 첫 키만 낡은 선택을 읽는다
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("dkwn", into: manager)
+        _ = manager.handleKeyDown(keyDown(0x31))
+        _ = manager.handleKeyUp(keyUp(0x31))
+
+        XCTAssertTrue(
+            output.actions.contains(.text("아주")),
+            "첫 키의 일시적 선택 영역 때문에 그 단어를 통째로 잃었습니다: \(output.actions)"
+        )
+    }
+
+    /// 가설 A의 증상 고정. 첫 단어만 죽고 두 번째 단어는 살아나는지 —
+    /// 사용자가 겪은 모양 그대로인지 확인한다. 이 테스트는 현재 동작을 기술만
+    /// 하므로 HEAD에서 통과해도 정상이며, 통과 자체가 A의 증거가 된다.
+    func testTransientSelectionSymptomIsFirstWordOnly() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.ineligibleProbesRemaining = 1
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("dkwn", into: manager)
+        _ = manager.handleKeyDown(keyDown(0x31))
+        _ = manager.handleKeyUp(keyUp(0x31))
+        let afterFirstWord = output.actions
+        output.actions.removeAll()
+
+        type("dkwn", into: manager)
+        _ = manager.handleKeyDown(keyDown(0x31))
+        _ = manager.handleKeyUp(keyUp(0x31))
+        let afterSecondWord = output.actions
+
+        XCTAssertFalse(
+            afterFirstWord.contains(.text("아주")),
+            "증상 기술: 첫 단어는 교정되지 않아야 재현이다"
+        )
+        XCTAssertTrue(
+            afterSecondWord.contains(.text("아주")),
+            "증상 기술: 두 번째 단어는 정상 교정돼야 재현이다: \(afterSecondWord)"
+        )
+    }
+
+    /// 가설 B. 키마다 조회 하나가 AX 예산을 다 써서 세 키 연속 실패해도,
+    /// 네 번째 키에서 성공하면 그 단어는 교정돼야 한다.
+    ///
+    /// 조회가 일어날 때만 시계를 밀어, 키마다 재시도 없이 조회 **한 번**만
+    /// 하도록 만든다(예산 만료). 경계 처리 경로는 조회를 하지 않으므로 그쪽
+    /// 예산은 건드리지 않는다.
+    func testColdAXAcrossThreeKeysStillCorrectsThatWord() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.transientFailuresRemaining = 3
+        var clock: TimeInterval = 0
+        focus.onProbeRequest = { clock += 0.2 }
+        let manager = makeManager(
+            output: output,
+            focus: focus,
+            monotonicNow: { clock }
+        )
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("dkwn", into: manager)
+        _ = manager.handleKeyDown(keyDown(0x31))
+        _ = manager.handleKeyUp(keyUp(0x31))
+
+        XCTAssertTrue(
+            output.actions.contains(.text("아주")),
+            "토큰 단위 시도 예산이 단어 중간에서 소진돼 나머지 키를 버렸습니다: \(output.actions)"
+        )
+    }
+
+    /// 대조군. 같은 시계 장치에 실패를 **한 번**만 두면 예산 안에서 회복해야
+    /// 한다. 이것마저 실패하면 제품이 아니라 위 두 테스트의 하네스 사용이 틀린
+    /// 것이므로, 위 결과를 근거로 삼을 수 없다.
+    func testColdAXWithinAttemptBudgetRecoversAndCorrects() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.transientFailuresRemaining = 1
+        var clock: TimeInterval = 0
+        focus.onProbeRequest = { clock += 0.2 }
+        let manager = makeManager(
+            output: output,
+            focus: focus,
+            monotonicNow: { clock }
+        )
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("dkwn", into: manager)
+        _ = manager.handleKeyDown(keyDown(0x31))
+        _ = manager.handleKeyUp(keyUp(0x31))
+
+        XCTAssertTrue(
+            output.actions.contains(.text("아주")),
+            "대조군이 깨졌습니다 — 하네스 사용이 틀렸다는 뜻입니다: \(output.actions)"
+        )
+    }
+
+    /// 가설 B의 더 단순한 변종. 시계를 조작하지 않아도 재현된다.
+    ///
+    /// 예산이 남아 있으면 **첫 keyDown 안에서** 재시도가 세 번 다 소모되고,
+    /// 세 번째가 여전히 실패하면 그 자리에서 확정 거부로 굳는다. 그 뒤 이
+    /// 토큰에서는 AX가 아무리 멀쩡해져도 다시 묻지 않는다.
+    ///
+    /// 알려진 미해결 버그(감사 #6): per-key 카운터 수정으로 "키마다 1회씩 3키"
+    /// 경로는 살렸지만, AX가 아주 차가워 첫 키의 재시도 3회가 전부 실패하면
+    /// `.unavailable` 소진을 여전히 확정 거부로 래치한다. 근본 수정은 소진을
+    /// `false`로 굳히지 말고 키열을 계속 기록해 나중 키가 성공하게 두는 것.
+    /// 고쳐지면 이 기대 실패가 풀린다. 감싼 것을 벗겨라.
+    func testColdAXExhaustingRetriesInOneKeyStillCorrectsThatWord() {
+        XCTExpectFailure(
+            "미해결: 첫 키 재시도 3회 전부 실패 시 소진을 확정 거부로 래치 (감사 #6)"
+        )
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.transientFailuresRemaining = 3   // 네 번째부터는 정상
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("dkwn", into: manager)
+        _ = manager.handleKeyDown(keyDown(0x31))
+        _ = manager.handleKeyUp(keyUp(0x31))
+
+        XCTAssertTrue(
+            output.actions.contains(.text("아주")),
+            "첫 키가 재시도 예산을 다 태워 토큰이 굳었습니다: \(output.actions) "
+                + "조회 \(focus.tokenRequestCount)회"
+        )
+    }
+
     // MARK: - Layer 1 어휘 tiebreaker 배선
     //
     // 규칙만으로는 한국어·영어 두 문법을 모두 만족하는 토큰을 가를 수 없어
@@ -2373,6 +2538,14 @@ private final class FakeFocusInspector: EventTapFocusInspecting {
     /// 이 횟수만큼 조회가 *일시적으로* 실패한 뒤 성공합니다. Chrome처럼 차가운
     /// 첫 조회가 타임아웃 나는 앱을 흉내 냅니다.
     var transientFailuresRemaining = 0
+    /// 이 횟수만큼 조회가 `.ineligible`을 돌려준 뒤 성공합니다. Safari 주소창을
+    /// 클릭하면 URL 전체가 선택된 채로 남아 있고, head-insert 이벤트 탭은 앱이
+    /// 그 선택을 접기 *전에* 첫 keyDown을 받습니다. 그 순간의 조회만 낡은 선택
+    /// 영역을 읽어 거부되고, 다음 키부터는 정상입니다.
+    var ineligibleProbesRemaining = 0
+    /// 조회가 일어날 때마다 불립니다. 조회 하나가 AX 예산을 통째로 쓰는 앱을
+    /// 흉내 내려고 테스트가 여기서 시계를 밀 수 있습니다.
+    var onProbeRequest: (() -> Void)?
     /// 캡처 앵커가 낡아 산술 검증이 실패해도, 캐럿 앞 글자 대조는 통과하는 상황.
     var caretTextMatches = false
     var caretTextCheckOriginals: [String] = []
@@ -2390,6 +2563,12 @@ private final class FakeFocusInspector: EventTapFocusInspecting {
     }
 
     func probeAutomaticCorrectionFocus() -> FocusedInputSafety.FocusProbe {
+        onProbeRequest?()
+        if ineligibleProbesRemaining > 0 {
+            ineligibleProbesRemaining -= 1
+            tokenRequestCount += 1
+            return .ineligible
+        }
         if transientFailuresRemaining > 0 {
             transientFailuresRemaining -= 1
             tokenRequestCount += 1

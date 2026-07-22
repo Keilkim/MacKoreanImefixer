@@ -196,7 +196,6 @@ class EventTapManager {
     private var undoExpirationWorkItem: DispatchWorkItem?
     private var suppressedPhysicalKeyUps: Set<UInt16> = []
     private var suppressedPhysicalRepeatKeyDowns: Set<UInt16> = []
-    private var automaticCorrectionProbeAttempts = 0
     private var preserveUndoAcrossNextInputSourceChange = false
     private let keyboardOutput: EventTapKeyboardOutputting
     private let focusInspector: EventTapFocusInspecting
@@ -764,21 +763,28 @@ class EventTapManager {
                 // Chrome에서는 자동 교정이 영영 걸리지 않습니다. 실제로 그랬습니다.
                 //
                 // 실패한 조회 자체가 AX 연결을 데우므로 예산 안에서는 곧바로
-                // 재시도합니다. 예산을 넘기면 키열만 보존하고 다음 글자에서 남은
-                // 횟수를 사용합니다. 이렇게 해야 첫 글자를 잃지 않으면서도 멈춘
-                // 앱의 AX IPC가 한 keyDown을 오래 붙잡지 않습니다.
+                // 재시도합니다. 예산을 넘기면 키열만 보존하고 다음 글자에서
+                // 새 횟수로 다시 확인합니다. 이렇게 해야 첫 글자를 잃지 않으면서도
+                // 멈춘 앱의 AX IPC가 한 keyDown을 오래 붙잡지 않습니다.
+                //
+                // 시도 횟수는 **이 키 안에서만** 셉니다. 토큰 단위로 누적하면
+                // 차가운 앱에서 첫 두세 키가 횟수를 다 써 버리고, 그 시점부터
+                // 아래 `!= false` 게이트가 그 단어의 나머지 키를 통째로 버립니다
+                // — 단어 하나가 통째로 교정 후보에서 사라집니다. 실제로 그랬고
+                // (`4bb0dbb`가 지역 변수를 인스턴스 변수로 바꾸며 생긴 회귀),
+                // 아래 두 회귀 테스트가 이걸 고정합니다.
                 let focusProbeDeadline = monotonicNow()
                     + EventTapManager.synchronousAXTimeBudget
                 var probe = focusInspector.probeAutomaticCorrectionFocus()
-                automaticCorrectionProbeAttempts += 1
+                var probeAttempts = 1
                 while case .unavailable = probe,
-                      automaticCorrectionProbeAttempts
+                      probeAttempts
                         < EventTapManager.maximumFocusProbeAttempts,
                       monotonicNow() < focusProbeDeadline {
                     // 실패한 조회 자체가 AX 연결을 데우므로 다음 시도는
                     // 데워진 경로(실측 중앙값 0.4ms)로 곧장 돌아옵니다.
                     probe = focusInspector.probeAutomaticCorrectionFocus()
-                    automaticCorrectionProbeAttempts += 1
+                    probeAttempts += 1
                 }
                 switch probe {
                 case .eligible(let token):
@@ -789,10 +795,12 @@ class EventTapManager {
                     automaticCorrectionFieldAllowed = false
                 case .unavailable:
                     automaticCorrectionFocusToken = nil
-                    // 현재 키에서는 AX 예산만큼만 기다립니다. 시도 횟수가
-                    // 남았다면 키열은 메모리에만 보존하고 다음 글자에서 다시
-                    // 확인합니다. exact-text 검증 전에는 화면을 바꾸지 않습니다.
-                    if automaticCorrectionProbeAttempts
+                    // 이 키 안에서 상한까지 다 물어봤는데도 안 되면 AX가 계속
+                    // 죽어 있는 앱으로 보고 확정합니다. 예산 때문에 횟수를 남긴
+                    // 채 빠져나왔다면 키열은 메모리에만 보존하고 다음 글자에서
+                    // 새 횟수로 다시 확인합니다. exact-text 검증 전에는 화면을
+                    // 바꾸지 않습니다.
+                    if probeAttempts
                         >= EventTapManager.maximumFocusProbeAttempts {
                         automaticCorrectionFieldAllowed = false
                     }
@@ -1849,7 +1857,6 @@ class EventTapManager {
     private func clearAutomaticCorrectionFocus() {
         automaticCorrectionFieldAllowed = nil
         automaticCorrectionFocusToken = nil
-        automaticCorrectionProbeAttempts = 0
     }
 
     private func resetAutomaticCorrectionState() {
