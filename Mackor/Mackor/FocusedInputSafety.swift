@@ -524,24 +524,26 @@ enum FocusedInputSafety {
         guard let rangeValue = AXValueCreate(.cfRange, &range) else {
             return .ambiguous
         }
+        // 캐럿이 앵커로 돌아온 것(위 guard 통과) 자체가 삭제 착지의 1차 증거입니다.
+        // 흡수돼 삭제가 안 됐다면 캐럿은 앵커가 아니라 원문 뒤에 남아 위에서 이미
+        // .ambiguous로 걸립니다. 문자열 읽기는 오직 "앵커에서 원문이 아직 그대로
+        // 읽히는가"를 확인해 방출을 **거부**하는 용도입니다(캐럿을 조합 시작점으로
+        // 보고하는 마크드-텍스트 앱 방어). 읽기가 실패하면(범위 밖 = 방금 친 단어가
+        // 필드 끝이라 삭제됨) 원문이 거기 없다는 뜻이므로 착지로 봅니다 — 이걸
+        // .ambiguous로 두면 끝-필드 교정(가장 흔한 경우)이 영영 확정되지 못해
+        // 삭제만 되고 교정문이 안 나가 단어가 사라졌습니다.
         var stringValue: CFTypeRef?
-        guard AXUIElementCopyParameterizedAttributeValue(
+        let readOK = AXUIElementCopyParameterizedAttributeValue(
             element,
             kAXStringForRangeParameterizedAttribute as CFString,
             rangeValue,
             &stringValue
-        ) == .success,
-        let text = stringValue as? String else {
-            // 읽기 실패는 landed로 낙관하지 않습니다 — 원문이 그대로인데 못 읽는
-            // 경우와 구분할 수 없으므로 방출 금지 쪽(ambiguous)으로 둡니다.
-            diagnostic("deletion gate ambiguous — could not read range text")
-            return .ambiguous
-        }
-        if text == original {
+        ) == .success
+        if readOK, let text = stringValue as? String, text == original {
             diagnostic("deletion gate notLanded — original still present anchor=\(anchor)")
             return .notLanded
         }
-        diagnostic("deletion gate landed — anchor=\(anchor)")
+        diagnostic("deletion gate landed — anchor=\(anchor) readOK=\(readOK)")
         return .landed
     }
 
