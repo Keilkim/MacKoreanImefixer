@@ -184,8 +184,11 @@ final class EventTapManagerTests: XCTestCase {
         XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
 
         XCTAssertTrue(output.actions.isEmpty, "실패가 계속되는데 교정을 시도했습니다")
+        // 소프트 상한(2키) × in-key 재시도(3회) = 6에서 확정 거부로 굳는다.
+        // 8키 "dkwndkwn"을 쳐도 6에 머물러 "조회는 토큰당 O(1), 키당 아님"
+        // 불변식이 유지됨을 못박는다(상수만 3→6으로 바뀜).
         XCTAssertLessThanOrEqual(
-            focus.tokenRequestCount, 3,
+            focus.tokenRequestCount, 6,
             "상한을 넘겨 매 키마다 조회했습니다: \(focus.tokenRequestCount)회"
         )
     }
@@ -207,15 +210,11 @@ final class EventTapManagerTests: XCTestCase {
 
     /// 가설 A. 첫 조회만 낡은 선택 영역을 읽어 거부돼도, 그 단어는 교정돼야 한다.
     ///
-    /// 알려진 미해결 버그(감사 #10): 첫 키의 `.ineligible`(선택 영역 있음)을
-    /// 영구 거부로 래치해 그 단어를 통째로 버린다. 선택은 그 키가 곧 지울
-    /// *직전 상태*의 증거일 뿐인데 확정 거부로 취급한다. 근본 수정은 선택-전용
-    /// 거부를 `.transientSelection` 같은 별도 상태로 나눠 다음 키에서 다시 묻는
-    /// 것. 고쳐지면 이 기대 실패가 풀려 테스트가 알려준다. 감싼 것을 벗겨라.
+    /// 수정됨(감사 #10): 선택-전용 거부를 `.ineligibleTransientSelection`으로
+    /// 분리해 즉시 래치하지 않고 다음 키에서 재확인한다. 첫 키에서 선택이
+    /// 읽혀도 키열은 계속 기록되고, 둘째 키에서 빈 캐럿으로 바뀌면 `.eligible`이
+    /// 떠 그 단어가 교정된다.
     func testTransientSelectionOnFirstKeyStillCorrectsThatWord() {
-        XCTExpectFailure(
-            "미해결: 선택 영역이 첫 키에서 토큰을 통째로 죽인다 (감사 #10)"
-        )
         let output = FakeKeyboardOutput()
         let focus = FakeFocusInspector()
         focus.ineligibleProbesRemaining = 1   // 첫 키만 낡은 선택을 읽는다
@@ -233,10 +232,10 @@ final class EventTapManagerTests: XCTestCase {
         )
     }
 
-    /// 가설 A의 증상 고정. 첫 단어만 죽고 두 번째 단어는 살아나는지 —
-    /// 사용자가 겪은 모양 그대로인지 확인한다. 이 테스트는 현재 동작을 기술만
-    /// 하므로 HEAD에서 통과해도 정상이며, 통과 자체가 A의 증거가 된다.
-    func testTransientSelectionSymptomIsFirstWordOnly() {
+    /// 수정 후: 첫 단어도 두 번째 단어도 모두 교정돼야 한다. 예전엔 첫 단어만
+    /// 죽던 증상(사용자가 겪은 그대로)이 이 수정으로 사라졌음을 고정한다 —
+    /// 전이 선택을 즉시 확정 거부하지 않고 다음 키에서 재확인하기 때문이다.
+    func testTransientSelectionCorrectsFirstWordToo() {
         let output = FakeKeyboardOutput()
         let focus = FakeFocusInspector()
         focus.ineligibleProbesRemaining = 1
@@ -255,13 +254,13 @@ final class EventTapManagerTests: XCTestCase {
         _ = manager.handleKeyUp(keyUp(0x31))
         let afterSecondWord = output.actions
 
-        XCTAssertFalse(
+        XCTAssertTrue(
             afterFirstWord.contains(.text("아주")),
-            "증상 기술: 첫 단어는 교정되지 않아야 재현이다"
+            "수정 후 첫 단어도 교정돼야 한다: \(afterFirstWord)"
         )
         XCTAssertTrue(
             afterSecondWord.contains(.text("아주")),
-            "증상 기술: 두 번째 단어는 정상 교정돼야 재현이다: \(afterSecondWord)"
+            "두 번째 단어도 정상 교정돼야 한다: \(afterSecondWord)"
         )
     }
 
@@ -328,15 +327,11 @@ final class EventTapManagerTests: XCTestCase {
     /// 세 번째가 여전히 실패하면 그 자리에서 확정 거부로 굳는다. 그 뒤 이
     /// 토큰에서는 AX가 아무리 멀쩡해져도 다시 묻지 않는다.
     ///
-    /// 알려진 미해결 버그(감사 #6): per-key 카운터 수정으로 "키마다 1회씩 3키"
-    /// 경로는 살렸지만, AX가 아주 차가워 첫 키의 재시도 3회가 전부 실패하면
-    /// `.unavailable` 소진을 여전히 확정 거부로 래치한다. 근본 수정은 소진을
-    /// `false`로 굳히지 말고 키열을 계속 기록해 나중 키가 성공하게 두는 것.
-    /// 고쳐지면 이 기대 실패가 풀린다. 감싼 것을 벗겨라.
+    /// 수정됨(감사 #6): 첫 키의 재시도 3회가 전부 소진돼도 즉시 확정 거부로
+    /// 굳히지 않고 소프트 카운터만 1 올린 뒤 키열을 계속 기록한다. 실패한
+    /// 조회가 AX를 데우므로 둘째 키가 `.eligible`을 받아 그 단어를 교정한다.
+    /// 소진이 상한 키 수(2)만큼 이어질 때만 확정 거부로 굳는다.
     func testColdAXExhaustingRetriesInOneKeyStillCorrectsThatWord() {
-        XCTExpectFailure(
-            "미해결: 첫 키 재시도 3회 전부 실패 시 소진을 확정 거부로 래치 (감사 #6)"
-        )
         let output = FakeKeyboardOutput()
         let focus = FakeFocusInspector()
         focus.transientFailuresRemaining = 3   // 네 번째부터는 정상
@@ -352,6 +347,277 @@ final class EventTapManagerTests: XCTestCase {
             output.actions.contains(.text("아주")),
             "첫 키가 재시도 예산을 다 태워 토큰이 굳었습니다: \(output.actions) "
                 + "조회 \(focus.tokenRequestCount)회"
+        )
+    }
+
+    // MARK: - 소프트 거부 안전망 — 새로 넓힌 경로가 파괴로 새지 않는지 고정
+    //
+    // 아래 세 테스트는 "일시적 거부를 미해결로 보존"이라는 이번 변경이, 늘어난
+    // 적격 토큰을 파괴 경로로 흘리지 않음을 못박는다. 영구 거부는 여전히 첫
+    // 프로브에서 굳고(#2), 늘 선택된 필드는 키당 thrash 없이 2프로브에서 굳으며
+    // (#1, 3d44306 perf 보존), 새로 적격이 된 토큰도 경계 검증이 실패하면
+    // 파괴 없이 포기한다(#3, 결정적 안전 논증의 토큰 집단판).
+
+    /// URL이 아니면서 늘 전체 선택을 유지하는 드문 필드: 소프트 상한(2)에서
+    /// 확정 거부로 굳고, 키당 AX 조회를 반복하지 않는다(정확히 2회). 3d44306이
+    /// 지키려던 "영구 선택 필드에서 키당 thrash 없음" 불변식을 선택측에서 고정.
+    func testPersistentlySelectedFieldRefusesAfterTwoProbes() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.ineligibleProbesRemaining = 99   // 끝까지 선택 유지
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("dkwn", into: manager)
+        _ = manager.handleKeyDown(keyDown(0x31))
+        _ = manager.handleKeyUp(keyUp(0x31))
+
+        XCTAssertTrue(
+            output.actions.isEmpty,
+            "늘 선택된 필드에서 교정을 시도했습니다: \(output.actions)"
+        )
+        XCTAssertEqual(
+            focus.tokenRequestCount, 2,
+            "선택은 in-key 재시도 대상이 아니어야 합니다 — 키당 thrash: \(focus.tokenRequestCount)회"
+        )
+    }
+
+    /// 영구 거부(보안·미지원 role·보호 subrole·보호 메타데이터)는 소프트
+    /// 카운터로 완화되지 않고 첫 프로브에서 즉시 확정 거부로 굳는다.
+    func testPermanentIneligibleLatchesOnFirstProbe() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.tokenAvailable = false   // 영구 .ineligible
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("dkwn", into: manager)
+        _ = manager.handleKeyDown(keyDown(0x31))
+        _ = manager.handleKeyUp(keyUp(0x31))
+
+        XCTAssertTrue(
+            output.actions.isEmpty,
+            "영구 거부 필드에서 교정을 시도했습니다: \(output.actions)"
+        )
+        XCTAssertEqual(
+            focus.tokenRequestCount, 1,
+            "영구 거부가 소프트 카운터로 완화됐습니다 — 프로브 \(focus.tokenRequestCount)회"
+        )
+    }
+
+    /// 전이 선택으로 미뤘다가 뒤늦게 적격이 된 토큰도, 경계에서 두 검증(anchored·
+    /// reanchored)이 모두 실패하면 삭제하지 않고 안전하게 포기한다. 넓힌 경로가
+    /// 파괴 경로에 미검증 토큰을 넘기지 않음을 직접 고정.
+    func testRecoveredTransientTokenAbandonsWhenBoundaryUnverified() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.ineligibleProbesRemaining = 1     // 키1 전이 선택 → 키2 적격
+        focus.currentFocusMatches = false       // anchored 실패
+        // caretTextMatches는 기본 false — reanchored도 실패
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("dkwn", into: manager)
+        _ = manager.handleKeyDown(keyDown(0x31))
+        _ = manager.handleKeyUp(keyUp(0x31))
+
+        XCTAssertFalse(
+            output.actions.contains(.text("아주")),
+            "경계 검증이 모두 실패했는데 교정(삭제)을 시도했습니다: \(output.actions)"
+        )
+    }
+
+    // MARK: - 삭제 착지 게이트 — 흡수된 삭제 위에 방출해 화면을 파괴하지 않는다
+    //
+    // 교정은 원문을 지운 뒤 교정문을 넣는다. 게시한 Backspace가 IME 조합·선택
+    // 영역에 흡수되면 원문이 남아 교정문이 덧붙는다(확인된 "솓the" 손상). 아래
+    // 테스트는 방출 전에 삭제 반영을 3값(landed/notLanded/ambiguous)으로 확인하고,
+    // 미확인이면 방출하지 않으며, 비행 중(ambiguous)이면 비동기 검증기로 기다림을
+    // 고정한다. fake 기본값 .landed 라 기존 테스트는 그대로 통과한다.
+
+    /// 지연 경로: 삭제 미확인(ambiguous)이면 교정문을 내보내지 않고 검증기를
+    /// 예약한다. caretTextMatches 기본 false가 fast 경로를 막아 지연으로 보낸다.
+    func testDeferredUnconfirmedDeletionEmitsNothingAndSchedulesVerifier() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.deletionEvidenceResponses = [.ambiguous]
+        var scheduled: [() -> Void] = []
+        let manager = makeManager(
+            output: output,
+            focus: focus,
+            scheduleBoundaryCorrection: { scheduled.append($0) }
+        )
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("gksrmf", into: manager)
+        _ = manager.handleKeyDown(keyDown(0x31))
+        _ = manager.handleKeyUp(keyUp(0x31))
+        XCTAssertEqual(scheduled.count, 1, "교정 시도가 예약돼야 합니다")
+
+        scheduled.removeFirst()()   // 7 백스페이스 + 게이트 .ambiguous → 검증기 예약
+
+        XCTAssertFalse(
+            output.actions.contains(.text("한글")),
+            "삭제 미확인인데 교정문을 방출했습니다: \(output.actions)"
+        )
+        XCTAssertEqual(output.actions, Array(repeating: .key(0x33, false), count: 7))
+        XCTAssertEqual(scheduled.count, 1, "ambiguous는 검증기를 예약해야 합니다")
+    }
+
+    /// 검증기가 뒤늦게 착지를 확인하면 그때 교정문을 완성한다.
+    func testDeferredVerifierCompletesEmissionWhenDeletionLands() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.deletionEvidenceResponses = [.ambiguous, .landed]
+        var scheduled: [() -> Void] = []
+        let manager = makeManager(
+            output: output,
+            focus: focus,
+            scheduleBoundaryCorrection: { scheduled.append($0) }
+        )
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("gksrmf", into: manager)
+        _ = manager.handleKeyDown(keyDown(0x31))
+        _ = manager.handleKeyUp(keyUp(0x31))
+
+        scheduled.removeFirst()()   // ambiguous → 검증기 예약, 방출 없음
+        XCTAssertFalse(output.actions.contains(.text("한글")))
+        XCTAssertEqual(scheduled.count, 1)
+
+        scheduled.removeFirst()()   // 검증기 .landed → 교정문 방출
+
+        XCTAssertEqual(
+            Array(output.actions.suffix(2)),
+            [.text("한글"), .key(0x31, false)],
+            "착지 확인 후 교정문+경계가 방출돼야 합니다: \(output.actions)"
+        )
+    }
+
+    /// 흡수 확정(notLanded)이면 원문이 화면에 무사하므로 방출하지 않고, 검증기도
+    /// 예약하지 않는다(완전 no-op). 손상을 무동작으로 바꾸는 핵심 경로.
+    func testDeferredNotLandedAbortsWithoutEmittingOrScheduling() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.deletionEvidenceResponses = [.notLanded]
+        var scheduled: [() -> Void] = []
+        let manager = makeManager(
+            output: output,
+            focus: focus,
+            scheduleBoundaryCorrection: { scheduled.append($0) }
+        )
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("gksrmf", into: manager)
+        _ = manager.handleKeyDown(keyDown(0x31))
+        _ = manager.handleKeyUp(keyUp(0x31))
+        scheduled.removeFirst()()
+
+        XCTAssertFalse(
+            output.actions.contains(.text("한글")),
+            "흡수 확정인데 교정문을 방출했습니다: \(output.actions)"
+        )
+        XCTAssertEqual(output.actions, Array(repeating: .key(0x33, false), count: 7))
+        XCTAssertTrue(scheduled.isEmpty, "notLanded는 검증기를 예약하지 않아야 합니다")
+    }
+
+    /// 검증기 대기 중 사용자가 다음 키를 치면(generation 증가) 검증기가 취소돼
+    /// 늦은 방출을 하지 않는다. 이미 다음 입력으로 넘어간 화면 보호.
+    func testDeferredVerifierCancelledByNextKeyDownEmitsNothing() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.deletionEvidenceResponses = [.ambiguous, .landed]  // 검증기는 원래 착지할 예정
+        var scheduled: [() -> Void] = []
+        let manager = makeManager(
+            output: output,
+            focus: focus,
+            scheduleBoundaryCorrection: { scheduled.append($0) }
+        )
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("gksrmf", into: manager)
+        _ = manager.handleKeyDown(keyDown(0x31))
+        _ = manager.handleKeyUp(keyUp(0x31))
+        scheduled.removeFirst()()   // ambiguous → 검증기 예약
+
+        // 사용자가 다음 글자를 침 → generation 증가 → 검증기 취소돼야 함
+        _ = manager.handleKeyDown(keyDown(Self.keycodes["g"]!))
+        scheduled.removeFirst()()   // 검증기 실행 — generation 불일치로 조용히 종료
+
+        XCTAssertFalse(
+            output.actions.contains(.text("한글")),
+            "검증기가 취소됐어야 하는데 늦게 방출했습니다: \(output.actions)"
+        )
+    }
+
+    /// 제출 경로: 삭제 미확인이면 교정문을 내보내지 않는다. 제출 키는 defer가
+    /// 그대로 전달하므로 최종 화면은 원문+Enter(사용자가 친 그대로). 검증기 없음.
+    func testSubmitRefusesEmissionWhenDeletionUnconfirmed() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.deletionEvidenceResponses = [.notLanded]
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("gksrmf", into: manager)
+        XCTAssertNil(manager.handleKeyDown(keyDown(0x24)))   // Enter 억제
+
+        XCTAssertFalse(
+            output.actions.contains(.text("한글")),
+            "삭제 미확인인데 제출 교정문을 방출했습니다: \(output.actions)"
+        )
+        XCTAssertEqual(
+            output.actions,
+            Array(repeating: .key(0x33, false), count: 6) + [.key(0x24, false)],
+            "6 백스페이스 + 제출 키만 나와야 합니다: \(output.actions)"
+        )
+    }
+
+    /// undo: 교정문 삭제가 미확인이면 원문을 되돌리지 않고 트랜잭션을 지운다.
+    /// Cmd-Z는 소비하고, 두 번째 Cmd-Z는 트랜잭션이 없어 앱으로 통과한다 —
+    /// 두 번째 백스페이스 일제사격이 교정 밖 텍스트까지 지우는 것을 막는다.
+    func testUndoWithheldAndClearedWhenDeletionUnconfirmed() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.deletionEvidenceResponses = [.landed, .notLanded]  // 교정은 착지, undo는 미확인
+        var scheduled: [() -> Void] = []
+        let manager = makeManager(
+            output: output,
+            focus: focus,
+            scheduleBoundaryCorrection: { scheduled.append($0) }
+        )
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("gksrmf", into: manager)
+        _ = manager.handleKeyDown(keyDown(0x31))
+        _ = manager.handleKeyUp(keyUp(0x31))
+        scheduled.removeFirst()()   // 게이트 .landed → 교정 완료, 트랜잭션 생성
+        XCTAssertTrue(output.actions.contains(.text("한글")))
+        output.actions.removeAll()
+
+        // Cmd-Z: 교정문 삭제 백스페이스는 게시하나 게이트 .notLanded → 원문 보류
+        XCTAssertNil(
+            manager.handleKeyDown(keyDown(0x06, flags: .maskCommand)),
+            "undo Cmd-Z는 소비돼야 합니다"
+        )
+        XCTAssertFalse(
+            output.actions.contains(.text("gksrmf")),
+            "삭제 미확인인데 undo가 원문을 방출했습니다: \(output.actions)"
+        )
+
+        // 두 번째 Cmd-Z: 트랜잭션이 지워졌으므로 앱으로 통과(non-nil)
+        XCTAssertNotNil(
+            manager.handleKeyDown(keyDown(0x06, flags: .maskCommand)),
+            "트랜잭션이 지워졌으니 두 번째 Cmd-Z는 통과해야 합니다"
         )
     }
 
@@ -2538,10 +2804,10 @@ private final class FakeFocusInspector: EventTapFocusInspecting {
     /// 이 횟수만큼 조회가 *일시적으로* 실패한 뒤 성공합니다. Chrome처럼 차가운
     /// 첫 조회가 타임아웃 나는 앱을 흉내 냅니다.
     var transientFailuresRemaining = 0
-    /// 이 횟수만큼 조회가 `.ineligible`을 돌려준 뒤 성공합니다. Safari 주소창을
-    /// 클릭하면 URL 전체가 선택된 채로 남아 있고, head-insert 이벤트 탭은 앱이
-    /// 그 선택을 접기 *전에* 첫 keyDown을 받습니다. 그 순간의 조회만 낡은 선택
-    /// 영역을 읽어 거부되고, 다음 키부터는 정상입니다.
+    /// 이 횟수만큼 조회가 `.ineligibleTransientSelection`을 돌려준 뒤 성공합니다.
+    /// 필드 클릭 시 내용이 전체 선택된 채로 남아 있고, head-insert 이벤트 탭은
+    /// 앱이 그 선택을 접기 *전에* 첫 keyDown을 받습니다. 그 순간의 조회만 낡은
+    /// 선택 영역을 읽어 일시적으로 거부되고, 다음 키부터는 정상입니다.
     var ineligibleProbesRemaining = 0
     /// 조회가 일어날 때마다 불립니다. 조회 하나가 AX 예산을 통째로 쓰는 앱을
     /// 흉내 내려고 테스트가 여기서 시계를 밀 수 있습니다.
@@ -2556,6 +2822,11 @@ private final class FakeFocusInspector: EventTapFocusInspecting {
     var observedDirection: CorrectionDirection?
     var scriptBoundaryOffsets: [Int] = []
     var onScriptRequest: (() -> Void)?
+    /// 호출마다 하나씩 소비합니다. 비어 있으면 `.landed` — 기존 테스트는 전부
+    /// 삭제가 정상 반영되는 세계에서 돕니다.
+    var deletionEvidenceResponses: [FocusedInputSafety.DeletionEvidence] = []
+    var deletionGateRequestCount = 0
+    var onDeletionGateRequest: (() -> Void)?
 
     func automaticCorrectionFocusToken() -> FocusedInputSafety.FocusToken? {
         tokenRequestCount += 1
@@ -2567,7 +2838,7 @@ private final class FakeFocusInspector: EventTapFocusInspecting {
         if ineligibleProbesRemaining > 0 {
             ineligibleProbesRemaining -= 1
             tokenRequestCount += 1
-            return .ineligible
+            return .ineligibleTransientSelection
         }
         if transientFailuresRemaining > 0 {
             transientFailuresRemaining -= 1
@@ -2632,5 +2903,19 @@ private final class FakeFocusInspector: EventTapFocusInspecting {
         scriptBoundaryOffsets.append(boundaryUTF16Count)
         onScriptRequest?()
         return observedDirection
+    }
+
+    func deletionLanded(
+        _ token: FocusedInputSafety.FocusToken,
+        original: String,
+        shouldContinue: () -> Bool
+    ) -> FocusedInputSafety.DeletionEvidence {
+        deletionGateRequestCount += 1
+        onDeletionGateRequest?()
+        guard shouldContinue() else { return .ambiguous }
+        if !deletionEvidenceResponses.isEmpty {
+            return deletionEvidenceResponses.removeFirst()
+        }
+        return .landed
     }
 }
