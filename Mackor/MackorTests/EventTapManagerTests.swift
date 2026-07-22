@@ -621,6 +621,65 @@ final class EventTapManagerTests: XCTestCase {
         )
     }
 
+    // MARK: - LexicalGuard 배선 — 파괴적 오교정이 이벤트 흐름에서 실제로 멈추는가
+
+    /// `dns`+Space: 예전엔 `운`으로 파괴됐다. 모음 없는 라틴→단음절 구조
+    /// 거부가 이벤트 탭 경로에서 실제로 발동해 아무것도 방출하지 않는다.
+    func testVowellessAcronymIsNotDestroyedIntoASingleSyllable() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("dns", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(
+            output.actions.isEmpty,
+            "dns가 여전히 교정(파괴)됩니다: \(output.actions)"
+        )
+    }
+
+    /// 한글 자판으로 `ac`를 친 화면(`ㅁㅊ`)+Space: 예전엔 `ac`로 파괴됐다.
+    /// 결과가 실단어가 아니므로 순수 자음 게이트가 원문을 보존한다.
+    func testFixedJamoExpressionIsNotDestroyedIntoNonWord() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .koreanTwoSet
+        manager.isAutoCorrectionEnabled = true
+
+        type("ac", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(
+            output.actions.isEmpty,
+            "ㅁㅊ이 여전히 ac로 교정(파괴)됩니다: \(output.actions)"
+        )
+    }
+
+    /// `ㅈㄷ`→we처럼 결과가 실단어인 순수 자음은 계속 교정된다 — 게이트가
+    /// 정당한 교정까지 막지 않음을 고정한다(사전 증거 주입).
+    func testConsonantRunWithRealWordResultStillCorrects() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        let manager = makeManager(output: output, focus: focus, guardEvidence: ["we"])
+        manager.inputSourceKind = .koreanTwoSet
+        manager.isAutoCorrectionEnabled = true
+
+        type("we", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(
+            output.actions.contains(.text("we")),
+            "실단어 결과의 정당한 교정이 막혔습니다: \(output.actions)"
+        )
+    }
+
     // MARK: - Layer 1 어휘 tiebreaker 배선
     //
     // 규칙만으로는 한국어·영어 두 문법을 모두 만족하는 토큰을 가를 수 없어
@@ -2613,7 +2672,8 @@ final class EventTapManagerTests: XCTestCase {
             ProcessInfo.processInfo.systemUptime
         },
         scheduleBoundaryCorrection: @escaping (@escaping () -> Void) -> Void = { $0() },
-        lexicalTiebreaker: LexicalTiebreaker? = nil
+        lexicalTiebreaker: LexicalTiebreaker? = nil,
+        guardEvidence: Set<String>? = nil
     ) -> EventTapManager {
         EventTapManager(
             keyboardOutput: output,
@@ -2622,7 +2682,8 @@ final class EventTapManagerTests: XCTestCase {
             monotonicNow: monotonicNow,
             pause: { _ in },
             scheduleBoundaryCorrection: scheduleBoundaryCorrection,
-            lexicalTiebreaker: lexicalTiebreaker
+            lexicalTiebreaker: lexicalTiebreaker,
+            guardEvidence: guardEvidence
         )
     }
 

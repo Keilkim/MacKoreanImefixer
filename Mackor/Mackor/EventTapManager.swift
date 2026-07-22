@@ -190,6 +190,8 @@ class EventTapManager {
     /// Layer 1 어휘 판정기. 자산이 없으면 `nil`이고, 그때는 이 계층 없이
     /// 오늘과 동일하게 동작합니다.
     private let lexicalTiebreaker: LexicalTiebreaker?
+    /// LexicalGuard의 영어 증거 투영. nil이면 순수 자음 게이트는 fail-closed.
+    private let guardEvidence: Set<String>?
 
     /// 현재 토큰의 키열 사본.
     ///
@@ -411,6 +413,9 @@ class EventTapManager {
         // 사전은 앱 번들에서 읽습니다. 없으면 nil이고, 그때는 어휘 계층 없이
         // 규칙만으로 오늘과 동일하게 동작합니다.
         lexicalTiebreaker = LexicalTiebreaker(bundle: .main)
+        // guard 증거가 없으면 순수 자음 게이트가 fail-closed(보존)로 돌아
+        // 파괴적 오교정만 막히고 we/see류 교정을 놓칩니다 — 안전한 방향입니다.
+        guardEvidence = LexicalGuard.loadEnglishEvidence(bundle: .main)
         keyboardOutput = QuartzKeyboardOutput()
         focusInspector = AccessibilityEventTapFocusInspector()
         now = Date.init
@@ -435,10 +440,12 @@ class EventTapManager {
         },
         pause: @escaping (useconds_t) -> Void,
         scheduleBoundaryCorrection: @escaping (@escaping () -> Void) -> Void = { $0() },
-        lexicalTiebreaker: LexicalTiebreaker? = LexicalTiebreaker(bundle: .main)
+        lexicalTiebreaker: LexicalTiebreaker? = LexicalTiebreaker(bundle: .main),
+        guardEvidence: Set<String>? = nil
     ) {
         autoCorrectionEngine = WrongLayoutCorrectionEngine()
         self.lexicalTiebreaker = lexicalTiebreaker
+        self.guardEvidence = guardEvidence
         self.keyboardOutput = keyboardOutput
         self.focusInspector = focusInspector
         self.now = now
@@ -1875,13 +1882,33 @@ class EventTapManager {
         // 실제로 그 상태였습니다 — 진단의 token length가 문장 전체로 자랐습니다.
         lexicalKeystrokeMirror.removeAll(keepingCapacity: true)
 
+        // 어느 경로에서 나온 결정이든 마지막에 어휘 거부권·강화(LexicalGuard)를
+        // 한 번 거칩니다. 세 경로(엔진·어휘·방향 재판정)가 전부 이 출구를
+        // 지나므로, 일반 경로와 방향 재판정 경로가 같은 최종 resolver를 씁니다.
+        // 거부되면 보존과 동일하게 nil — 파괴적 오교정(`ㅁㅊ`→ac, `dns`→운)이
+        // 여기서 멈춥니다.
+        func guarded(_ decision: CorrectionDecision) -> CorrectionDecision? {
+            guard let resolved = LexicalGuard.apply(
+                decision,
+                englishEvidence: guardEvidence
+            ) else {
+                EventTapManager.diagnostic(
+                    "lexical veto direction=\(decision.direction) "
+                        + "rule=\(decision.rule) len=\(decision.originalCharacterCount) "
+                        + FocusedInputSafety.diagnosticContext()
+                )
+                return nil
+            }
+            return resolved
+        }
+
         if let decision = autoCorrectionEngine.processBoundary(boundary) {
-            return decision
+            return guarded(decision)
         }
         // 현재 TIS 방향에서 사전만으로 확정할 수 있으면 AX 조회 없이 끝냅니다.
         // 특히 짧은 첫 단어가 cold AX 비용 때문에 지연 경로로 밀리는 일을 줄입니다.
         if let decision = lexicalDecision(boundary: boundary, keystrokes: keystrokes) {
-            return decision
+            return guarded(decision)
         }
 
         // 방향을 **믿음이 아니라 증거로** 다시 확인합니다.
@@ -1899,7 +1926,7 @@ class EventTapManager {
             boundaryUTF16Count: boundaryUTF16Count,
             shouldContinue: shouldContinue
         ) {
-            return decision
+            return guarded(decision)
         }
 
         // 보존된 토큰도 반드시 흔적을 남깁니다.
