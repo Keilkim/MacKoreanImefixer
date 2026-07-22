@@ -583,6 +583,15 @@ class EventTapManager {
         if !preserveOriginalChoice {
             clearUndoTransaction(notify: true)
         }
+
+        // 클릭으로 포커스/캐럿이 옮겨간 뒤, 첫 키가 오기 전에 그 앱의 AX 연결을
+        // 미리 데웁니다. Chromium/Electron은 콜드 첫 조회가 최대 57ms라 첫 단어가
+        // 콜드 트리에 걸립니다. 예열은 pid 단위 연결을 데우는 것이라 정확한
+        // 자식 요소를 안 읽어도 이후 프로브가 빨라집니다. 옵저버가 놓치는
+        // 같은-요소 캐럿 이동 클릭까지 마우스 기반 전이를 전부 커버합니다.
+        // warmFocusCache는 탭 콜백 밖에서 호출해야 하므로 async입니다
+        // (handleSystemTapDisabled·scheduleBoundaryCorrection과 동일 패턴).
+        DispatchQueue.main.async { FocusedInputSafety.warmFocusCache() }
     }
 
     /// 앱 전환이나 이벤트 탭 복구 뒤에는 화면의 마지막 글자를 더 이상

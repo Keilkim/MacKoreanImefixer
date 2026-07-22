@@ -47,6 +47,9 @@ class AppMonitor: ObservableObject {
     private var targetSettingsCancellable: AnyCancellable?
     private var frontAppName: String?
     private var manuallyAccessibleProcessIDs: Set<pid_t> = []
+    /// 앱 전환마다 증가시켜, 이전 앱을 향해 예약해 둔 예열 사다리 rung들을
+    /// 조기 취소합니다. EventTapManager.boundaryCorrectionGeneration와 같은 패턴.
+    private var warmGeneration: UInt64 = 0
     private let inputSourceController = InputSourceController()
 
     init() {
@@ -147,11 +150,47 @@ class AppMonitor: ObservableObject {
         frontAppBundleID = frontApp.bundleIdentifier
         frontAppName = frontApp.localizedName
         prepareLazyAccessibilityIfNeeded(for: frontApp)
+        // 전환할 때마다 세대를 올려 이전 앱 사다리를 취소하고, 대상 앱이면 새
+        // 사다리를 예약합니다. 비대상/자기 앱으로 가면 세대만 오르고 예약은
+        // 안 해, 그쪽으로 예열이 새지 않습니다.
+        warmGeneration &+= 1
+        if isEnabled,
+           frontApp.processIdentifier != ProcessInfo.processInfo.processIdentifier,
+           targetAppManager?.isAutoCorrectionEnabled(
+               bundleID: frontApp.bundleIdentifier,
+               appName: frontApp.localizedName
+           ) == true {
+            scheduleWarmLadder(generation: warmGeneration)
+        }
         isTargetAppFront = targetAppManager?.isTargetApp(
             bundleID: frontAppBundleID,
             appName: frontAppName
         ) ?? false
         updateActiveState()
+    }
+
+    /// 앱 전환 직후, 첫 키가 오기 전에 대상 앱의 AX 트리를 짧은 간격으로 몇 번
+    /// 미리 데웁니다. Chromium/Electron은 `AXManualAccessibility`를 켠 뒤에도
+    /// 트리를 비동기로 지어, 활성화 시점의 1회 예열만으로는 첫 단어가 콜드
+    /// 트리에 걸립니다(사용자가 VS Code에서 겪은 "첫 단어 씹힘").
+    ///
+    /// 간격은 콜드 예열 1회 최대 실측(57ms)보다 크게 벌려 rung이 겹치지 않게
+    /// 하고, 3개로 250ms를 덮어 cmd-tab→타이핑의 통상 인간 반응(>200ms)을
+    /// 커버합니다. `usleep`이 아니라 `asyncAfter`인 이유: 탭이 얹힌 메인 런루프를
+    /// 막지 않고 키 사이에 양보하기 위함(EventTapManager의 예열 규율과 동일).
+    ///
+    /// 못 고치는 것: cmd-tab 후 ~50ms 안에 치는 즉시 첫 키, 트리 빌드가 250ms를
+    /// 넘는 거대 워크스페이스. 그 경우는 기존 in-key 프로브 재시도가 뒤 키에서
+    /// 복구합니다.
+    private func scheduleWarmLadder(generation: UInt64) {
+        for delayMs in [50, 120, 250] {
+            DispatchQueue.main.asyncAfter(
+                deadline: .now() + .milliseconds(delayMs)
+            ) { [weak self] in
+                guard let self, self.warmGeneration == generation else { return }
+                FocusedInputSafety.warmFocusCache()
+            }
+        }
     }
 
     /// Chromium/Electron 계열 앱은 VoiceOver 같은 보조 기술이 감지되기 전까지
