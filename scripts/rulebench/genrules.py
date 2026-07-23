@@ -97,6 +97,11 @@ def coda_ok(us,final=False):
 
 def english_eval(word):
     """(hard_pass, cost) — cost는 '영어로도 가능하지만 유표적' 위반 수"""
+    # R-E14 어중 대문자는 영어 정서법이 아니다. 어두 대문자(고유명사)와
+    # 전대문자(약어, l2k에서는 R-D3가 먼저 걸러냄)는 표기 관례지만 어중
+    # 대문자는 아니다 — 두벌식 Shift 쌍자모(ㅃㅉㄸㄲㅆㅒㅖ)가 어중에 온
+    # 키열(alcuTek=미쳤다, roRnf=개꿀)이 여기서 갈린다.
+    if any(c.isupper() for c in word[1:]): return (False,0)
     w=word.lower(); cost=0
     if not (w.isalpha() and w.isascii()): return (False,0)
     if w[-1] in 'jqv': return (False,0)                # R-E6 어말 j/q/v 금지
@@ -107,6 +112,12 @@ def english_eval(word):
     if 'q' in w:
         i=w.index('q')
         if i+1>=len(w) or w[i+1] not in V5|{'y'}: return (False,cost)
+    # R-E13 j 뒤에는 모음이 온다 (y 허용). jam·inject·fjord — 영어 정서법에서
+    # j는 언제나 onset이고 뒤에 핵이 따른다. 사전 235,974단어 중 위반은 52개
+    # (0.022%)로 전부 raj·hadj·majlis류 차용어다. R-E6 어말 j 금지의 일반화이며,
+    # coda `nj`+onset `d` 분절로 살아남던 anjdi(뭐야)류가 여기서 갈린다.
+    for i,c in enumerate(w):
+        if c=='j' and (i+1>=len(w) or w[i+1] not in V5|{'y'}): return (False,cost)
     # R-E2 모음자 판정 + R-E12 y/w 모음 사이 자음화(활음 onset)
     letters=list(w); vowel_pos=set()
     for i,c in enumerate(letters):

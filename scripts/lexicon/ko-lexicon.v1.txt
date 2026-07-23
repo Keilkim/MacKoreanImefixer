@@ -1,16 +1,13 @@
 Qoftpa	뺄셈
 Qorl	빼기
 Qorldyd	빼기용
-QydQyd	뿅뿅
 Thorlgud	쐐기형
 ahazoa	몸캠
-ahejs	모던
 ahem	모드
 ahemfh	모드로
 ahems	모든
 ahen	모두
 ajacna	멈춤
-ajrek	먹다
 akcla	마침
 akclavy	마침표
 akclavyfh	마침표로
@@ -29,7 +26,6 @@ aksfy	만료
 akskak	마나마
 aksska	만남
 aktuf	마셜
-alRl	미끼
 alaks	미만
 alckadu	미참여
 alel	미디
@@ -57,7 +53,6 @@ anfyfh	무료로
 angks	무한
 angkseo	무한대
 angyrk	무효가
-anjgoanjgo	뭐해뭐해
 ansaor	문맥
 anstjaks	문서만
 apahaks	메모만
@@ -127,7 +122,6 @@ duranfrufvy	역물결표
 durk	여가
 durl	여기
 durlfh	여기로
-durnjs	여권
 duror	여객
 durrkaak	역감마
 durrkfaorlgud	역갈매기형
@@ -167,7 +161,6 @@ ehedna	돋움
 ehowl	돼지
 ehowlrhrl	돼지고기
 ejal	더미
-ejgo	더해
 ekaks	다만
 ekaqo	담배
 ekarls	담긴
@@ -203,7 +196,6 @@ emform	드래그
 emfu	드려
 emfudy	드려요
 enemflek	두드리다
-enfWo	둘째
 enffp	둘레
 enfnal	두루미
 enrorhf	두개골
@@ -280,7 +272,6 @@ rork	개가
 rosua	개념
 rosuarhk	개념과
 rownf	개줄
-ruRrh	겪고
 rudfur	경력
 rudwod	경쟁
 rufghs	결혼
@@ -307,7 +298,6 @@ skator	남색
 skaus	나면
 skawk	남자
 slarhk	님과
-soRn	내꾸
 sodur	내역
 sodyd	내용
 sodydakek	내용마다
