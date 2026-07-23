@@ -1,0 +1,58 @@
+name: 앱 지원 요청 / 자동 교정이 안 되는 앱
+description: 특정 앱에서 자판 자동 교정이 안 될 때. (앱을 "추가"하는 코드 PR은 받지 않습니다 — 이유는 아래 안내를 읽어 주세요.)
+title: "[앱 지원 요청] "
+labels: ["app-support"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **먼저 확인해 주세요.** 아래 중 하나면 앱 문제가 아니라 설정 문제라 바로 풀립니다.
+
+        - 자동 교정 범위가 `선택한 앱만`인데 그 앱을 안 켰다 → 켜면 됩니다.
+        - 손쉬운 사용 권한이 꺼졌다(재설치·재빌드 후 자주 끊깁니다) → 다시 켜면 됩니다.
+        - 비밀번호·주소창·보안 입력란이다 → **의도적으로** 제외한 것이며 정상입니다.
+        - 앱을 방금 전환하고 친 **첫 단어**다 → 알려진 한계이고 다음 단어부터 정상입니다.
+
+        가장 빠른 확인: 메뉴에서 범위를 **`앱을 가리지 않고 적용`**으로 바꾸고, 그 앱 입력란에 커서를 둔 뒤 **한글로 두 문장** 쳐 보세요. 그래도 안 되면 아래를 채워 주세요.
+
+        > Mackor에는 지원 앱 목록이 없어서 앱을 "추가"하는 개념이 없습니다. 그 앱에서 안 되는 건 저희가 안 넣어서가 아니라, 그 앱이 macOS 접근성(AX)에 입력란을 내주지 않기 때문입니다. 코드로 뚫을 수 있는 문제가 아닐 수 있습니다. 자세한 배경은 [CONTRIBUTING.md](../blob/main/CONTRIBUTING.md)에 있습니다.
+  - type: input
+    id: app-name
+    attributes:
+      label: 앱 이름과 버전
+      placeholder: "예: Adobe Illustrator 2026"
+    validations:
+      required: true
+  - type: input
+    id: bundle-id
+    attributes:
+      label: 번들 ID (알면)
+      placeholder: "예: com.adobe.illustrator"
+  - type: dropdown
+    id: status
+    attributes:
+      label: 앱 목록의 자판자동 칸이 뭐라고 떠 있나요
+      options:
+        - "미확인 (아직 그 앱에서 안 쳐봄)"
+        - "미지원 (접근성에 텍스트 요소가 관찰되지 않음)"
+        - "동작 확인인데도 안 됨"
+        - "모르겠음 / 목록에 없음"
+    validations:
+      required: true
+  - type: textarea
+    id: where
+    attributes:
+      label: 어느 화면·어느 입력란인가요
+      description: 앱 안에서도 되는 곳과 안 되는 곳이 다를 수 있습니다. 캔버스인지, 검색창인지, 채팅 입력란인지 등.
+      placeholder: "예: 문자 도구로 캔버스에 글자를 칠 때 교정이 안 됩니다. 상단 옵션 바 입력란은 됩니다."
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: 환경
+      placeholder: "예: Mackor 1.3 (빌드 5), macOS 14.5"
+  - type: markdown
+    attributes:
+      value: |
+        입력한 글자·파일 경로·사용자 이름은 이 이슈에 포함하지 마세요. 재현에는 위 정보만 있으면 됩니다.
