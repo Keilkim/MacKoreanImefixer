@@ -189,6 +189,13 @@ class EventTapManager {
     /// 못합니다.
     private var lexicalKeystrokeMirror: [PhysicalKeystroke] = []
 
+    /// 현재 수집 중인 토큰 안에서 어퍼스트로피가 나온 위치(그 앞의 자모 키 수).
+    /// `nil`이면 어퍼스트로피 없는 보통 토큰입니다. 어퍼스트로피는 **판정이 아니라
+    /// 투명한 구분자**로, 이 값이 있으면 경계에서 양쪽 키열을 합쳐 동결 정책에
+    /// 맡기고 결과에 `'`를 다시 끼웁니다. 모든 리셋이 지나는
+    /// `clearAutomaticCorrectionFocus`에서 비워져 토큰 경계를 넘어 새지 않습니다.
+    private var apostropheBreakStrokeCount: Int?
+
     private var _isActive: Bool = false
     private var _isAutoCorrectionEnabled: Bool = false
     private var automaticCorrectionFieldAllowed: Bool?
@@ -248,6 +255,9 @@ class EventTapManager {
     /// 제외하고, 4키 이상에서만 되살립니다(en-guard 4+ 구제 대상 365개 전수
     /// 확인 결과 실사용 초성체 충돌 없음).
     private static let minimumConsonantMashKeystrokes = 4
+    /// 어퍼스트로피(kVK_ANSI_Quote). 영어 축약형(it's·don't)을 한글 모드에서
+    /// 치면 자모 사이에 이 키가 들어옵니다.
+    private static let apostropheKeycode: UInt16 = 0x27
     /// 이벤트 탭 안에서 연속 AX 요청에 쓰는 soft 예산입니다. 이미 시작한 AX
     /// 요청은 끝까지 기다리지만, 만료 뒤 새 요청이나 삭제는 시작하지 않습니다.
     /// 일반 경계는 지연 경로로 돌아가고 제출 경계는 제출 키만 전달합니다.
@@ -797,6 +807,36 @@ class EventTapManager {
 
         // 자모 키 확인
         guard let jamo = KeycodeToJamoMap.jamo(for: keycode, shift: shiftPressed) else {
+            // 어퍼스트로피는 토큰을 죽이지 않고 **투명한 구분자**로 남깁니다.
+            //
+            // 영어 축약형(it's·don't·we're)은 한글 모드에서 자모+`'`+자모로
+            // 찍히는데, 지금까지는 `'`가 비자모라 아래 폐기 경로로 빠져 교정
+            // 기회조차 없었습니다. 그렇다고 `'`를 "영어" 신호로 쓰면 안 됩니다 —
+            // 한국어 닫는 따옴표+조사(`배고프다'라고`·`세상'이라는`)를 전부
+            // 파괴합니다(내부 공백으로 쪼개져 `'` 하나짜리라 "하나만" 조건으로도
+            // 못 막습니다). 그래서 `'`는 판정하지 않고, 양쪽 키열을 **합쳐 동결
+            // 정책에** 넘겨 정책이 확인하게 합니다(경계의 `apostropheCorrection`).
+            // `배고프다라고`는 정책이 modernKorean으로 보존하고 `its`는
+            // englishStructure로 교정합니다 — 실측 한국어 오탐 0.0016%.
+            //
+            // 가드: 자동 교정 켜짐 · 한글자판 방향(영자판은 이미 영어라 불필요하고
+            // `didn't`→야웃 오교정이 측정됨) · Shift 없음(Shift+`'`는 큰따옴표) ·
+            // Caps 없음 · 수집 중이고 앞에 자모 ≥1 · 이 토큰에 `'`가 아직 없음
+            // (둘째 `'`는 재구성을 복잡하게 하고 `'아니'라고`를 제외).
+            if isAutoCorrectionEnabled,
+               keycode == EventTapManager.apostropheKeycode,
+               !shiftPressed,
+               !capsLockPressed,
+               inputSourceKind == .koreanTwoSet,
+               apostropheBreakStrokeCount == nil,
+               case .collecting(let letterStrokeCount) = tokenCaptureState,
+               letterStrokeCount >= 1 {
+                // 실제 IME도 비자모 키에서 조합을 확정하므로 표시 조합만 커밋하고,
+                // 토큰(엔진 버퍼·수집 상태)은 그대로 살려 오른쪽 자모를 이어 받습니다.
+                apostropheBreakStrokeCount = letterStrokeCount
+                commitCompositionIfNeeded()
+                return event
+            }
             // 숫자나 지원하지 않는 기호가 같은 공백 토큰에 섞이면 뒤쪽의
             // 사전 단어만 따로 교정하지 않도록 다음 경계까지 후보를 폐기합니다.
             // 안전한 한국어 입력란에서는 직접 조합 상태를 유지해 토큰 도중
@@ -1792,6 +1832,8 @@ class EventTapManager {
         // 항상 어긋나고 이 아래의 방향 수정·어휘 판정이 영영 발동하지 못합니다.
         // 실제로 그 상태였습니다 — 진단의 token length가 문장 전체로 자랐습니다.
         lexicalKeystrokeMirror.removeAll(keepingCapacity: true)
+        // 호출자가 곧 `clearAutomaticCorrectionFocus`로 비우므로 여기서 잡아 둡니다.
+        let apostropheBreak = apostropheBreakStrokeCount
 
         // 어느 경로에서 나온 결정이든 마지막에 어휘 거부권·강화(LexicalGuard)를
         // 한 번 거칩니다. 세 경로(엔진·어휘·방향 재판정)가 전부 이 출구를
@@ -1819,6 +1861,22 @@ class EventTapManager {
                 )
             }
             return resolved
+        }
+
+        // 어퍼스트로피 토큰: `'`를 판정으로 쓰지 않고, 합친 키열을 동결 정책에
+        // 맡겨 "영어로 읽어보고 확인"합니다. 정책이 교정이면 `'`를 다시 끼워
+        // emit하고, 아니면 보존합니다(조사·따옴표가 여기서 안전하게 걸러집니다).
+        // 엔진 버퍼는 `processBoundary`를 우회하므로 여기서 직접 비웁니다.
+        if let apostropheBreak {
+            autoCorrectionEngine.reset()
+            if let decision = apostropheCorrection(
+                keystrokes: keystrokes,
+                breakIndex: apostropheBreak,
+                boundary: boundary
+            ) {
+                return guarded(decision)
+            }
+            return nil
         }
 
         if let decision = autoCorrectionEngine.processBoundary(boundary) {
@@ -2204,6 +2262,70 @@ class EventTapManager {
         )
     }
 
+    /// 어퍼스트로피 토큰을 `'`를 사이에 낀 두 세그먼트로 복원해 교정합니다.
+    ///
+    /// 판정은 **합친 키열을 동결 정책에 그대로** 맡깁니다 — `'`는 판정에 관여하지
+    /// 않습니다. 정책이 한→영 교정을 내면(`its`→englishStructure) 그 결정을 받되,
+    /// 원문·교정문은 `'`를 다시 끼운 **세그먼트별** 값으로 덮어씁니다. 세그먼트별로
+    /// 조합해야 하는 이유: 화면은 `'`가 왼쪽 조합을 확정시켜 `ㅑㅅ'ㄴ`(4자)인데,
+    /// 합쳐 조합하면 `HangulStructure.evaluate([i,t,s])`가 다른 글자·다른 길이를
+    /// 줍니다. 삭제 수(`originalCharacterCount`)가 화면과 어긋나면 텍스트가 깨지므로
+    /// 반드시 세그먼트별로 만듭니다.
+    ///
+    /// 정책이 보존이면(`배고프다라고`→modernKorean) nil = 보존이라, 한국어 닫는
+    /// 따옴표+조사가 여기서 안전하게 걸러집니다.
+    private func apostropheCorrection(
+        keystrokes: [PhysicalKeystroke],
+        breakIndex: Int,
+        boundary: CorrectionBoundary
+    ) -> CorrectionDecision? {
+        // 양쪽에 자모가 최소 1개씩 있어야 합니다("양옆에 글자"). 선행/후행
+        // 어퍼스트로피(`'25년`·`don'`)는 여기서 걸러 nil = 보존입니다.
+        guard breakIndex >= 1, breakIndex < keystrokes.count else { return nil }
+        let left = Array(keystrokes[..<breakIndex])
+        let right = Array(keystrokes[breakIndex...])
+
+        // 판정은 `'`를 뺀 합친 키열로 — 동결 정책이 확인합니다. 한글자판 방향의
+        // `.correct`는 언제나 koreanToLatin(englishStructure·markedEnglishForm)입니다.
+        guard case .correct(let tier, _, _, let rule) = LayoutCorrectionPolicy.evaluate(
+            keystrokes: keystrokes,
+            inputSource: .koreanTwoSet
+        ) else {
+            return nil
+        }
+
+        // 원문·교정문은 세그먼트별로 조합하고 `'`를 다시 끼웁니다(화면과 일치).
+        guard let leftKorean = HangulStructure.evaluate(left)?.text,
+              let rightKorean = HangulStructure.evaluate(right)?.text,
+              let leftLatin = LayoutCorrectionPolicy.latinCandidate(for: left),
+              let rightLatin = LayoutCorrectionPolicy.latinCandidate(for: right) else {
+            return nil
+        }
+        let original = leftKorean + "'" + rightKorean
+        let replacement = leftLatin + "'" + rightLatin
+        guard original != replacement else { return nil }
+
+        EventTapManager.diagnostic(
+            "apostrophe rescue rule=\(rule) len=\(keystrokes.count) "
+                + FocusedInputSafety.diagnosticContext()
+        )
+
+        return CorrectionDecision(
+            original: original,
+            replacement: replacement,
+            direction: .koreanToLatin,
+            tier: tier,
+            rule: rule,
+            diagnostic: CorrectionDiagnostic(
+                direction: .koreanToLatin,
+                tier: tier,
+                rule: rule,
+                tokenLength: keystrokes.count,
+                boundary: boundary
+            )
+        )
+    }
+
     /// "텍스트 역할이 아니다"를 한 번 더 관찰합니다. 상한에 닿으면 딱 한 번
     /// 호출부에 알리고 카운터를 비웁니다.
     ///
@@ -2237,6 +2359,7 @@ class EventTapManager {
         automaticCorrectionFieldAllowed = nil
         automaticCorrectionFocusToken = nil
         softProbeRefusalKeys = 0
+        apostropheBreakStrokeCount = nil
         // 미지원 관찰은 **앱 단위** 근거이므로 여기서 비우지 않습니다. 토큰·포커스가
         // 바뀔 때마다 0이 되면 상한에 영영 닿지 못해 학습이 죽습니다. 앱이 바뀌는
         // 시점(`resetAutomaticCorrectionState`)에서만 비웁니다.

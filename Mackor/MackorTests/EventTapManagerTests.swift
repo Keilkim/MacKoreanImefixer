@@ -597,6 +597,163 @@ final class EventTapManagerTests: XCTestCase {
         )
     }
 
+    // MARK: - 어퍼스트로피 축약형
+    //
+    // 영어 축약형(it's·don't·we're)은 한글 모드에서 자모+'+자모로 찍힌다.
+    // '는 판정이 아니라 투명한 구분자로, 양쪽 키열을 합쳐 동결 정책에 맡기고
+    // 결과에 '를 다시 끼운다. 한국어 닫는 따옴표+조사는 정책이 modernKorean으로
+    // 보존하므로 여기서 파괴되지 않는다.
+
+    private static let apostropheKeycode: UInt16 = 0x27
+
+    /// `it's`(ㅑㅅ'ㄴ): '가 토큰을 죽이지 않고, 합친 `its`가 englishStructure로
+    /// 교정되며 '가 다시 끼워진다.
+    func testApostropheContractionItsIsCorrected() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .koreanTwoSet
+        manager.isAutoCorrectionEnabled = true
+
+        type("it", into: manager)
+        XCTAssertNotNil(
+            manager.handleKeyDown(keyDown(Self.apostropheKeycode)),
+            "어퍼스트로피는 앱으로 통과해야 합니다"
+        )
+        type("s", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(
+            output.actions.contains(.text("it's")),
+            "it's가 교정되지 않았습니다: \(output.actions)"
+        )
+    }
+
+    /// `don't`(ㅇㅐㅜ'ㅅ): 앞 세그먼트가 3자여도 `'` 위치가 정확히 복원된다.
+    func testApostropheContractionDontIsCorrected() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .koreanTwoSet
+        manager.isAutoCorrectionEnabled = true
+
+        type("don", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(Self.apostropheKeycode)))
+        type("t", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(
+            output.actions.contains(.text("don't")),
+            "don't가 교정되지 않았습니다: \(output.actions)"
+        )
+    }
+
+    /// `we're`(ㅈㄷ'ㄱㄷ): 오른쪽 세그먼트가 2자여도 정확히 복원된다.
+    func testApostropheContractionWereIsCorrected() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .koreanTwoSet
+        manager.isAutoCorrectionEnabled = true
+
+        type("we", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(Self.apostropheKeycode)))
+        type("re", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(
+            output.actions.contains(.text("we're")),
+            "we're가 교정되지 않았습니다: \(output.actions)"
+        )
+    }
+
+    /// `아니'라고`(dksl'fkrh): 한국어 닫는 따옴표+조사. 합친 `아니라고`는
+    /// modernKorean이라 정책이 보존한다 — 어퍼스트로피 규칙이 파괴하지 않는다.
+    func testKoreanClosingQuoteWithParticleIsPreserved() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .koreanTwoSet
+        manager.isAutoCorrectionEnabled = true
+
+        type("dksl", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(Self.apostropheKeycode)))
+        type("fkrh", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(
+            output.actions.isEmpty,
+            "한국어 따옴표+조사가 파괴됐습니다: \(output.actions)"
+        )
+    }
+
+    /// 영자판에서는 이 규칙이 발동하지 않는다 — 이미 영어로 찍히고, `didn't`→야웃
+    /// 오교정이 측정됐다(G1: koreanTwoSet 방향 한정).
+    func testApostropheInLatinModeIsUntouched() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("it", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(Self.apostropheKeycode)))
+        type("s", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(
+            output.actions.isEmpty,
+            "영자판에서 어퍼스트로피 규칙이 발동했습니다: \(output.actions)"
+        )
+    }
+
+    /// Shift+`'`는 큰따옴표(")이므로 축약형 신호가 아니다 — 규칙이 발동하지 않는다.
+    func testShiftApostropheDoesNotTrigger() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .koreanTwoSet
+        manager.isAutoCorrectionEnabled = true
+
+        type("it", into: manager)
+        XCTAssertNotNil(
+            manager.handleKeyDown(keyDown(Self.apostropheKeycode, shift: true))
+        )
+        type("s", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(
+            output.actions.isEmpty,
+            "Shift+어퍼스트로피가 축약형으로 처리됐습니다: \(output.actions)"
+        )
+    }
+
+    /// 선행 어퍼스트로피(`'s`, 여는 따옴표)는 왼쪽 세그먼트가 없어 발동하지 않고
+    /// 오늘처럼 보존된다.
+    func testLeadingApostropheIsPreserved() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .koreanTwoSet
+        manager.isAutoCorrectionEnabled = true
+
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(Self.apostropheKeycode)))
+        type("s", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(
+            output.actions.isEmpty,
+            "선행 어퍼스트로피가 교정을 일으켰습니다: \(output.actions)"
+        )
+    }
+
     // MARK: - Layer 1 어휘 tiebreaker 배선
     //
     // 규칙만으로는 한국어·영어 두 문법을 모두 만족하는 토큰을 가를 수 없어
