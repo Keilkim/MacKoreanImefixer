@@ -35,14 +35,20 @@ jobs:
             scripts/prepare-appcast.sh \
             scripts/validate-release.sh
 
-      # R4-1 동결 가드: IMK 마이그레이션 동안 코어 규칙 자산 31파일(엔진 9·순수 테스트 8·
-      # 코퍼스 5·rulebench 7·규범 문서 2)이 바이트 단위로 바뀌지 않았음을 보증한다.
+      # R4-1 동결 가드: 코어 규칙 자산 31파일(엔진 9·순수 테스트 8·코퍼스 5·
+      # rulebench 7·규범 문서 2)이 기준 태그 이후 바이트 단위로 바뀌지 않았음을
+      # 보증한다. 취지는 "규칙이 조용히 표류하지 않는다"이지 영구 금지가 아니다 —
+      # 개정은 이 블록의 기준 태그·매니페스트 해시를 함께 갱신하는 명시적
+      # 커밋으로만 가능하고, 그 diff가 곧 개정 기록이 된다.
+      #
+      # 기준 태그 이력: pre-imk (IMK 마이그레이션 동결) → rules-v5 (v4.3 규칙
+      # 개정: R-E13 j+모음, R-E14 어중 대문자 — bench 오탐 0 증가·재현율 개선).
       #
       # 두 겹으로 검사한다. 해시 대조만 하면 같은 PR에서 엔진과 매니페스트를 함께
-      # 바꿔 통과시킬 수 있으므로, 기준 태그 pre-imk와 직접 diff도 함께 본다.
+      # 바꿔 통과시킬 수 있으므로, 기준 태그 rules-v5와 직접 diff도 함께 본다.
       - name: Verify engine freeze (R4-1)
         run: |
-          ENGINE_FREEZE_EXPECTED_SHA256=58f21bffdfd0a3e1eb795c6e7f5ac3b3a4e2c06e1dc46a9cfa5f8ffe1886b99b
+          ENGINE_FREEZE_EXPECTED_SHA256=c2a423ad524016ebb86cf081ba5973e8f80657996ccda9bb1a0f43cd4682a459
           ENGINE_FREEZE_ACTUAL_SHA256=$(shasum -a 256 scripts/engine-freeze.sha256 | awk '{print $1}')
           if [ "$ENGINE_FREEZE_ACTUAL_SHA256" != "$ENGINE_FREEZE_EXPECTED_SHA256" ]; then
             echo "R4-1 위반: 동결 매니페스트 자체가 변경됨" >&2
@@ -50,16 +56,16 @@ jobs:
           fi
           shasum -a 256 -c scripts/engine-freeze.sha256
 
-          git fetch --force --quiet origin 'refs/tags/pre-imk:refs/tags/pre-imk'
-          git rev-parse --verify refs/tags/pre-imk >/dev/null
-          CHANGED=$(git diff --name-only refs/tags/pre-imk HEAD -- \
+          git fetch --force --quiet origin 'refs/tags/rules-v5:refs/tags/rules-v5'
+          git rev-parse --verify refs/tags/rules-v5 >/dev/null
+          CHANGED=$(git diff --name-only refs/tags/rules-v5 HEAD -- \
             $(awk '{print $2}' scripts/engine-freeze.sha256))
           if [ -n "$CHANGED" ]; then
-            echo "R4-1 위반: 동결 대상이 기준 태그 pre-imk 이후 변경됨" >&2
+            echo "R4-1 위반: 동결 대상이 기준 태그 rules-v5 이후 변경됨" >&2
             echo "$CHANGED" >&2
             exit 1
           fi
-          echo "동결 대상 $(wc -l < scripts/engine-freeze.sha256)파일: pre-imk와 동일"
+          echo "동결 대상 $(wc -l < scripts/engine-freeze.sha256)파일: rules-v5와 동일"
 
       # Layer 1 어휘 자산은 엔진 동결과 **별도**로 관리한다.
       #
@@ -78,6 +84,22 @@ jobs:
           # 줄인 것이 판정을 바꿨다는 뜻이므로 반드시 잡아야 한다.
           python3 -B scripts/lexicon/make_lexicon.py verify
 
+          # 단음절 자산은 원본 사전이 없어 "무손실성"을 검증할 수 없다(원본인
+          # ko_words.txt 에 1음절 어절이 0개다). 대신 정합성·도달성·안전성·경계
+          # 10개 불변식을 검증한다 — 특히 KEEP 완전성(3)이 "오늘 동작하던 교정이
+          # 조용히 사라지지 않았음"을, 자산 분리(9)가 ambiguousBothValid 를
+          # LexicalTiebreaker 에 남겨둔다는 전제를 강제한다.
+          #
+          # 게이트 입력(영어 사전·Apple 명령어·로케일)은 mono-gates.v1.txt 로
+          # 스냅샷돼 있어 이 검증은 결정적이다. OS 를 다시 스캔하면 러너 이미지가
+          # 바뀔 때 자산과 무관한 실패가 나고 그 메시지가 오도한다.
+          python3 -B scripts/lexicon/make_mono_lexicon.py verify
+
+      # 자산이 자라면 파괴 표면이 자란다. 리뷰가 diff 를 놓쳐도 CI 가 숫자로 잡는다.
+      # 상한은 스크립트 상수(SURFACE_LIMIT)이며 올릴 때는 사유를 커밋 메시지에 남긴다.
+      - name: Verify monosyllable correction surface
+        run: python3 -B scripts/lexicon/make_mono_lexicon.py surface
+
       - name: Run unit tests
         run: |
           xcodebuild \
@@ -93,7 +115,9 @@ jobs:
       - name: Verify bundled lexicon resources
         run: |
           MACKOR_RESOURCE_DIR="$RUNNER_TEMP/MackorTests/Build/Products/Debug/Mackor.app/Contents/Resources"
-          for LEXICON_NAME in ko-lexicon.v1.txt en-lexicon.v1.txt; do
+          # en-guard.v1.txt 는 d51c953 이 pbxproj 만 배선하고 이 루프에 넣지 않아
+          # 번들에서 빠져도 잡히지 않았다. 새 자산과 함께 그 구멍도 막는다.
+          for LEXICON_NAME in ko-lexicon.v1.txt en-lexicon.v1.txt en-guard.v1.txt ko-mono.v1.txt; do
             if ! cmp -s \
               "scripts/lexicon/$LEXICON_NAME" \
               "$MACKOR_RESOURCE_DIR/$LEXICON_NAME"; then

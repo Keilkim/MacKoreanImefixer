@@ -40,7 +40,15 @@ enum FocusedInputSafety {
     /// 각 AX 요청의 상한입니다. 교정 한 번에는 여러 요청이 이어질 수 있어
     /// 전체 대기 시간은 이보다 길 수 있습니다. 늘리면 느린 앱에서 입력 전체가
     /// 그만큼 더 지연될 수 있으므로 함부로 올리지 마세요.
-    private static let messagingTimeout: Float = 0.05
+    ///
+    /// 50ms였을 때, 차가운 첫 조회 실측 ~57ms가 상한에 잘려 *실패*로 돌아왔습니다.
+    /// 조회가 느린 것과 조회가 실패한 것을 구분할 수 없어, 성공했을 조회가
+    /// `.unavailable`로 보고되고 그 토큰이 통째로 버려졌습니다. 100ms로 올리면
+    /// 그 조회는 57ms에 정상 응답합니다.
+    ///
+    /// 대가: 응답하지 않는 앱에서는 요청 하나가 최대 100ms를 물고, 프로브 하나가
+    /// AX 왕복 2회이므로 최악 200ms 동안 **시스템 전체 입력**이 밀립니다.
+    private static let messagingTimeout: Float = 0.1
 
     /// AX 연결을 미리 데웁니다. **결과를 쓰지 않고 버립니다.**
     ///
@@ -78,12 +86,28 @@ enum FocusedInputSafety {
     enum FocusProbe {
         /// 교정해도 되는 입력란.
         case eligible(FocusToken)
-        /// 확정적으로 교정하면 안 됨 — 보안 입력, 보호 필드, 텍스트가 아닌 역할.
+        /// 확정적으로 교정하면 안 됨 — 보안 입력, 보호 필드(비밀번호·주소창).
         /// 같은 토큰 안에서 다시 물어볼 필요가 없습니다.
+        ///
+        /// **이 거부는 필드 단위입니다.** 같은 앱의 다른 입력란은 멀쩡할 수 있으므로
+        /// 앱 전체를 미지원으로 판단하는 근거가 되면 안 됩니다 — 그러면 Safari가
+        /// 비밀번호 칸 하나 때문에 통째로 미지원이 됩니다.
         case ineligible
+        /// 포커스된 요소가 **텍스트 역할 자체가 아님**. 필드 단위가 아니라 앱이
+        /// AX에 텍스트를 안 내놓는다는 신호일 수 있어 따로 구분합니다.
+        ///
+        /// 한 번으로는 단정할 수 없습니다 — 버튼에 포커스가 가 있어도 이게 나옵니다.
+        /// 그래서 판정은 여기서 하지 않고, 호출부가 같은 앱에서 반복 관찰될 때만
+        /// 미지원으로 학습합니다.
+        case ineligibleUnsupportedRole
         /// 지금은 판단할 수 없음 — AX 트리가 아직 안 잡혔거나 IPC가 타임아웃.
         /// 잠시 뒤 같은 자리에서 다시 물으면 성공할 수 있습니다.
         case unavailable
+        /// 선택 영역이 남아 지금은 거부하나, 그 선택은 이 키가 곧 지울 직전
+        /// 상태의 증거일 뿐입니다. 다음 키에서 다시 물으면 대개 빈 캐럿으로
+        /// 바뀝니다(주소창 전체 선택 후 타이핑 등). 영구 거부(.ineligible)와
+        /// 구분해 제한된 횟수만 재확인을 허용합니다.
+        case ineligibleTransientSelection
     }
 
     static func probeAutomaticCorrectionFocus() -> FocusProbe {
@@ -138,7 +162,7 @@ enum FocusedInputSafety {
         ]
         guard supportedRoles.contains(role) else {
             diagnostic("focus token unsupported \(diagnosticContext(role: role))")
-            return .ineligible
+            return .ineligibleUnsupportedRole
         }
 
         let subrole = values[1] as? String
@@ -178,15 +202,18 @@ enum FocusedInputSafety {
             return .unavailable
         }
         guard selection.length == 0 else {
-            // 선택 영역이 있는 건 명확한 상태이지 일시적 실패가 아닙니다.
-            // 다시 물어도 같은 답이 오므로 재시도하지 않습니다 — 재시도하면
-            // 주소창처럼 늘 전체 선택된 필드에서 매 키마다 AX IPC를 세 번씩
-            // 반복해, 이벤트 탭 경로에 불필요한 지연을 쌓습니다.
+            // 선택 영역이 있는 건 명확한 상태이지 일시적 실패는 아닙니다. 다만
+            // 이 키가 곧 그 선택을 지우므로, 다음 키에서 다시 물으면 대개 빈
+            // 캐럿으로 바뀝니다("weather" 전체 선택 후 덮어쓰기 등). 그래서
+            // 즉시 확정 거부하지 않고 별도 케이스로 알려, 호출자가 제한된
+            // 횟수만 재확인하게 합니다. 주소창처럼 늘 전체 선택된 필드는 위쪽
+            // 메타데이터 필터(:179)가 먼저 .ineligible로 걸러내므로, 여기에는
+            // "URL이 아니면서 선택을 유지하는" 드문 필드만 도달합니다.
             diagnostic(
                 "focus token has selection len=\(selection.length) "
                     + diagnosticContext(role: role)
             )
-            return .ineligible
+            return .ineligibleTransientSelection
         }
 
         diagnostic("focus token ok \(diagnosticContext(role: role))")

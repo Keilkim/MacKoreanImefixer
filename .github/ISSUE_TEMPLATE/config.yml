@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 기여 방법 먼저 읽기
+    url: https://github.com/Keilkim/MacKoreanImefixer/blob/main/CONTRIBUTING.md
+    about: "앱을 코드로 \"추가\"하는 PR은 받지 않습니다. 왜 그런지, 그럼 무엇을 받는지 여기 정리돼 있습니다."

@@ -98,6 +98,12 @@ struct LexicalTiebreaker {
     /// 호출 계약: v4 규칙이 `ambiguousBothValid`를 낸 키열에 대해서만 호출합니다.
     /// 다른 분기에 개입하면 동결된 판정이 바뀝니다.
     ///
+    /// 이 자산은 **1음절 항목을 갖지 않습니다** — 원본 `ko_words.txt`에 1음절 어절이
+    /// 0개라 구조적으로 그렇습니다. 그 성질이 `MonosyllableLexicon` 관문과의 분리를
+    /// 지탱합니다: 두 자산의 키가 겹치지 않으므로, 단음절 관문이 여기서 확정된 교정을
+    /// 죽일 수 없습니다. `make_mono_lexicon.py verify` 불변식 9와
+    /// `MonosyllableLexiconTests` 가 양쪽에서 강제합니다.
+    ///
     /// `nil`은 "보존" — 즉 오늘과 완전히 같은 동작입니다. 사전에 없는 한국어는
     /// 후퇴가 아니라 현상 유지이므로 이 계층은 fail-safe입니다.
     func resolve(latin: String) -> String? {

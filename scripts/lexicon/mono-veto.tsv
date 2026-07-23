@@ -1,0 +1,43 @@
+# 라틴 측 실사용 위험 원장 — 이 설계에 남은 손 판단 **전부**.
+#
+# OS 자산(영어 사전·Apple 명령어·로케일 코드)이 **잡지 못하는 것만** 적는다.
+# 잡히는 것을 여기 또 적으면 원장이 실효 없는 장식이 되고, 무엇이 기계 판정이고
+# 무엇이 사람 판정인지 구분이 무너진다. verify 불변식 7-①이 그것을 강제한다.
+#
+# 왜 거부 방향만 라틴 키열로 적는가:
+#   허용 방향(mono-source.ko.tsv)은 한글로만 적는다 — 키열을 직접 적을 수 있으면
+#   영어사전·CLI·로케일 게이트를 우회해 항목을 밀어 넣을 수 있기 때문이다.
+#   거부 방향은 반대다. 추가가 언제나 단조 안전하므로 키열로 적는 것이 옳다.
+#   이 비대칭이 자산 설계의 안전 축이다.
+#
+# status
+#   active      지금 후보를 하나 이상 실제로 제거한다 (verify 불변식 7-①이 강제)
+#   prospective 지금은 소스가 그 후보를 만들지 않는다. 소스가 자랄 때 자동으로
+#               막히도록 미리 둔다 (verify 불변식 7-②가 "자산에 없음"을 강제)
+#
+# code
+#   ABBR_LOWER  소문자 표기가 실재하는 약어·식별자·확장자
+#   CLI_THIRD   $PATH 서드파티 명령. Apple 기본 bin 밖이라 OS 투영이 못 잡는다
+#
+# 전대문자(SMS·DNS·XML…)는 R-D3 `acronymConvention`이 오늘도 보존한다. 그래서
+# 여기 남는 위험은 **소문자 단독 토큰**뿐이다.
+keys	status	code	reason
+ch	active	ABBR_LOWER	channel·chapter의 관용 축약. 초 — mono-admit.tsv 로 열어 둠
+cma	active	ABBR_LOWER	CMA(증권 종합계좌). 결과 `츰`은 코퍼스 빈도 0의 비단어라 한국어 쪽 비용이 0이다
+dhl	prospective	ABBR_LOWER	DHL — 외
+dir	prospective	CLI_THIRD	dir 명령 — 약. 지금은 `ambiguousBothValid` 분기(주인이 LexicalTiebreaker)라 이 계층에 오지 않는다
+dl	active	ABBR_LOWER	HTML <dl> / download. 이 — mono-admit.tsv 로 열어 둠
+dml	active	ABBR_LOWER	DML(SQL 데이터 조작어). 의 — mono-admit.tsv 로 열어 둠
+dns	prospective	ABBR_LOWER	DNS — 운
+dp	active	ABBR_LOWER	DisplayPort / data plane / 동적계획법. 에 — mono-admit.tsv 로 열어 둠
+fps	prospective	ABBR_LOWER	FPS — 렌
+gh	active	CLI_THIRD	GitHub CLI. 호 — mono-admit.tsv 로 열어 둠
+gmt	prospective	ABBR_LOWER	GMT — 흣
+skt	prospective	ABBR_LOWER	SKT — 낫
+smt	prospective	ABBR_LOWER	SMT — 늣
+sns	prospective	ABBR_LOWER	SNS — 눈. 한국어 맥락에서 특히 흔하다
+thx	prospective	ABBR_LOWER	thx — 솥
+tl	active	ABBR_LOWER	TL;DR / timeline. 시 — mono-admit.tsv 로 열어 둠
+tls	prospective	ABBR_LOWER	TLS — 신
+wp	active	ABBR_LOWER	WordPress / well played. 제 — mono-admit.tsv 로 열어 둠
+xml	prospective	ABBR_LOWER	XML — 틔

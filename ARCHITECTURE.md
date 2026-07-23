@@ -497,10 +497,13 @@ xcodebuild \
 | `CorrectionNoticeControllerTests` | 6 | 칩 표시·히트테스트, 신뢰 등급→강조 매핑과 수명 |
 | `GoldenCorpusParityTests` | 2 | 골든 코퍼스 405행 Swift↔Python 일치, 규칙 전수 커버 |
 | `LexicalTiebreakerParityTests` | 5 | 고정 어휘 파싱·case 정책·fixture와 Python parity |
+| `LexicalGuardTests` | 15 | 동결 밖 거부권·등급 조정 계약, 영→한 단음절 관문, 한→영 순수 자음 사전 게이트 |
+| `MonosyllableLexiconTests` | 12 | 단음절 자산 511행의 fixture parity·동결 조합기 재조합·자산 분리·표면 상한·회귀 가드 |
+| `MackorAppFilterTests` | 2 | 앱 목록 필터링 |
 | `TargetAppManagerTests` | 13 | 범위 기본값·저장·마이그레이션·빈 목록·앱별 기능 |
 | `AppMonitorTests` | 9 | 범위와 무관한 직접 조합, 자동 교정 활성 상태 조합 |
 | `InputSourceControllerTests` | 6 | 정확한 소스 선택·fallback·실패·수동 변경 뒤 Undo |
-| `EventTapManagerTests` | 89 | 네이티브 IME 유지, 빠른 입력 경계, `BoundarySequence`, 제출 키 동기 상한·후행 마침표, 입력 소스 동기화, 고정 어휘·방향 재판정, 안전 필드, exact 포커스, 원문 칩 transaction, Undo, autorepeat |
+| `EventTapManagerTests` | 108 | 네이티브 IME 유지, 빠른 입력 경계, `BoundarySequence`, 제출 키 동기 상한·후행 마침표, 입력 소스 동기화, 고정 어휘·방향 재판정, 단음절 구제(2키·무모음 3키·fail-closed·전대문자 보존), 안전 필드, exact 포커스, 원문 칩 transaction, Undo, autorepeat |
 | `StructureCorrectionCorpusTests` | 2 | 고정 tune/holdout fixture, 혼동행렬과 정밀도·재현율·F1 회귀 |
 | `SparkleUpdateConfigurationTests` | 5 | feed URL·EdDSA 공개키·업데이터 활성화 gate |
 

@@ -73,8 +73,21 @@ final class LexicalTiebreakerParityTests: XCTestCase {
     /// 어중 대문자 veto(정책 C). `내꾸` 의 키열 `soRn` 은 ㄲ 때문에 Shift 가 섞여
     /// 있는데, 통째로 소문자로 접으면 방언 `sorn` 에 걸려 교정이 막힌다.
     func testInternalUppercaseIsNotFoldedToEnglish() throws {
+        // `내꾸`(soRn)의 보호는 R-E14(어중 대문자 = 영어 아님)로 엔진에 승격됐다.
+        // 이제 규칙이 직접 교정하므로 ambiguous 분기에 도달하지 않아 투영에서
+        // 빠진다 — 사전 조회는 nil이고, 정책이 직접 한글로 확정한다.
         let tiebreaker = try loadTiebreaker()
-        XCTAssertEqual(tiebreaker.resolve(latin: "soRn"), "내꾸")
+        XCTAssertNil(tiebreaker.resolve(latin: "soRn"), "R-E14 이후 투영 밖이어야 합니다")
+        guard let keystrokes = PhysicalKeystrokeFixture.keystrokes("soRn") else {
+            return XCTFail("soRn 키열 변환 실패")
+        }
+        guard case .correct(_, _, let replacement, _) = LayoutCorrectionPolicy.evaluate(
+            keystrokes: keystrokes,
+            inputSource: .supportedLatin
+        ) else {
+            return XCTFail("내꾸가 규칙으로도 사전으로도 지켜지지 않습니다")
+        }
+        XCTAssertEqual(replacement, "내꾸")
         XCTAssertNil(LexicalTiebreaker.englishLookupKey("soRn"))
         // 어두 대문자는 정상 영어이므로 접어야 한다.
         XCTAssertEqual(LexicalTiebreaker.englishLookupKey("Sorn"), "sorn")

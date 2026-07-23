@@ -82,6 +82,16 @@ enum EnglishPhonotactics {
     // MARK: - 진입점
 
     static func evaluate(_ word: String) -> Evaluation {
+        // R-E14 어중 대문자는 영어 정서법이 아니다. 어두 대문자(고유명사)와
+        // 전대문자(약어 — 영→한에서는 R-D3가 먼저 걸러낸다)는 표기 관례지만
+        // 어중 대문자는 아니다. 두벌식 Shift 쌍자모(ㅃㅉㄸㄲㅆㅒㅖ)가 어중에
+        // 온 키열(`alcuTek`=미쳤다, `roRnf`=개꿀)이 여기서 갈린다.
+        // `LexicalTiebreaker.englishLookupKey`가 조회 정규화에 쓰던 논리의
+        // 엔진 승격이다.
+        if word.dropFirst().contains(where: \.isUppercase) {
+            return .implausible
+        }
+
         var cost = 0
         var letters = Array(word.lowercased())
 
@@ -111,6 +121,19 @@ enum EnglishPhonotactics {
         if let index = letters.firstIndex(of: "q") {
             let next = letters.index(after: index)
             guard next < letters.endIndex,
+                  vowelLetters.contains(letters[next]) || letters[next] == "y" else {
+                return Evaluation(isPlausible: false, cost: cost)
+            }
+        }
+
+        // R-E13 j 뒤에는 모음이 온다 (y 허용). jam·inject·fjord — 영어
+        // 정서법에서 j는 언제나 onset이고 뒤에 핵이 따른다. 사전 235,974단어 중
+        // 위반은 52개(0.022%)로 전부 raj·hadj·majlis류 차용어다. R-E6 어말 j
+        // 금지의 일반화이며, coda `nj`+onset `d` 분절로 살아남던 `anjdi`(뭐야)류가
+        // 여기서 갈린다.
+        for (index, character) in letters.enumerated() where character == "j" {
+            let next = index + 1
+            guard next < letters.count,
                   vowelLetters.contains(letters[next]) || letters[next] == "y" else {
                 return Evaluation(isPlausible: false, cost: cost)
             }

@@ -136,6 +136,27 @@ final class EnglishPhonotacticsTests: XCTestCase {
         XCTAssertFalse(plausible("qbert"))
     }
 
+    func testRejectsJNotFollowedByVowel() {
+        // R-E13. j는 언제나 onset이고 뒤에 핵이 따른다. coda `nj`+onset 분절로
+        // 살아남던 `anjdi`(뭐야)류가 여기서 갈린다.
+        // (`fjord`는 이 규칙 이전부터 `fj` onset 위반으로 거부되던 단어라 여기
+        // 넣지 않는다 — R-E13은 j+모음 단어를 새로 거부하지 않는다.)
+        for word in ["jam", "inject", "banjo", "judge"] {
+            XCTAssertTrue(plausible(word), "정상 j+모음이 거부됐습니다: \(word)")
+        }
+        for word in ["anjdi", "anjgo", "anjsi", "majlis", "hajj"] {
+            XCTAssertFalse(plausible(word), "j+비모음이 통과했습니다: \(word)")
+        }
+    }
+
+    func testRejectsMidWordUppercase() {
+        // R-E14. 어중 대문자는 영어 정서법이 아니다 — 두벌식 어중 Shift
+        // 쌍자모(`alcuTek`=미쳤다, `roRnf`=개꿀)가 여기서 갈린다.
+        for word in ["alcuTek", "woalTek", "roRnf", "teSt"] {
+            XCTAssertFalse(plausible(word), "어중 대문자가 통과했습니다: \(word)")
+        }
+    }
+
     func testRejectsExcessiveVowelRuns() {
         // R-C2.
         XCTAssertFalse(plausible("baaaad"))
@@ -178,14 +199,16 @@ final class EnglishPhonotacticsTests: XCTestCase {
         XCTAssertFalse(plausible("한글"))
     }
 
-    func testEvaluationIsCaseInsensitive() {
+    /// R-E14 이후의 대소문자 계약: 어두 대문자(고유명사·문장 첫 단어)는 표기
+    /// 변형으로 접지만, 어중 대문자는 유의미한 신호(영어 아님)다. 전대문자는
+    /// 영→한에서 R-D3(acronymConvention)가 이 계층 앞에서 걸러내고, 한→영에서는
+    /// 전-Shift 자모 입력이 영어로 바뀌지 않는 보존 방향이므로 안전하다.
+    func testLeadingCaseIsFoldedButMidWordCaseIsSignificant() {
         XCTAssertEqual(
             EnglishPhonotactics.evaluate("Hello"),
             EnglishPhonotactics.evaluate("hello")
         )
-        XCTAssertEqual(
-            EnglishPhonotactics.evaluate("PROJECT"),
-            EnglishPhonotactics.evaluate("project")
-        )
+        XCTAssertFalse(plausible("PROJECT"))
+        XCTAssertTrue(plausible("project"))
     }
 }

@@ -5,7 +5,14 @@ final class EventTapManagerTests: XCTestCase {
     func testSpaceCorrectionReplacesTokenAndRequestsKoreanSource() throws {
         let output = FakeKeyboardOutput()
         let focus = FakeFocusInspector()
-        let manager = makeManager(output: output, focus: focus)
+        // `dho`→왜는 한글 한 음절이므로 단음절 관문을 지납니다. 자산을 주입하지
+        // 않으면 fail-closed 로 보존되는 것이 계약입니다 — 여기서는 실제 저장소
+        // 자산을 주입해 이 배관 테스트가 end-to-end 증거도 겸하게 합니다.
+        let manager = makeManager(
+            output: output,
+            focus: focus,
+            monosyllableLexicon: try makeMonosyllableLexicon()
+        )
         manager.inputSourceKind = .supportedLatin
         manager.isAutoCorrectionEnabled = true
 
@@ -184,9 +191,566 @@ final class EventTapManagerTests: XCTestCase {
         XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
 
         XCTAssertTrue(output.actions.isEmpty, "실패가 계속되는데 교정을 시도했습니다")
+        // 소프트 상한(2키) × in-key 재시도(3회) = 6에서 확정 거부로 굳는다.
+        // 8키 "dkwndkwn"을 쳐도 6에 머물러 "조회는 토큰당 O(1), 키당 아님"
+        // 불변식이 유지됨을 못박는다(상수만 3→6으로 바뀜).
         XCTAssertLessThanOrEqual(
-            focus.tokenRequestCount, 3,
+            focus.tokenRequestCount, 6,
             "상한을 넘겨 매 키마다 조회했습니다: \(focus.tokenRequestCount)회"
+        )
+    }
+
+    // MARK: - "첫 단어만 안 바뀐다" — 두 가설의 판별 실험
+    //
+    // 재현(3회, 모두 Safari 주소창): 같은 필드에서 **첫 토큰만** 교정되지 않고
+    // 그 뒤 토큰은 전부 정상. "아주 좋아"를 치면 "dkwn 좋아"가 남는다.
+    //
+    // 가설 A — 일시적 선택 영역. 주소창을 클릭하면 URL 전체가 선택된다.
+    //   head-insert 탭이라 첫 keyDown은 앱이 선택을 접기 전에 도착하고, 그
+    //   조회만 `.ineligible`을 받는다. 재시도가 없으므로 그 토큰이 통째로 죽는다.
+    // 가설 B — 차가운 AX가 시도 예산을 소진. 시도 횟수가 키가 아니라 토큰
+    //   단위라, 키마다 한 번씩 실패하면 세 번째 키에서 상한에 닿아 확정 거부된다.
+    //
+    // 아래 세 테스트는 *의도한* 동작을 고정한다 — 어느 쪽이든 첫 단어는 교정돼야
+    // 한다. 실패하는 쪽이 실제 원인이다. 마지막 대조군은 HEAD에서 통과해야
+    // 하며, 그것이 깨지면 원인은 제품이 아니라 이 하네스 사용법이다.
+
+    /// 가설 A. 첫 조회만 낡은 선택 영역을 읽어 거부돼도, 그 단어는 교정돼야 한다.
+    ///
+    /// 수정됨(감사 #10): 선택-전용 거부를 `.ineligibleTransientSelection`으로
+    /// 분리해 즉시 래치하지 않고 다음 키에서 재확인한다. 첫 키에서 선택이
+    /// 읽혀도 키열은 계속 기록되고, 둘째 키에서 빈 캐럿으로 바뀌면 `.eligible`이
+    /// 떠 그 단어가 교정된다.
+    func testTransientSelectionOnFirstKeyStillCorrectsThatWord() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.ineligibleProbesRemaining = 1   // 첫 키만 낡은 선택을 읽는다
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("dkwn", into: manager)
+        _ = manager.handleKeyDown(keyDown(0x31))
+        _ = manager.handleKeyUp(keyUp(0x31))
+
+        XCTAssertTrue(
+            output.actions.contains(.text("아주")),
+            "첫 키의 일시적 선택 영역 때문에 그 단어를 통째로 잃었습니다: \(output.actions)"
+        )
+    }
+
+    /// 수정 후: 첫 단어도 두 번째 단어도 모두 교정돼야 한다. 예전엔 첫 단어만
+    /// 죽던 증상(사용자가 겪은 그대로)이 이 수정으로 사라졌음을 고정한다 —
+    /// 전이 선택을 즉시 확정 거부하지 않고 다음 키에서 재확인하기 때문이다.
+    func testTransientSelectionCorrectsFirstWordToo() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.ineligibleProbesRemaining = 1
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("dkwn", into: manager)
+        _ = manager.handleKeyDown(keyDown(0x31))
+        _ = manager.handleKeyUp(keyUp(0x31))
+        let afterFirstWord = output.actions
+        output.actions.removeAll()
+
+        type("dkwn", into: manager)
+        _ = manager.handleKeyDown(keyDown(0x31))
+        _ = manager.handleKeyUp(keyUp(0x31))
+        let afterSecondWord = output.actions
+
+        XCTAssertTrue(
+            afterFirstWord.contains(.text("아주")),
+            "수정 후 첫 단어도 교정돼야 한다: \(afterFirstWord)"
+        )
+        XCTAssertTrue(
+            afterSecondWord.contains(.text("아주")),
+            "두 번째 단어도 정상 교정돼야 한다: \(afterSecondWord)"
+        )
+    }
+
+    /// 가설 B. 키마다 조회 하나가 AX 예산을 다 써서 세 키 연속 실패해도,
+    /// 네 번째 키에서 성공하면 그 단어는 교정돼야 한다.
+    ///
+    /// 조회가 일어날 때만 시계를 밀어, 키마다 재시도 없이 조회 **한 번**만
+    /// 하도록 만든다(예산 만료). 경계 처리 경로는 조회를 하지 않으므로 그쪽
+    /// 예산은 건드리지 않는다.
+    func testColdAXAcrossThreeKeysStillCorrectsThatWord() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.transientFailuresRemaining = 3
+        var clock: TimeInterval = 0
+        focus.onProbeRequest = { clock += 0.2 }
+        let manager = makeManager(
+            output: output,
+            focus: focus,
+            monotonicNow: { clock }
+        )
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("dkwn", into: manager)
+        _ = manager.handleKeyDown(keyDown(0x31))
+        _ = manager.handleKeyUp(keyUp(0x31))
+
+        XCTAssertTrue(
+            output.actions.contains(.text("아주")),
+            "토큰 단위 시도 예산이 단어 중간에서 소진돼 나머지 키를 버렸습니다: \(output.actions)"
+        )
+    }
+
+    /// 대조군. 같은 시계 장치에 실패를 **한 번**만 두면 예산 안에서 회복해야
+    /// 한다. 이것마저 실패하면 제품이 아니라 위 두 테스트의 하네스 사용이 틀린
+    /// 것이므로, 위 결과를 근거로 삼을 수 없다.
+    func testColdAXWithinAttemptBudgetRecoversAndCorrects() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.transientFailuresRemaining = 1
+        var clock: TimeInterval = 0
+        focus.onProbeRequest = { clock += 0.2 }
+        let manager = makeManager(
+            output: output,
+            focus: focus,
+            monotonicNow: { clock }
+        )
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("dkwn", into: manager)
+        _ = manager.handleKeyDown(keyDown(0x31))
+        _ = manager.handleKeyUp(keyUp(0x31))
+
+        XCTAssertTrue(
+            output.actions.contains(.text("아주")),
+            "대조군이 깨졌습니다 — 하네스 사용이 틀렸다는 뜻입니다: \(output.actions)"
+        )
+    }
+
+    /// 가설 B의 더 단순한 변종. 시계를 조작하지 않아도 재현된다.
+    ///
+    /// 예산이 남아 있으면 **첫 keyDown 안에서** 재시도가 세 번 다 소모되고,
+    /// 세 번째가 여전히 실패하면 그 자리에서 확정 거부로 굳는다. 그 뒤 이
+    /// 토큰에서는 AX가 아무리 멀쩡해져도 다시 묻지 않는다.
+    ///
+    /// 수정됨(감사 #6): 첫 키의 재시도 3회가 전부 소진돼도 즉시 확정 거부로
+    /// 굳히지 않고 소프트 카운터만 1 올린 뒤 키열을 계속 기록한다. 실패한
+    /// 조회가 AX를 데우므로 둘째 키가 `.eligible`을 받아 그 단어를 교정한다.
+    /// 소진이 상한 키 수(2)만큼 이어질 때만 확정 거부로 굳는다.
+    func testColdAXExhaustingRetriesInOneKeyStillCorrectsThatWord() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.transientFailuresRemaining = 3   // 네 번째부터는 정상
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("dkwn", into: manager)
+        _ = manager.handleKeyDown(keyDown(0x31))
+        _ = manager.handleKeyUp(keyUp(0x31))
+
+        XCTAssertTrue(
+            output.actions.contains(.text("아주")),
+            "첫 키가 재시도 예산을 다 태워 토큰이 굳었습니다: \(output.actions) "
+                + "조회 \(focus.tokenRequestCount)회"
+        )
+    }
+
+    // MARK: - 소프트 거부 안전망 — 새로 넓힌 경로가 파괴로 새지 않는지 고정
+    //
+    // 아래 세 테스트는 "일시적 거부를 미해결로 보존"이라는 이번 변경이, 늘어난
+    // 적격 토큰을 파괴 경로로 흘리지 않음을 못박는다. 영구 거부는 여전히 첫
+    // 프로브에서 굳고(#2), 늘 선택된 필드는 키당 thrash 없이 2프로브에서 굳으며
+    // (#1, 3d44306 perf 보존), 새로 적격이 된 토큰도 경계 검증이 실패하면
+    // 파괴 없이 포기한다(#3, 결정적 안전 논증의 토큰 집단판).
+
+    /// URL이 아니면서 늘 전체 선택을 유지하는 드문 필드: 소프트 상한(2)에서
+    /// 확정 거부로 굳고, 키당 AX 조회를 반복하지 않는다(정확히 2회). 3d44306이
+    /// 지키려던 "영구 선택 필드에서 키당 thrash 없음" 불변식을 선택측에서 고정.
+    func testPersistentlySelectedFieldRefusesAfterTwoProbes() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.ineligibleProbesRemaining = 99   // 끝까지 선택 유지
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("dkwn", into: manager)
+        _ = manager.handleKeyDown(keyDown(0x31))
+        _ = manager.handleKeyUp(keyUp(0x31))
+
+        XCTAssertTrue(
+            output.actions.isEmpty,
+            "늘 선택된 필드에서 교정을 시도했습니다: \(output.actions)"
+        )
+        XCTAssertEqual(
+            focus.tokenRequestCount, 2,
+            "선택은 in-key 재시도 대상이 아니어야 합니다 — 키당 thrash: \(focus.tokenRequestCount)회"
+        )
+    }
+
+    /// 영구 거부(보안·미지원 role·보호 subrole·보호 메타데이터)는 소프트
+    /// 카운터로 완화되지 않고 첫 프로브에서 즉시 확정 거부로 굳는다.
+    func testPermanentIneligibleLatchesOnFirstProbe() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.tokenAvailable = false   // 영구 .ineligible
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("dkwn", into: manager)
+        _ = manager.handleKeyDown(keyDown(0x31))
+        _ = manager.handleKeyUp(keyUp(0x31))
+
+        XCTAssertTrue(
+            output.actions.isEmpty,
+            "영구 거부 필드에서 교정을 시도했습니다: \(output.actions)"
+        )
+        XCTAssertEqual(
+            focus.tokenRequestCount, 1,
+            "영구 거부가 소프트 카운터로 완화됐습니다 — 프로브 \(focus.tokenRequestCount)회"
+        )
+    }
+
+    /// 전이 선택으로 미뤘다가 뒤늦게 적격이 된 토큰도, 경계에서 두 검증(anchored·
+    /// reanchored)이 모두 실패하면 삭제하지 않고 안전하게 포기한다. 넓힌 경로가
+    /// 파괴 경로에 미검증 토큰을 넘기지 않음을 직접 고정.
+    func testRecoveredTransientTokenAbandonsWhenBoundaryUnverified() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.ineligibleProbesRemaining = 1     // 키1 전이 선택 → 키2 적격
+        focus.currentFocusMatches = false       // anchored 실패
+        // caretTextMatches는 기본 false — reanchored도 실패
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("dkwn", into: manager)
+        _ = manager.handleKeyDown(keyDown(0x31))
+        _ = manager.handleKeyUp(keyUp(0x31))
+
+        XCTAssertFalse(
+            output.actions.contains(.text("아주")),
+            "경계 검증이 모두 실패했는데 교정(삭제)을 시도했습니다: \(output.actions)"
+        )
+    }
+
+    // MARK: - LexicalGuard 배선 — 파괴적 오교정이 이벤트 흐름에서 실제로 멈추는가
+
+    /// `dns`+Space: 예전엔 `운`으로 파괴됐다. 모음 없는 라틴→단음절 구조
+    /// 거부가 이벤트 탭 경로에서 실제로 발동해 아무것도 방출하지 않는다.
+    func testVowellessAcronymIsNotDestroyedIntoASingleSyllable() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("dns", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(
+            output.actions.isEmpty,
+            "dns가 여전히 교정(파괴)됩니다: \(output.actions)"
+        )
+    }
+
+    /// 한글 자판으로 `ac`를 친 화면(`ㅁㅊ`)+Space: 예전엔 `ac`로 파괴됐다.
+    /// 결과가 실단어가 아니므로 순수 자음 게이트가 원문을 보존한다.
+    func testFixedJamoExpressionIsNotDestroyedIntoNonWord() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .koreanTwoSet
+        manager.isAutoCorrectionEnabled = true
+
+        type("ac", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(
+            output.actions.isEmpty,
+            "ㅁㅊ이 여전히 ac로 교정(파괴)됩니다: \(output.actions)"
+        )
+    }
+
+    /// `ㅈㄷ`→we처럼 결과가 실단어인 순수 자음은 계속 교정된다 — 게이트가
+    /// 정당한 교정까지 막지 않음을 고정한다(사전 증거 주입).
+    func testConsonantRunWithRealWordResultStillCorrects() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        let manager = makeManager(output: output, focus: focus, guardEvidence: ["we"])
+        manager.inputSourceKind = .koreanTwoSet
+        manager.isAutoCorrectionEnabled = true
+
+        type("we", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(
+            output.actions.contains(.text("we")),
+            "실단어 결과의 정당한 교정이 막혔습니다: \(output.actions)"
+        )
+    }
+
+    // MARK: - 자음 매시 어휘 구제
+    //
+    // 구조 규칙은 서로 다른 자음 자모 3+개 나열을 키보드 매시로 보고 보존하는데,
+    // 그중 `card`·`water`처럼 자음 자판 글자만으로 적힌 실제 영어 단어가 함께
+    // 죽는다. 4키 이상이고 결과가 동결 사전에 실단어로 있을 때만 되살린다.
+
+    /// 한글 자판으로 `card`를 친 화면(`ㅊㅁㄱㅇ`)+Space: 4키 매시이고 결과가
+    /// 실단어이므로 영어로 되살아난다.
+    func testConsonantMashRealWordIsRescued() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        let manager = makeManager(output: output, focus: focus, guardEvidence: ["card"])
+        manager.inputSourceKind = .koreanTwoSet
+        manager.isAutoCorrectionEnabled = true
+
+        type("card", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(
+            output.actions.contains(.text("card")),
+            "ㅊㅁㄱㅇ이 card로 구제되지 않았습니다: \(output.actions)"
+        )
+    }
+
+    /// 3키 매시는 `ㅁㅊㄷ`(미쳤다)류 실사용 초성체와 조밀하게 겹치므로 하한
+    /// 아래로 제외한다. 결과가 사전에 있어도(`cat`) 되살리지 않는다.
+    func testShortConsonantMashIsNotRescued() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        let manager = makeManager(output: output, focus: focus, guardEvidence: ["cat"])
+        manager.inputSourceKind = .koreanTwoSet
+        manager.isAutoCorrectionEnabled = true
+
+        type("cat", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(
+            output.actions.isEmpty,
+            "3키 매시가 하한을 넘어 교정됐습니다: \(output.actions)"
+        )
+    }
+
+    /// 사전 증거가 그 단어를 담지 않으면 매시 보호가 그대로 유지된다.
+    /// (자산은 있으나 `card` 미포함 — 무조건 켜지는 게 아니라 사전 게이트임을 고정)
+    func testConsonantMashWithoutMatchingEvidenceIsPreserved() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        let manager = makeManager(output: output, focus: focus, guardEvidence: ["water"])
+        manager.inputSourceKind = .koreanTwoSet
+        manager.isAutoCorrectionEnabled = true
+
+        type("card", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(
+            output.actions.isEmpty,
+            "사전에 없는데도 매시가 교정됐습니다: \(output.actions)"
+        )
+    }
+
+    /// 사전 자산이 없으면 fail-closed — 매시 구제 전체가 사라지고 오늘과 같이
+    /// 보존한다. `asdf`(ㅁㄴㅇㄹ)는 실단어가 아니므로 어차피 보존이지만,
+    /// 자산 부재로도 정당한 매시 보호가 흔들리지 않음을 함께 고정한다.
+    func testConsonantMashWithoutEvidenceAssetPreserves() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        let manager = makeManager(output: output, focus: focus, guardEvidence: nil)
+        manager.inputSourceKind = .koreanTwoSet
+        manager.isAutoCorrectionEnabled = true
+
+        type("card", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(
+            output.actions.isEmpty,
+            "자산이 없는데 매시 구제가 발동했습니다: \(output.actions)"
+        )
+    }
+
+    /// 실단어가 아닌 진짜 매시(`asdf`=ㅁㄴㅇㄹ)는 풍부한 사전이 있어도 보존된다.
+    func testGenuineMashIsStillPreservedWithEvidence() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        let manager = makeManager(output: output, focus: focus, guardEvidence: ["card", "water"])
+        manager.inputSourceKind = .koreanTwoSet
+        manager.isAutoCorrectionEnabled = true
+
+        type("asdf", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(
+            output.actions.isEmpty,
+            "실단어가 아닌 매시가 교정됐습니다: \(output.actions)"
+        )
+    }
+
+    // MARK: - 어퍼스트로피 축약형
+    //
+    // 영어 축약형(it's·don't·we're)은 한글 모드에서 자모+'+자모로 찍힌다.
+    // '는 판정이 아니라 투명한 구분자로, 양쪽 키열을 합쳐 동결 정책에 맡기고
+    // 결과에 '를 다시 끼운다. 한국어 닫는 따옴표+조사는 정책이 modernKorean으로
+    // 보존하므로 여기서 파괴되지 않는다.
+
+    private static let apostropheKeycode: UInt16 = 0x27
+
+    /// `it's`(ㅑㅅ'ㄴ): '가 토큰을 죽이지 않고, 합친 `its`가 englishStructure로
+    /// 교정되며 '가 다시 끼워진다.
+    func testApostropheContractionItsIsCorrected() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .koreanTwoSet
+        manager.isAutoCorrectionEnabled = true
+
+        type("it", into: manager)
+        XCTAssertNotNil(
+            manager.handleKeyDown(keyDown(Self.apostropheKeycode)),
+            "어퍼스트로피는 앱으로 통과해야 합니다"
+        )
+        type("s", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(
+            output.actions.contains(.text("it's")),
+            "it's가 교정되지 않았습니다: \(output.actions)"
+        )
+    }
+
+    /// `don't`(ㅇㅐㅜ'ㅅ): 앞 세그먼트가 3자여도 `'` 위치가 정확히 복원된다.
+    func testApostropheContractionDontIsCorrected() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .koreanTwoSet
+        manager.isAutoCorrectionEnabled = true
+
+        type("don", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(Self.apostropheKeycode)))
+        type("t", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(
+            output.actions.contains(.text("don't")),
+            "don't가 교정되지 않았습니다: \(output.actions)"
+        )
+    }
+
+    /// `we're`(ㅈㄷ'ㄱㄷ): 오른쪽 세그먼트가 2자여도 정확히 복원된다.
+    func testApostropheContractionWereIsCorrected() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .koreanTwoSet
+        manager.isAutoCorrectionEnabled = true
+
+        type("we", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(Self.apostropheKeycode)))
+        type("re", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(
+            output.actions.contains(.text("we're")),
+            "we're가 교정되지 않았습니다: \(output.actions)"
+        )
+    }
+
+    /// `아니'라고`(dksl'fkrh): 한국어 닫는 따옴표+조사. 합친 `아니라고`는
+    /// modernKorean이라 정책이 보존한다 — 어퍼스트로피 규칙이 파괴하지 않는다.
+    func testKoreanClosingQuoteWithParticleIsPreserved() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .koreanTwoSet
+        manager.isAutoCorrectionEnabled = true
+
+        type("dksl", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(Self.apostropheKeycode)))
+        type("fkrh", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(
+            output.actions.isEmpty,
+            "한국어 따옴표+조사가 파괴됐습니다: \(output.actions)"
+        )
+    }
+
+    /// 영자판에서는 이 규칙이 발동하지 않는다 — 이미 영어로 찍히고, `didn't`→야웃
+    /// 오교정이 측정됐다(G1: koreanTwoSet 방향 한정).
+    func testApostropheInLatinModeIsUntouched() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("it", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(Self.apostropheKeycode)))
+        type("s", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(
+            output.actions.isEmpty,
+            "영자판에서 어퍼스트로피 규칙이 발동했습니다: \(output.actions)"
+        )
+    }
+
+    /// Shift+`'`는 큰따옴표(")이므로 축약형 신호가 아니다 — 규칙이 발동하지 않는다.
+    func testShiftApostropheDoesNotTrigger() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .koreanTwoSet
+        manager.isAutoCorrectionEnabled = true
+
+        type("it", into: manager)
+        XCTAssertNotNil(
+            manager.handleKeyDown(keyDown(Self.apostropheKeycode, shift: true))
+        )
+        type("s", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(
+            output.actions.isEmpty,
+            "Shift+어퍼스트로피가 축약형으로 처리됐습니다: \(output.actions)"
+        )
+    }
+
+    /// 선행 어퍼스트로피(`'s`, 여는 따옴표)는 왼쪽 세그먼트가 없어 발동하지 않고
+    /// 오늘처럼 보존된다.
+    func testLeadingApostropheIsPreserved() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .koreanTwoSet
+        manager.isAutoCorrectionEnabled = true
+
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(Self.apostropheKeycode)))
+        type("s", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(
+            output.actions.isEmpty,
+            "선행 어퍼스트로피가 교정을 일으켰습니다: \(output.actions)"
         )
     }
 
@@ -948,10 +1512,14 @@ final class EventTapManagerTests: XCTestCase {
         XCTAssertEqual(focus.currentFocusOffsets, [5, 5, 5])
     }
 
-    func testImmediateUndoRestoresPunctuationAndRequestsOriginalSource() {
+    func testImmediateUndoRestoresPunctuationAndRequestsOriginalSource() throws {
         let output = FakeKeyboardOutput()
         let focus = FakeFocusInspector()
-        let manager = makeManager(output: output, focus: focus)
+        let manager = makeManager(
+            output: output,
+            focus: focus,
+            monosyllableLexicon: try makeMonosyllableLexicon()
+        )
         manager.inputSourceKind = .supportedLatin
         manager.isAutoCorrectionEnabled = true
         let receipt = InputSourceSwitchReceipt(
@@ -1269,7 +1837,7 @@ final class EventTapManagerTests: XCTestCase {
         ])
     }
 
-    func testPreBoundaryQuestionMarkPreservesShiftAndSuppressesPhysicalPair() {
+    func testPreBoundaryQuestionMarkPreservesShiftAndSuppressesPhysicalPair() throws {
         let output = FakeKeyboardOutput()
         let focus = FakeFocusInspector()
         focus.caretTextMatches = true
@@ -1277,7 +1845,8 @@ final class EventTapManagerTests: XCTestCase {
         let manager = makeManager(
             output: output,
             focus: focus,
-            scheduleBoundaryCorrection: { scheduledCorrections.append($0) }
+            scheduleBoundaryCorrection: { scheduledCorrections.append($0) },
+            monosyllableLexicon: try makeMonosyllableLexicon()
         )
         manager.inputSourceKind = .supportedLatin
         manager.isAutoCorrectionEnabled = true
@@ -2174,6 +2743,256 @@ final class EventTapManagerTests: XCTestCase {
         XCTAssertTrue(output.actions.isEmpty)
     }
 
+    // MARK: - AX 미지원 앱 학습
+
+    /// 텍스트 역할을 계속 못 보면 그 앱을 미지원으로 학습한다.
+    ///
+    /// 이 경로가 없어서 목록은 "자판자동 켜짐"으로 보이는데 실제로는 아무것도
+    /// 안 되는 상태가 있었다. Adobe Illustrator가 그 사례다 — AX 트리에
+    /// AXTextField·AXTextArea·AXComboBox가 0개인데 UI는 켜진 것처럼 표시했다.
+    func testUnsupportedRoleIsLearnedAfterRepeatedObservations() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.alwaysUnsupportedRole = true
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+        var learned = 0
+        manager.onAutoCorrectionUnsupported = { learned += 1 }
+
+        // 포커스 판정은 토큰당 한 번 굳으므로 관찰 단위는 **단어**다. 여섯 단어.
+        for _ in 0..<6 {
+            type("gksrmf", into: manager)
+            XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+            XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+        }
+
+        XCTAssertEqual(learned, 1, "미지원 학습이 한 번 일어나야 합니다")
+        XCTAssertTrue(output.actions.isEmpty, "미지원 앱에서 화면을 바꿨습니다")
+    }
+
+    /// 한 번 봤다고 단정하면 안 된다 — 버튼에 포커스가 가 있어도 같은 신호가 난다.
+    func testSingleUnsupportedRoleObservationDoesNotLearn() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.alwaysUnsupportedRole = true
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+        var learned = 0
+        manager.onAutoCorrectionUnsupported = { learned += 1 }
+
+        for _ in 0..<2 {
+            type("gksrmf", into: manager)
+            XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+            XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+        }
+
+        XCTAssertEqual(learned, 0, "두 단어만으로 앱을 미지원으로 굳혔습니다")
+    }
+
+    /// 필드 단위 거부(비밀번호·주소창)는 앱 학습 근거가 아니다.
+    /// 이걸 세면 Safari가 비밀번호 칸 하나 때문에 통째로 미지원이 된다.
+    func testFieldLevelRefusalNeverLearnsUnsupported() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.tokenAvailable = false        // 영구 .ineligible (필드 단위 거부)
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+        var learned = 0
+        manager.onAutoCorrectionUnsupported = { learned += 1 }
+
+        for _ in 0..<10 {
+            type("gksrmf", into: manager)
+            XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+            XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+        }
+
+        XCTAssertEqual(learned, 0, "필드 단위 거부를 앱 미지원으로 학습했습니다")
+    }
+
+    // MARK: - 단음절 구제 (동결 자산 경유)
+
+    /// 2키 단음절은 엔진이 R-K4로 판정을 포기한다. 동결 자산이 그 키열을
+    /// 확인해 줄 때만 교정이 나온다.
+    func testTwoKeyMonosyllableIsCorrectedAtBoundary() throws {
+        let output = FakeKeyboardOutput()
+        let manager = makeManager(
+            output: output,
+            monosyllableLexicon: try makeMonosyllableLexicon()
+        )
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("fh", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertTrue(output.actions.isEmpty, "경계 키가 눌린 직후에는 아무것도 내보내지 않습니다")
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        // 삭제는 토큰 2자 + 경계 문자 1자 = 3회. 경계는 우리가 다시 내보낸다.
+        XCTAssertEqual(output.actions, [
+            .key(0x33, false),
+            .key(0x33, false),
+            .key(0x33, false),
+            .text("로"),
+            .key(0x31, false),
+        ])
+    }
+
+    /// 사용자가 지목한 7개가 전부 교정된다. 이 테스트가 이 작업의 수용 기준이다.
+    func testReportedMonosyllablesAreAllCorrected() throws {
+        let lexicon = try makeMonosyllableLexicon()
+        let expected = [
+            ("fh", "로"), ("dy", "요"), ("dk", "아"), ("sp", "네"),
+            ("dh", "오"), ("fmf", "를"), ("sms", "는"),
+        ]
+        for (latin, korean) in expected {
+            let output = FakeKeyboardOutput()
+            let manager = makeManager(output: output, monosyllableLexicon: lexicon)
+            manager.inputSourceKind = .supportedLatin
+            manager.isAutoCorrectionEnabled = true
+
+            type(latin, into: manager)
+            XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+            XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+            // 토큰 길이 + 경계 문자 1자만큼 지운다.
+            let deletions = Array(
+                repeating: FakeKeyboardOutput.Action.key(0x33, false),
+                count: latin.count + 1
+            )
+            XCTAssertEqual(
+                output.actions,
+                deletions + [.text(korean), .key(0x31, false)],
+                "\(latin) 가 \(korean) 로 교정되지 않았습니다"
+            )
+        }
+    }
+
+    /// 자산 밖 단음절은 보존한다. `cma`는 **오늘 파괴 중**인 사례다.
+    func testMonosyllableOutsideLexiconIsPreserved() throws {
+        let lexicon = try makeMonosyllableLexicon()
+        // `sk`·`eh`·`go`·`dp` 는 mono-admit.tsv 로 **의도적으로 열었으므로** 여기
+        // 없습니다. 그 결정은 MonosyllableLexiconTests 가 따로 고정합니다.
+        for latin in ["zh", "dns", "sns", "cma", "rm", "du", "dha"] {
+            let output = FakeKeyboardOutput()
+            let manager = makeManager(output: output, monosyllableLexicon: lexicon)
+            manager.inputSourceKind = .supportedLatin
+            manager.isAutoCorrectionEnabled = true
+
+            type(latin, into: manager)
+            XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+            XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+            XCTAssertTrue(output.actions.isEmpty, "\(latin) 가 교정됐습니다 — 파괴적 오교정입니다")
+        }
+    }
+
+    /// 전대문자는 R-D3 약어 관례가 이미 보존한다. 단음절 관문 앞의 무료 게이트다.
+    func testAllCapsAcronymIsPreserved() throws {
+        let output = FakeKeyboardOutput()
+        let manager = makeManager(
+            output: output,
+            monosyllableLexicon: try makeMonosyllableLexicon()
+        )
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        // `SMS` — 전부 Shift. `sms`(는)와 같은 물리 키열이지만 R-D3가 약어로 본다.
+        for keycode in [0x01, 0x2E, 0x01] as [UInt16] {
+            _ = manager.handleKeyDown(keyDown(keycode, shift: true))
+        }
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+        XCTAssertTrue(output.actions.isEmpty, "전대문자 약어가 교정됐습니다")
+    }
+
+    /// 자산이 없으면 단음절 교정이 **전부** 사라진다(fail-closed).
+    func testMissingAssetKeepsMonosyllablesPreserved() {
+        for latin in ["fh", "dy", "dk", "sp", "dh", "fmf", "sms"] {
+            let output = FakeKeyboardOutput()
+            let manager = makeManager(output: output, monosyllableLexicon: nil)
+            manager.inputSourceKind = .supportedLatin
+            manager.isAutoCorrectionEnabled = true
+
+            type(latin, into: manager)
+            XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+            XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+            XCTAssertTrue(output.actions.isEmpty, "\(latin): 자산 없이 교정됐습니다")
+        }
+    }
+
+    /// 단음절 교정은 `.medium` — 원문 칩이 Undo 창(6초) 내내 강조된다.
+    func testMonosyllableCorrectionEmitsMediumTierChip() throws {
+        let output = FakeKeyboardOutput()
+        let manager = makeManager(
+            output: output,
+            monosyllableLexicon: try makeMonosyllableLexicon()
+        )
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+        var request: OriginalChoiceRequest?
+        manager.onOriginalChoiceAvailable = { request = $0 }
+
+        type("fh", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        let unwrapped = try XCTUnwrap(request, "원문 칩이 제시되지 않았습니다")
+        XCTAssertEqual(unwrapped.original, "fh")
+        XCTAssertEqual(unwrapped.replacement, "로")
+        XCTAssertEqual(unwrapped.tier, .medium, "단음절은 항상 medium 이어야 합니다")
+        XCTAssertEqual(unwrapped.boundaryUTF16Count, 1)
+    }
+
+    /// 3키 무모음 단음절은 엔진이 이미 교정을 내지만 옛 게이트가 죽였다.
+    /// 관문이 자산으로 그것을 살리고, 등급은 medium으로 통일된다.
+    func testVowellessThreeKeyMonosyllableIsCorrected() throws {
+        let output = FakeKeyboardOutput()
+        let manager = makeManager(
+            output: output,
+            monosyllableLexicon: try makeMonosyllableLexicon()
+        )
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+        var request: OriginalChoiceRequest?
+        manager.onOriginalChoiceAvailable = { request = $0 }
+
+        type("fmf", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertEqual(output.actions, [
+            .key(0x33, false),
+            .key(0x33, false),
+            .key(0x33, false),
+            .key(0x33, false),
+            .text("를"),
+            .key(0x31, false),
+        ])
+        XCTAssertEqual(try XCTUnwrap(request).tier, .medium)
+    }
+
+    /// 사본이 실제 토큰과 어긋나면(길이 대조 실패) 아무것도 하지 않는다.
+    /// 발산은 기회를 놓칠 뿐 오교정을 만들지 못한다.
+    func testMonosyllableRescueRequiresMatchingDiagnosticLength() throws {
+        let output = FakeKeyboardOutput()
+        let manager = makeManager(
+            output: output,
+            monosyllableLexicon: try makeMonosyllableLexicon()
+        )
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        // 숫자 키가 섞이면 토큰이 경계까지 무효화된다 — 사본과 엔진이 어긋나는
+        // 상황을 실제 경로로 만든다.
+        type("fh", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x53)))
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+        XCTAssertTrue(output.actions.isEmpty, "무효화된 토큰이 교정됐습니다")
+    }
+
     private func makeManager(
         output: FakeKeyboardOutput,
         focus: FakeFocusInspector = FakeFocusInspector(),
@@ -2182,7 +3001,9 @@ final class EventTapManagerTests: XCTestCase {
             ProcessInfo.processInfo.systemUptime
         },
         scheduleBoundaryCorrection: @escaping (@escaping () -> Void) -> Void = { $0() },
-        lexicalTiebreaker: LexicalTiebreaker? = nil
+        lexicalTiebreaker: LexicalTiebreaker? = nil,
+        guardEvidence: Set<String>? = nil,
+        monosyllableLexicon: MonosyllableLexicon? = nil
     ) -> EventTapManager {
         EventTapManager(
             keyboardOutput: output,
@@ -2191,7 +3012,26 @@ final class EventTapManagerTests: XCTestCase {
             monotonicNow: monotonicNow,
             pause: { _ in },
             scheduleBoundaryCorrection: scheduleBoundaryCorrection,
-            lexicalTiebreaker: lexicalTiebreaker
+            lexicalTiebreaker: lexicalTiebreaker,
+            guardEvidence: guardEvidence,
+            monosyllableLexicon: monosyllableLexicon
+        )
+    }
+
+    /// 저장소 원본 자산으로 단음절 관문을 만듭니다.
+    ///
+    /// 기본값을 `nil`로 둔 이유는 단음절 교정이 **자산에서만** 나온다는 사실을
+    /// 테스트마다 명시적으로 드러내기 위해서입니다. 자산을 주입하지 않은 테스트가
+    /// 보존을 보는 것은 버그가 아니라 fail-closed 계약 그 자체입니다.
+    private func makeMonosyllableLexicon() throws -> MonosyllableLexicon {
+        var root = URL(fileURLWithPath: #filePath)
+        for _ in 0..<3 { root.deleteLastPathComponent() }
+        let url = root
+            .appendingPathComponent("scripts")
+            .appendingPathComponent("lexicon")
+            .appendingPathComponent("ko-mono.v1.txt")
+        return MonosyllableLexicon(
+            entries: MonosyllableLexicon.parse(try String(contentsOf: url, encoding: .utf8))
         )
     }
 
@@ -2373,6 +3213,18 @@ private final class FakeFocusInspector: EventTapFocusInspecting {
     /// 이 횟수만큼 조회가 *일시적으로* 실패한 뒤 성공합니다. Chrome처럼 차가운
     /// 첫 조회가 타임아웃 나는 앱을 흉내 냅니다.
     var transientFailuresRemaining = 0
+    /// 이 횟수만큼 조회가 `.ineligibleTransientSelection`을 돌려준 뒤 성공합니다.
+    /// 필드 클릭 시 내용이 전체 선택된 채로 남아 있고, head-insert 이벤트 탭은
+    /// 앱이 그 선택을 접기 *전에* 첫 keyDown을 받습니다. 그 순간의 조회만 낡은
+    /// 선택 영역을 읽어 일시적으로 거부되고, 다음 키부터는 정상입니다.
+    var ineligibleProbesRemaining = 0
+    /// 켜면 모든 조회가 `.ineligibleUnsupportedRole`을 돌려줍니다. AX에 텍스트
+    /// 요소를 아예 안 내놓는 앱(Adobe Illustrator 실측: 메뉴 2,976개, 텍스트 0개)을
+    /// 흉내 냅니다.
+    var alwaysUnsupportedRole = false
+    /// 조회가 일어날 때마다 불립니다. 조회 하나가 AX 예산을 통째로 쓰는 앱을
+    /// 흉내 내려고 테스트가 여기서 시계를 밀 수 있습니다.
+    var onProbeRequest: (() -> Void)?
     /// 캡처 앵커가 낡아 산술 검증이 실패해도, 캐럿 앞 글자 대조는 통과하는 상황.
     var caretTextMatches = false
     var caretTextCheckOriginals: [String] = []
@@ -2390,6 +3242,16 @@ private final class FakeFocusInspector: EventTapFocusInspecting {
     }
 
     func probeAutomaticCorrectionFocus() -> FocusedInputSafety.FocusProbe {
+        onProbeRequest?()
+        if alwaysUnsupportedRole {
+            tokenRequestCount += 1
+            return .ineligibleUnsupportedRole
+        }
+        if ineligibleProbesRemaining > 0 {
+            ineligibleProbesRemaining -= 1
+            tokenRequestCount += 1
+            return .ineligibleTransientSelection
+        }
         if transientFailuresRemaining > 0 {
             transientFailuresRemaining -= 1
             tokenRequestCount += 1
