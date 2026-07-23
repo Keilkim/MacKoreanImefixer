@@ -173,6 +173,8 @@ class EventTapManager {
     private let lexicalTiebreaker: LexicalTiebreaker?
     /// LexicalGuard의 영어 증거 투영. nil이면 순수 자음 게이트는 fail-closed.
     private let guardEvidence: Set<String>?
+    /// 단음절 관문 자산. nil이면 단음절 교정이 **전부** 사라집니다(fail-closed).
+    private let monosyllableLexicon: MonosyllableLexicon?
 
     /// 현재 토큰의 키열 사본.
     ///
@@ -196,6 +198,9 @@ class EventTapManager {
     /// 제어합니다. 모든 리셋이 지나는 clearAutomaticCorrectionFocus에서 0으로
     /// 되돌리므로 토큰 경계를 넘어 새지 않습니다.
     private var softProbeRefusalKeys = 0
+    /// "포커스가 텍스트 역할이 아니다"를 연속으로 본 횟수. 다른 결과가 한 번이라도
+    /// 나오면 0으로 되돌아갑니다.
+    private var unsupportedRoleObservations = 0
     private var tokenCaptureState: TokenCaptureState = .idle
     private var pendingCorrectionState: PendingCorrectionState = .none
     private var originalChoiceState: OriginalChoiceState = .none
@@ -219,6 +224,9 @@ class EventTapManager {
     var onInputSourceSwitch: ((CorrectionDirection) -> InputSourceSwitchReceipt?)?
     var onInputSourceRestore: ((InputSourceSwitchReceipt) -> Bool)?
     var onInputSourceKindRefresh: (() -> InputSourceKind)?
+    /// 현재 앱이 AX에 텍스트를 내놓지 않는다고 판단됐을 때 한 번 불립니다.
+    /// 이 계층은 앱 목록·저장을 모르므로 학습은 호출부(UI 계층)가 합니다.
+    var onAutoCorrectionUnsupported: (() -> Void)?
 
     /// 우리가 주입한 이벤트를 식별하기 위한 마커값
     private static let injectionMarker: Int64 = 0x48474C46  // "HGLF"
@@ -235,6 +243,11 @@ class EventTapManager {
     /// 오래 붙잡지 않도록 짧은 토큰으로 제한합니다. 삭제당 3ms 대기를
     /// 포함해 고정 대기는 최대 27ms입니다.
     private static let maximumSynchronousCorrectionCharacters = 8
+    /// 자음 매시 어휘 구제의 최소 키 수. 3키 전부-다른-자음 구간은 `ace`·`cat`
+    /// 같은 실단어와 `ㅁㅊㄷ`(미쳤다)류 실사용 초성체가 조밀하게 겹치므로
+    /// 제외하고, 4키 이상에서만 되살립니다(en-guard 4+ 구제 대상 365개 전수
+    /// 확인 결과 실사용 초성체 충돌 없음).
+    private static let minimumConsonantMashKeystrokes = 4
     /// 이벤트 탭 안에서 연속 AX 요청에 쓰는 soft 예산입니다. 이미 시작한 AX
     /// 요청은 끝까지 기다리지만, 만료 뒤 새 요청이나 삭제는 시작하지 않습니다.
     /// 일반 경계는 지연 경로로 돌아가고 제출 경계는 제출 키만 전달합니다.
@@ -247,6 +260,19 @@ class EventTapManager {
     /// 거부되면 그때 굳힙니다. 선택은 이 키가 곧 지우므로 대개 두 번째 키에서
     /// 빈 캐럿으로 바뀌어 교정됩니다.
     private static let maximumSoftProbeRefusalKeys = 2
+    /// 같은 앱에서 "포커스가 텍스트 역할이 아니다"를 몇 번 연속으로 봐야 그 앱을
+    /// 미지원으로 학습할지. 포커스 판정은 토큰당 한 번 굳으므로 **사실상 단어 수**입니다.
+    ///
+    /// 한 번으로는 안 됩니다 — 버튼이나 캔버스에 포커스가 가 있어도 같은 신호가
+    /// 나옵니다. 그러나 AX에 텍스트를 아예 안 내놓는 앱에서는 치는 단어마다
+    /// 빠짐없이 쌓입니다. 그 비대칭이 판별의 근거이고, 중간에 적격이 한 번이라도
+    /// 나오면 카운터를 0으로 되돌려 오탐을 막습니다.
+    ///
+    /// 3인 이유: 사용자가 "켜져 있는데 안 된다"를 겪는 시간이 곧 이 숫자입니다.
+    /// 실사용에서 네 단어를 치고도 목록이 그대로라 오해가 생겼습니다. 정상 앱이
+    /// 버튼 포커스만으로 세 단어를 연속으로 채울 일은 없고, 혹 그래도 다음 적격
+    /// 판정 한 번이면 `.supported`가 이 값을 덮어 즉시 복구됩니다.
+    private static let unsupportedRoleObservationsToLearn = 3
 
     /// 앱에 실제로 입력된 경계 하나입니다. 현재 지원 경계는 모두 ASCII 한
     /// 문자지만, AX caret 계산(UTF-16)과 Backspace 횟수(Character)는 서로
@@ -393,6 +419,14 @@ class EventTapManager {
         // guard 증거가 없으면 순수 자음 게이트가 fail-closed(보존)로 돌아
         // 파괴적 오교정만 막히고 we/see류 교정을 놓칩니다 — 안전한 방향입니다.
         guardEvidence = LexicalGuard.loadEnglishEvidence(bundle: .main)
+        // 안전 게이트(영어 사전·CLI·로케일·거부 원장)는 **생성 시점**에 이미
+        // 적용돼 자산에 구워져 있습니다. 런타임은 조회 한 번입니다.
+        monosyllableLexicon = MonosyllableLexicon(bundle: .main)
+        if monosyllableLexicon == nil {
+            // 미발동은 사용자 체감으로 "그냥 안 된다"와 구분되지 않으므로
+            // 반드시 흔적을 남깁니다.
+            EventTapManager.diagnostic("monosyllable lexicon missing — 단음절 교정 비활성")
+        }
         keyboardOutput = QuartzKeyboardOutput()
         focusInspector = AccessibilityEventTapFocusInspector()
         now = Date.init
@@ -418,11 +452,13 @@ class EventTapManager {
         pause: @escaping (useconds_t) -> Void,
         scheduleBoundaryCorrection: @escaping (@escaping () -> Void) -> Void = { $0() },
         lexicalTiebreaker: LexicalTiebreaker? = LexicalTiebreaker(bundle: .main),
-        guardEvidence: Set<String>? = nil
+        guardEvidence: Set<String>? = nil,
+        monosyllableLexicon: MonosyllableLexicon? = nil
     ) {
         autoCorrectionEngine = WrongLayoutCorrectionEngine()
         self.lexicalTiebreaker = lexicalTiebreaker
         self.guardEvidence = guardEvidence
+        self.monosyllableLexicon = monosyllableLexicon
         self.keyboardOutput = keyboardOutput
         self.focusInspector = focusInspector
         self.now = now
@@ -824,11 +860,25 @@ class EventTapManager {
                     // 게이트 flag==true && token!=nil)에 닿을 수 없습니다.
                     automaticCorrectionFocusToken = token
                     automaticCorrectionFieldAllowed = true
+                    // 텍스트 역할을 실제로 봤으므로 미지원 근거가 끊깁니다.
+                    unsupportedRoleObservations = 0
                 case .ineligible:
-                    // 보안 입력·미지원 role·보호 subrole·보호 메타데이터 —
-                    // 확정 거부. 즉시 래치, 재확인 없음(기존과 동일).
+                    // 보안 입력·보호 subrole·보호 메타데이터 — 확정 거부.
+                    // 즉시 래치, 재확인 없음(기존과 동일).
+                    //
+                    // 이건 **필드 단위** 거부이므로 앱 학습에 쓰지 않습니다.
+                    // 쓰면 Safari가 비밀번호 칸 하나 때문에 미지원이 됩니다.
                     automaticCorrectionFocusToken = nil
                     automaticCorrectionFieldAllowed = false
+                    unsupportedRoleObservations = 0
+
+                case .ineligibleUnsupportedRole:
+                    // 판정은 위와 같습니다(확정 거부). 다른 것은 이 신호가 앱이
+                    // AX에 텍스트를 안 내놓는다는 뜻일 수 있다는 점뿐입니다.
+                    // 같은 앱에서 연속으로 쌓일 때만 미지원으로 학습합니다.
+                    automaticCorrectionFocusToken = nil
+                    automaticCorrectionFieldAllowed = false
+                    noteUnsupportedRoleObservation()
                 case .ineligibleTransientSelection:
                     // 선택 영역은 이 키가 곧 지울 직전 상태의 증거일 뿐입니다.
                     // 즉시 굳히지 않고 플래그를 nil로 두어 키열은 계속 기록하고
@@ -1751,7 +1801,8 @@ class EventTapManager {
         func guarded(_ decision: CorrectionDecision) -> CorrectionDecision? {
             guard let resolved = LexicalGuard.apply(
                 decision,
-                englishEvidence: guardEvidence
+                englishEvidence: guardEvidence,
+                monosyllables: monosyllableLexicon
             ) else {
                 EventTapManager.diagnostic(
                     "lexical veto direction=\(decision.direction) "
@@ -1759,6 +1810,13 @@ class EventTapManager {
                         + FocusedInputSafety.diagnosticContext()
                 )
                 return nil
+            }
+            if resolved != decision {
+                EventTapManager.diagnostic(
+                    "lexical guard retier direction=\(decision.direction) "
+                        + "rule=\(decision.rule) \(decision.tier)->\(resolved.tier) "
+                        + "len=\(decision.originalCharacterCount)"
+                )
             }
             return resolved
         }
@@ -1769,6 +1827,33 @@ class EventTapManager {
         // 현재 TIS 방향에서 사전만으로 확정할 수 있으면 AX 조회 없이 끝냅니다.
         // 특히 짧은 첫 단어가 cold AX 비용 때문에 지연 경로로 밀리는 일을 줄입니다.
         if let decision = lexicalDecision(boundary: boundary, keystrokes: keystrokes) {
+            return guarded(decision)
+        }
+
+        // 2키 단음절은 엔진이 `weakKoreanStructure`로 보존합니다(R-K4: 단음절은
+        // 3키 이상 요구). 그 하한은 무작위 충돌률 7.69%라는 구조적 근거로 세워진
+        // 것이라 옳습니다 — 구조만으로는 `dk`(아)와 `sk`(SK)를 가를 수 없습니다.
+        // 그래서 여기서 완화하는 것은 구조가 아니라 **증거**입니다: 해시로 동결된
+        // 자산에 그 키열이 명시적으로 들어 있을 때만 교정합니다.
+        //
+        // AX 조회보다 앞에 두는 이유는 위 1789-1790행과 같습니다. 단음절은 정확히
+        // 그 "짧은 첫 단어"의 극단이고, 아래 `directionCorrectedDecision`은 캐럿
+        // 앞 글자를 읽으려 AX 왕복을 하므로 cold AX 비용을 치르면 지연 경로로 밀립니다.
+        //
+        // `guarded()`를 우회하지 않습니다. 여기서 만든 결정도 자산에서 왔으므로
+        // 단음절 관문을 그대로 통과합니다 — 하나의 증거가 두 갈래를 동시에 살리고,
+        // "모든 결정은 단일 출구를 지난다"는 보장(위 1766-1770행)이 깨지지 않습니다.
+        if let decision = monosyllableDecision(boundary: boundary, keystrokes: keystrokes) {
+            return guarded(decision)
+        }
+
+        // 한→영 자음 매시 구제. 구조 규칙은 서로 다른 자음 자모 나열(ㅁㄴㅇ류)을
+        // 키보드 매시로 보고 보존하는데, 그중 `card`·`water`처럼 자음 자판
+        // 글자만으로 적힌 실제 영어 단어가 함께 죽습니다. 단음절 구제와 같은
+        // 원리로 완화하는 것은 구조가 아니라 **증거**입니다 — 결과가 동결
+        // 사전에 실단어로 있을 때만, 그리고 `guarded()` 단일 출구를 그대로
+        // 지나며 되살립니다.
+        if let decision = consonantMashDecision(boundary: boundary, keystrokes: keystrokes) {
             return guarded(decision)
         }
 
@@ -1871,6 +1956,18 @@ class EventTapManager {
             guard observed == .latinToKorean else { return nil }
             return lexicalCorrection(boundary: boundary, keystrokes: keystrokes)
 
+        case .preserve(.weakKoreanStructure):
+            // 단음절 구제도 같은 이유로 여기 대칭이 필요합니다. 없으면 TIS와
+            // 화면이 어긋난 **첫 단어에서만** 단음절이 조용히 빠집니다.
+            guard observed == .latinToKorean else { return nil }
+            return monosyllableCorrection(boundary: boundary, keystrokes: keystrokes)
+
+        case .preserve(.consonantJamoMash):
+            // 자음 매시 구제도 대칭이 필요합니다. 이쪽은 화면에 한글(자모)이
+            // 찍힌 한→영 방향이므로 관측 방향이 반대입니다.
+            guard observed == .koreanToLatin else { return nil }
+            return consonantMashCorrection(boundary: boundary, keystrokes: keystrokes)
+
         case .preserve:
             return nil
         }
@@ -1943,6 +2040,192 @@ class EventTapManager {
         )
     }
 
+    /// 규칙이 R-K4로 판정을 포기한 단음절을 동결 자산으로 되살립니다.
+    ///
+    /// 키열 사본은 발산할 수 있으므로 **신뢰하지 않고 검증**합니다. 사본으로
+    /// 동결 정책을 다시 돌려, 엔진이 방금 낸 진단과 규칙·경계·방향·길이가 모두
+    /// 일치할 때만 자산을 조회합니다. 하나라도 어긋나면 사본이 실제 토큰이
+    /// 아니라는 뜻이므로 아무것도 하지 않습니다 — 발산은 기회를 놓칠 뿐
+    /// 오교정을 만들지 못합니다.
+    ///
+    /// 진단을 반드시 대조해야 하는 이유는 `WrongLayoutCorrectionEngine`이
+    /// 폐기된 토큰에서는 `lastDiagnostic`을 갱신하지 않고 `nil`만 돌려주기
+    /// 때문입니다 — 그때 `lastDiagnostic`은 **직전 토큰의 것**일 수 있습니다.
+    private func monosyllableDecision(
+        boundary: CorrectionBoundary,
+        keystrokes: [PhysicalKeystroke]
+    ) -> CorrectionDecision? {
+        guard let diagnostic = autoCorrectionEngine.lastDiagnostic,
+              diagnostic.rule == .weakKoreanStructure,
+              diagnostic.boundary == boundary,
+              diagnostic.direction == .latinToKorean,
+              diagnostic.tokenLength == keystrokes.count,
+              !keystrokes.isEmpty else {
+            return nil
+        }
+
+        // 사본으로 동결 정책을 재실행해 같은 판정이 나오는지 확인합니다.
+        // `inputSource`를 하드코딩하는 이유는 위에서 진단의 방향을 이미 확인했고,
+        // 런타임 입력 소스는 그 사이 바뀌었을 수 있기 때문입니다.
+        guard case .preserve(.weakKoreanStructure) = LayoutCorrectionPolicy.evaluate(
+            keystrokes: keystrokes,
+            inputSource: .supportedLatin
+        ) else {
+            return nil
+        }
+
+        return monosyllableCorrection(boundary: boundary, keystrokes: keystrokes)
+    }
+
+    /// 이미 `weakKoreanStructure`임을 검증한 물리 키열에만 동결 자산을 적용합니다.
+    private func monosyllableCorrection(
+        boundary: CorrectionBoundary,
+        keystrokes: [PhysicalKeystroke]
+    ) -> CorrectionDecision? {
+        guard let lexicon = monosyllableLexicon,
+              // 원문은 반드시 정책의 함수로 얻습니다. 손으로 조립하면 shift 처리가
+              // 어긋납니다.
+              let latin = LayoutCorrectionPolicy.latinCandidate(for: keystrokes),
+              let korean = lexicon.resolve(latin: latin),
+              latin != korean,
+              // 동결 조합기와 자산이 **같은 음절**을 가리킬 때만 진행합니다.
+              // 출력은 여전히 자산에서만 오고 조합기는 대조용입니다. 둘이 어긋나면
+              // (자산 오타·NFD 혼입·오토마톤 발산) 결과는 nil = 보존입니다.
+              // 파괴가 일어나려면 해시로 동결된 자산과 pre-imk로 동결된 조합기가
+              // **동시에** 틀려야 합니다.
+              let composed = HangulStructure.evaluate(keystrokes),
+              composed.jamoCount == 0,
+              composed.syllableCount == 1,
+              composed.text.precomposedStringWithCanonicalMapping == korean else {
+            return nil
+        }
+
+        EventTapManager.diagnostic(
+            "monosyllable rescue rule=weakKoreanStructure len=\(keystrokes.count) "
+                + FocusedInputSafety.diagnosticContext()
+        )
+
+        // tier는 medium입니다. 2키는 규칙이 판정을 포기할 만큼 증거가 약한 칸이고
+        // (R-K4 실측 무작위 충돌률 7.69%) 교정 근거가 전적으로 자산이라, 원문 칩을
+        // Undo 창(6초) 내내 강조해 되돌리기를 쉽게 만듭니다.
+        return CorrectionDecision(
+            original: latin,
+            replacement: korean,
+            direction: .latinToKorean,
+            tier: .medium,
+            rule: .weakKoreanStructure,
+            diagnostic: CorrectionDiagnostic(
+                direction: .latinToKorean,
+                tier: .medium,
+                rule: .weakKoreanStructure,
+                tokenLength: keystrokes.count,
+                boundary: boundary
+            )
+        )
+    }
+
+    private func consonantMashDecision(
+        boundary: CorrectionBoundary,
+        keystrokes: [PhysicalKeystroke]
+    ) -> CorrectionDecision? {
+        guard let diagnostic = autoCorrectionEngine.lastDiagnostic,
+              diagnostic.rule == .consonantJamoMash,
+              diagnostic.boundary == boundary,
+              diagnostic.direction == .koreanToLatin,
+              diagnostic.tokenLength == keystrokes.count,
+              !keystrokes.isEmpty else {
+            return nil
+        }
+
+        // 사본으로 동결 정책을 재실행해 같은 판정이 나오는지 확인합니다.
+        // 방향은 위에서 진단으로 이미 확인했으므로 한글자판으로 하드코딩합니다.
+        guard case .preserve(.consonantJamoMash) = LayoutCorrectionPolicy.evaluate(
+            keystrokes: keystrokes,
+            inputSource: .koreanTwoSet
+        ) else {
+            return nil
+        }
+
+        return consonantMashCorrection(boundary: boundary, keystrokes: keystrokes)
+    }
+
+    /// 이미 `consonantJamoMash`임을 검증한 물리 키열에만 동결 영어 사전을 적용합니다.
+    ///
+    /// 구조 규칙은 서로 다른 자음 자모 나열을 키보드 매시로 보고 보존하는데,
+    /// 그중 `card`·`water`처럼 자음 자판 글자만으로 적힌 **실제 영어 단어**가
+    /// 함께 죽습니다. 결과가 동결 사전(`en-guard.v1.txt`)에 실단어로 있을 때만
+    /// 되살립니다 — LexicalGuard 의 한→영 순수 자음 게이트와 같은 증거원(`guardEvidence`)
+    /// 을 씁니다. 자산이 없으면 `guard`가 fail-closed(보존)로 떨어집니다.
+    ///
+    /// 조회 키는 `LexicalTiebreaker.englishLookupKey`로 정규화합니다 — 소문자 fold에
+    /// 더해 어중 대문자를 veto하므로, 정상 영어가 아닌 표기(`cArd`)는 걸러집니다.
+    private func consonantMashCorrection(
+        boundary: CorrectionBoundary,
+        keystrokes: [PhysicalKeystroke]
+    ) -> CorrectionDecision? {
+        guard keystrokes.count >= EventTapManager.minimumConsonantMashKeystrokes,
+              let evidence = guardEvidence,
+              // 원문은 반드시 정책의 함수로 얻습니다. 손으로 조립하면 shift 처리가
+              // 어긋납니다.
+              let latin = LayoutCorrectionPolicy.latinCandidate(for: keystrokes),
+              let key = LexicalTiebreaker.englishLookupKey(latin),
+              evidence.contains(key),
+              // 동결 조합기로 화면의 자모를 재구성해, 실제로 음절을 이루지 못한
+              // **순수 낱자모 매시**일 때만 진행합니다. 하나라도 음절이 서면
+              // 매시가 아니므로 nil = 보존입니다.
+              let composed = HangulStructure.evaluate(keystrokes),
+              composed.syllableCount == 0,
+              composed.jamoCount == keystrokes.count,
+              composed.text != latin else {
+            return nil
+        }
+
+        EventTapManager.diagnostic(
+            "consonant mash rescue rule=consonantJamoMash len=\(keystrokes.count) "
+                + FocusedInputSafety.diagnosticContext()
+        )
+
+        // tier는 medium입니다. 구조가 '보존(매시)'으로 판정한 것을 사전 증거만으로
+        // 뒤집는 경우라 확신이 낮고, 원문 칩을 Undo 창(6초) 내내 강조해 되돌리기를
+        // 쉽게 만듭니다.
+        return CorrectionDecision(
+            original: composed.text,
+            replacement: latin,
+            direction: .koreanToLatin,
+            tier: .medium,
+            rule: .consonantJamoMash,
+            diagnostic: CorrectionDiagnostic(
+                direction: .koreanToLatin,
+                tier: .medium,
+                rule: .consonantJamoMash,
+                tokenLength: keystrokes.count,
+                boundary: boundary
+            )
+        )
+    }
+
+    /// "텍스트 역할이 아니다"를 한 번 더 관찰합니다. 상한에 닿으면 딱 한 번
+    /// 호출부에 알리고 카운터를 비웁니다.
+    ///
+    /// 여기서 앱을 직접 판정하지 않는 이유: 버튼·캔버스에 포커스가 가 있어도 같은
+    /// 신호가 나옵니다. 한 번으로 단정하면 정상 앱이 미지원으로 굳습니다. 반면
+    /// AX에 텍스트를 아예 안 내놓는 앱에서는 몇 글자만 쳐도 연속으로 쌓입니다 —
+    /// 그 비대칭이 판별의 근거이고, 중간에 적격이 한 번이라도 나오면 0으로
+    /// 되돌아가 오탐이 남지 않습니다.
+    private func noteUnsupportedRoleObservation() {
+        unsupportedRoleObservations += 1
+        // 상한에 **정확히 닿는 순간에만** 알립니다. 계속 세되 0으로 되돌리지 않으므로
+        // 같은 앱에서 계속 쳐도 통지는 한 번뿐이고, 앱이 바뀔 때
+        // (`resetAutomaticCorrectionState`) 비워져 다음 앱이 새로 세기 시작합니다.
+        guard unsupportedRoleObservations
+            == EventTapManager.unsupportedRoleObservationsToLearn else { return }
+        EventTapManager.diagnostic(
+            "auto correction unsupported app — 텍스트 역할 미노출 "
+                + FocusedInputSafety.diagnosticContext()
+        )
+        onAutoCorrectionUnsupported?()
+    }
+
     private func invalidateAutomaticCorrectionTokenUntilBoundary() {
         autoCorrectionEngine.invalidateCurrentTokenUntilBoundary()
         lexicalKeystrokeMirror.removeAll(keepingCapacity: true)
@@ -1954,12 +2237,18 @@ class EventTapManager {
         automaticCorrectionFieldAllowed = nil
         automaticCorrectionFocusToken = nil
         softProbeRefusalKeys = 0
+        // 미지원 관찰은 **앱 단위** 근거이므로 여기서 비우지 않습니다. 토큰·포커스가
+        // 바뀔 때마다 0이 되면 상한에 영영 닿지 못해 학습이 죽습니다. 앱이 바뀌는
+        // 시점(`resetAutomaticCorrectionState`)에서만 비웁니다.
     }
 
     private func resetAutomaticCorrectionState() {
         invalidatePendingBoundaryCorrection()
         resetAutomaticCorrectionToken()
         clearUndoTransaction(notify: true)
+        // 미지원 관찰은 앱 단위 근거입니다. 앱이 바뀌면 근거도 끊어야
+        // A 앱에서 쌓인 관찰이 B 앱을 미지원으로 만들지 않습니다.
+        unsupportedRoleObservations = 0
     }
 
     private func invalidatePendingBoundaryCorrection() {

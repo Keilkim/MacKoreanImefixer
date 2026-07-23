@@ -126,13 +126,18 @@ class AppMonitor: ObservableObject {
             return
         }
 
-        targetSettingsCancellable = Publishers.CombineLatest(
+        // 지원 학습(axSupport)과 opt-out 예외가 바뀌어도 유효 활성 상태가
+        // 달라지므로 함께 관찰합니다. 수동 프로브가 앱을 지원으로 학습하면 이
+        // 경로로 자판 자동 교정이 켜집니다.
+        targetSettingsCancellable = Publishers.CombineLatest4(
             targetAppManager.$targetApps,
-            targetAppManager.$autoCorrectionScope
+            targetAppManager.$autoCorrectionScope,
+            targetAppManager.$axSupportByBundleID,
+            targetAppManager.$autoCorrectionOptOut
         )
             .dropFirst()
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] _, _ in
+            .sink { [weak self] _, _, _, _ in
                 // @Published는 값이 설정되기 전에 발행하므로 메인 큐에서 새 설정 반영 후 재평가합니다.
                 self?.checkFrontmostApp()
             }
@@ -162,6 +167,20 @@ class AppMonitor: ObservableObject {
            ) == true {
             scheduleWarmLadder(generation: warmGeneration)
         }
+
+        // opt-out 모델: 아직 지원 여부를 모르는(그리고 목록 대상인) 앱은, 실제로
+        // 입력란이 포커스됐을 때 AX를 한 번 확인해(교정은 하지 않음) 지원되면
+        // 학습합니다. 그 순간부터 자판 자동 교정이 기본으로 켜집니다.
+        if isEnabled,
+           let bundleID = frontApp.bundleIdentifier,
+           frontApp.processIdentifier != ProcessInfo.processInfo.processIdentifier,
+           MackorAppFilter.isListable(bundleID: bundleID, name: frontApp.localizedName),
+           targetAppManager?.axAutoCorrectionSupport(
+               bundleID: bundleID,
+               name: frontApp.localizedName
+           ) == .unknown {
+            schedulePassiveSupportProbe(generation: warmGeneration)
+        }
         isTargetAppFront = targetAppManager?.isTargetApp(
             bundleID: frontAppBundleID,
             appName: frontAppName
@@ -189,6 +208,29 @@ class AppMonitor: ObservableObject {
             ) { [weak self] in
                 guard let self, self.warmGeneration == generation else { return }
                 FocusedInputSafety.warmFocusCache()
+            }
+        }
+    }
+
+    /// 지원 미확인 앱에서 입력란이 실제로 포커스됐는지 잠시 뒤 한 번 확인합니다.
+    /// 교정은 하지 않고 AX 적격 여부만 읽어(fail-closed 프로브와 같은 판정) 적격이면
+    /// 지원으로 학습합니다. 다른 앱으로 전환하면(세대 변경) 취소됩니다.
+    ///
+    /// 이 프로브는 탭 콜백이 아니라 asyncAfter로 메인에서 돌아 입력 경로를 직접
+    /// 막지 않으며, 미확인 앱당 활성화 1회만 돕니다. 한 번 지원으로 확정되면
+    /// 위 호출부의 `.unknown` 가드에서 걸러져 더는 돌지 않습니다.
+    private func schedulePassiveSupportProbe(generation: UInt64) {
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + .milliseconds(250)
+        ) { [weak self] in
+            guard let self, self.warmGeneration == generation else { return }
+            guard let bundleID = self.frontAppBundleID,
+                  self.targetAppManager?.axAutoCorrectionSupport(
+                    bundleID: bundleID,
+                    name: self.frontAppName
+                  ) == .unknown else { return }
+            if case .eligible = FocusedInputSafety.probeAutomaticCorrectionFocus() {
+                self.targetAppManager?.noteAutoCorrectionSupported(bundleID: bundleID)
             }
         }
     }

@@ -20,9 +20,16 @@ GitHub 소스 공개와 Apple 공증은 별개입니다. 공개 저장소에서 
 
 ## 현재 공식 배포 차단 조건
 
-2026-07-20 현재 `security find-identity -v -p codesigning`은 `Developer ID Application: SEONGHUN KIM (TZQ9JL6R7R)`를 포함해 유효한 identity 3개를 보고하며, 이 인증서로 실제 `codesign` 서명이 성공하는 것을 확인했습니다(Authority 체인 `Developer ID Application` → `Developer ID Certification Authority` → `Apple Root CA`). 따라서 서명 자체는 차단 조건이 아닙니다.
+2026-07-22 현재 `Developer ID Application: SEONGHUN KIM (TZQ9JL6R7R)`와 `Developer ID Installer: SEONGHUN KIM (TZQ9JL6R7R)`가 모두 유효하며, `build-installer.sh`의 공식 경로(`REQUIRE_SIGNING=1`)를 실제로 완주해 다음을 확인했습니다. 따라서 서명은 더 이상 차단 조건이 아닙니다.
 
-남은 차단 조건은 두 가지입니다. 첫째, `Developer ID Installer` identity가 없어 PKG 배포는 불가능하고 DMG만 가능합니다. 둘째, `notarytool` 자격 증명을 Keychain에 저장한 것은 제출 준비일 뿐이며, 현재 Mackor 최종 산출물은 아직 제출·`Accepted`·staple되지 않았습니다. 공식 경로의 `build-installer.sh`는 Xcode archive/export를 사용해 Sparkle의 중첩 XPC·Updater까지 같은 Team ID로 서명하고, 공증 제출 전에 각 Mach-O의 아키텍처·서명·Team ID를 검사합니다. 인증서와 개인 키·신뢰 체인을 복구한 뒤 이 경로의 최초 실서명 검증이 필요합니다.
+- 전체 XCTest 213개 통과
+- 앱이 `x86_64 arm64` 유니버설
+- 최상위 앱 `valid on disk` + `satisfies its Designated Requirement`, 중첩 Sparkle XPC(Downloader·Installer)와 Updater.app까지 validated
+- PKG가 `Developer ID Installer` 서명 + 신뢰된 타임스탬프, 체인이 `Developer ID Certification Authority` → `Apple Root CA`까지 완결
+- DMG 서명·검증 통과
+- `spctl -a -t install` 결과가 `rejected / source=Unnotarized Developer ID` — 서명은 정상이고 공증만 남았다는 뜻
+
+남은 차단 조건은 공증과 Sparkle 배포 입력값입니다. `notarytool` 자격 증명을 Keychain에 저장한 것은 제출 준비일 뿐이며, 현재 Mackor 최종 산출물은 아직 제출·`Accepted`·staple되지 않았습니다. 또한 `REQUIRE_NOTARIZATION=1` 경로는 `MACKOR_UPDATE_FEED_URL`과 `MACKOR_SPARKLE_PUBLIC_ED_KEY`를 요구하는데, feed URL은 빌드 시점에 앱에 박히므로(`Info.plist`의 `SUFeedURL`) 호스팅 위치를 확정하기 전에 공증본을 만들면 그 빌드는 영구히 자동 업데이트를 받을 수 없습니다. Sparkle 배포 도구(`generate_appcast`)도 SPM checkout에는 포함되지 않아 별도로 받아야 합니다.
 
 스크립트는 이 문제를 숨기지 않습니다. 다음 중 하나라도 충족되지 않으면 실패합니다.
 

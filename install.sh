@@ -86,7 +86,7 @@ fi
 rm -rf "$BUILD_ROOT"
 mkdir -p "$BUILD_ROOT"
 
-echo "[1/4] 프로젝트 빌드 중..."
+echo "[1/5] 프로젝트 빌드 중..."
 cd "$PROJECT_DIR"
 xcodebuild \
     -project "$APP_NAME.xcodeproj" \
@@ -187,25 +187,59 @@ else
 fi
 
 validate_local_app_graph "$BUILT_APP"
-echo "[2/4] 빌드 완료 (v$BUILT_VERSION, 빌드 $BUILT_BUILD_NUMBER)"
+echo "[2/5] 빌드 완료 (v$BUILT_VERSION, 빌드 $BUILT_BUILD_NUMBER)"
 
-if pgrep -x "$APP_NAME" > /dev/null 2>&1; then
-    echo "[3/4] 실행 중인 $APP_NAME 종료 중..."
+# 이름이 같은 프로세스를 전부 종료합니다.
+#
+# `pgrep -x`만 쓰면 /Applications 사본만 잡습니다. Xcode DerivedData에서 직접
+# 실행한 디버그 빌드가 함께 떠 있으면 그쪽이 살아남아 이벤트 탭을 계속 물고
+# 있고, 새로 설치한 앱은 탭을 못 잡아 "설치했는데 안 된다"가 됩니다.
+# 실제로 겪은 상황이라 경로와 무관하게 전부 종료합니다.
+if pgrep -x "$APP_NAME" > /dev/null 2>&1 \
+        || pgrep -f "/$APP_NAME.app/Contents/MacOS/$APP_NAME" > /dev/null 2>&1; then
+    echo "[3/5] 실행 중인 $APP_NAME 종료 중..."
     killall "$APP_NAME" > /dev/null 2>&1 || true
+    pkill -f "/$APP_NAME.app/Contents/MacOS/$APP_NAME" > /dev/null 2>&1 || true
     for _ in {1..20}; do
-        if ! pgrep -x "$APP_NAME" > /dev/null 2>&1; then
+        if ! pgrep -x "$APP_NAME" > /dev/null 2>&1 \
+                && ! pgrep -f "/$APP_NAME.app/Contents/MacOS/$APP_NAME" > /dev/null 2>&1; then
             break
         fi
         sleep 0.2
     done
-    if pgrep -x "$APP_NAME" > /dev/null 2>&1; then
+    if pgrep -x "$APP_NAME" > /dev/null 2>&1 \
+            || pgrep -f "/$APP_NAME.app/Contents/MacOS/$APP_NAME" > /dev/null 2>&1; then
         fail "$APP_NAME을 종료하지 못했습니다. 앱을 직접 종료한 뒤 다시 시도하세요."
     fi
 else
-    echo "[3/4] 실행 중인 기존 앱 없음"
+    echo "[3/5] 실행 중인 기존 앱 없음"
 fi
 
-echo "[4/4] $APP_PATH 에 설치 중..."
+# 손쉬운 사용 권한 등록을 지웁니다 — 설정 창에서 '-'를 누르는 것과 같습니다.
+#
+# 왜 필요한가: TCC는 승인을 **코드 서명 요구사항**에 묶어 기억합니다. 새 빌드가
+# 그 요구사항을 만족하지 못하면 목록에는 체크된 채로 남아 있는데 실제 권한은
+# 거부되는, 겉과 속이 다른 상태가 됩니다. 그러면 "분명 켜져 있는데 안 된다"가
+# 되고 원인을 찾을 단서가 화면에 없습니다. 재설치 때마다 지워서 그 상태가
+# 아예 생기지 않게 합니다.
+#
+# `tccutil reset`은 권한을 **없애기만** 합니다 — 스크립트가 권한을 부여할 방법은
+# macOS에 없고, 있어서도 안 됩니다. 그래서 아래에서 승인을 다시 요청합니다.
+#
+# 건너뛰려면: SKIP_TCC_RESET=1 ./install.sh
+if [ "${SKIP_TCC_RESET:-0}" = "1" ]; then
+    echo "[4/5] 손쉬운 사용 권한 초기화 건너뜀 (SKIP_TCC_RESET=1)"
+else
+    echo "[4/5] 손쉬운 사용 권한 등록 삭제 중 ($EXPECTED_IDENTIFIER)..."
+    if tccutil reset Accessibility "$EXPECTED_IDENTIFIER" > /dev/null 2>&1; then
+        echo "  삭제 완료 — 설치 후 다시 승인해야 합니다"
+    else
+        # 등록이 애초에 없으면 실패합니다. 정상이므로 설치를 막지 않습니다.
+        echo "  기존 등록 없음 (또는 삭제 불필요)"
+    fi
+fi
+
+echo "[5/5] $APP_PATH 에 설치 중..."
 echo "  시스템 Applications 폴더를 변경하려면 관리자 인증이 필요합니다."
 if ! sudo -v; then
     fail "관리자 인증이 취소되었습니다."
@@ -240,9 +274,13 @@ echo ""
 echo "  위치: $APP_PATH"
 echo ""
 echo "  [다음 단계]"
-echo "  1. $APP_PATH 을 실행"
-echo "  2. 시스템 설정 > 개인정보 보호 및 보안 > 손쉬운 사용에서 Mackor 허용"
-echo "  3. 메뉴바의 'Mackor' 메뉴에서 자동 교정 범위와 대상 앱 설정"
+if [ "${SKIP_TCC_RESET:-0}" = "1" ]; then
+    echo "  1. $APP_PATH 을 실행"
+    echo "  2. 메뉴바의 'Mackor' 메뉴에서 자동 교정 범위와 대상 앱 설정"
+else
+    echo "  1. 손쉬운 사용 목록에서 Mackor를 **다시 켜기** (등록을 지웠으므로 필수)"
+    echo "  2. 메뉴바의 'Mackor' 메뉴에서 자동 교정 범위와 대상 앱 설정"
+fi
 echo ""
 
 REPLY=""
@@ -256,6 +294,15 @@ if [[ "$REPLY" =~ ^[Yy]$ ]]; then
         echo "앱을 실행했습니다. 메뉴바를 확인하세요."
     else
         echo "[경고] 앱을 자동으로 열지 못했습니다. Finder에서 직접 실행하세요." >&2
+    fi
+    # 권한을 지웠으면 승인 창까지 데려다줍니다. 앱을 먼저 실행해야 목록에
+    # 나타나므로 순서를 바꾸면 안 됩니다.
+    if [ "${SKIP_TCC_RESET:-0}" != "1" ]; then
+        sleep 1
+        open "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility" \
+            > /dev/null 2>&1 \
+            && echo "손쉬운 사용 설정을 열었습니다 — 목록에서 Mackor를 켜세요." \
+            || echo "[안내] 시스템 설정 > 개인정보 보호 및 보안 > 손쉬운 사용에서 Mackor를 켜세요."
     fi
 elif [ ! -t 0 ]; then
     echo "비대화형 실행이므로 앱을 자동으로 열지 않았습니다."

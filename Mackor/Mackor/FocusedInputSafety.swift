@@ -86,9 +86,20 @@ enum FocusedInputSafety {
     enum FocusProbe {
         /// 교정해도 되는 입력란.
         case eligible(FocusToken)
-        /// 확정적으로 교정하면 안 됨 — 보안 입력, 보호 필드, 텍스트가 아닌 역할.
+        /// 확정적으로 교정하면 안 됨 — 보안 입력, 보호 필드(비밀번호·주소창).
         /// 같은 토큰 안에서 다시 물어볼 필요가 없습니다.
+        ///
+        /// **이 거부는 필드 단위입니다.** 같은 앱의 다른 입력란은 멀쩡할 수 있으므로
+        /// 앱 전체를 미지원으로 판단하는 근거가 되면 안 됩니다 — 그러면 Safari가
+        /// 비밀번호 칸 하나 때문에 통째로 미지원이 됩니다.
         case ineligible
+        /// 포커스된 요소가 **텍스트 역할 자체가 아님**. 필드 단위가 아니라 앱이
+        /// AX에 텍스트를 안 내놓는다는 신호일 수 있어 따로 구분합니다.
+        ///
+        /// 한 번으로는 단정할 수 없습니다 — 버튼에 포커스가 가 있어도 이게 나옵니다.
+        /// 그래서 판정은 여기서 하지 않고, 호출부가 같은 앱에서 반복 관찰될 때만
+        /// 미지원으로 학습합니다.
+        case ineligibleUnsupportedRole
         /// 지금은 판단할 수 없음 — AX 트리가 아직 안 잡혔거나 IPC가 타임아웃.
         /// 잠시 뒤 같은 자리에서 다시 물으면 성공할 수 있습니다.
         case unavailable
@@ -151,7 +162,7 @@ enum FocusedInputSafety {
         ]
         guard supportedRoles.contains(role) else {
             diagnostic("focus token unsupported \(diagnosticContext(role: role))")
-            return .ineligible
+            return .ineligibleUnsupportedRole
         }
 
         let subrole = values[1] as? String
