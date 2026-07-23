@@ -691,6 +691,28 @@ final class EventTapManagerTests: XCTestCase {
         )
     }
 
+    /// `현재'ㄷ`(guswo'e): 합친 조합이 현잳 — KS X 1001 밖 접합 음절이라 정책의
+    /// modernKorean 게이트를 빠져나가지만, 완전 조합 보존 가드가 잡는다.
+    /// (적대적 검증에서 발견된 오탐 — 열린 음절 + ' + 자음 하나 + 경계.)
+    func testKoreanJunctionSyllableWithApostropheIsPreserved() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .koreanTwoSet
+        manager.isAutoCorrectionEnabled = true
+
+        type("guswo", into: manager)  // 현재
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(Self.apostropheKeycode)))
+        type("e", into: manager)      // ㄷ
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(
+            output.actions.isEmpty,
+            "현재'ㄷ이 라틴으로 오교정됐습니다: \(output.actions)"
+        )
+    }
+
     /// 영자판에서는 이 규칙이 발동하지 않는다 — 이미 영어로 찍히고, `didn't`→야웃
     /// 오교정이 측정됐다(G1: koreanTwoSet 방향 한정).
     func testApostropheInLatinModeIsUntouched() {

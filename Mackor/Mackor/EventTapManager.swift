@@ -2285,6 +2285,17 @@ class EventTapManager {
         let left = Array(keystrokes[..<breakIndex])
         let right = Array(keystrokes[breakIndex...])
 
+        // 합친 키열이 한글로 **완전히 조합**되면 보존합니다. 정책의 modernKorean
+        // 게이트는 KS X 1001 밖 접합 음절(`현재'ㄷ` → 합치면 현잳)을 놓쳐
+        // 라틴으로 오교정하는데, 완전 조합 자체가 "한국어를 치고 있었다"는
+        // 충분한 증거입니다. 영어 축약형은 두벌식으로 낱자모가 반드시 남아
+        // (its=ㅑㅅㄴ, dont=애ㅜㅅ) 여기 걸리지 않습니다. 조합을 확인할 수
+        // 없으면 fail-closed = 보존입니다.
+        guard let joined = HangulStructure.evaluate(keystrokes),
+              !joined.isFullyComposed else {
+            return nil
+        }
+
         // 판정은 `'`를 뺀 합친 키열로 — 동결 정책이 확인합니다. 한글자판 방향의
         // `.correct`는 언제나 koreanToLatin(englishStructure·markedEnglishForm)입니다.
         guard case .correct(let tier, _, _, let rule) = LayoutCorrectionPolicy.evaluate(

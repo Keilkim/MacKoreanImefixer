@@ -73,8 +73,18 @@ func setActivation(_ attr: String) {
     log("set \(attr) on app -> \(r == .success ? "성공" : "실패(\(r.rawValue))")")
 }
 
-// 텍스트 요소 하강 탐색 (BFS, 깊이 제한)
-func findText(_ root: AXUIElement, maxNodes: Int = 4000) -> [(depth: Int, el: AXUIElement)] {
+func paramAttrNames(_ el: AXUIElement) -> [String] {
+    var names: CFArray?
+    guard AXUIElementCopyParameterizedAttributeNames(el, &names) == .success,
+          let arr = names as? [String] else { return [] }
+    return arr
+}
+
+/// 텍스트 **능력** 하강 탐색 — role이 아니라 속성으로 판정한다.
+/// 비표준 role(AXGroup·AXUnknown·custom)이라도 AXValue(문자열)나
+/// AXSelectedTextRange·StringForRange를 내놓으면 후보다. 자식은 AXChildren에
+/// 더해 AXContents·AXChildrenInNavigationOrder 가지도 따른다.
+func findText(_ root: AXUIElement, maxNodes: Int = 6000) -> [(depth: Int, el: AXUIElement)] {
     var found: [(Int, AXUIElement)] = []
     var queue: [(Int, AXUIElement)] = [(0, root)]
     var seen = 0
@@ -82,10 +92,26 @@ func findText(_ root: AXUIElement, maxNodes: Int = 4000) -> [(depth: Int, el: AX
     while !queue.isEmpty, seen < maxNodes {
         let (d, el) = queue.removeFirst()
         seen += 1
-        if textRoles.contains(role(el)) { found.append((d, el)) }
-        if d < 12 { for c in children(el) { queue.append((d + 1, c)) } }
+        let r = role(el)
+        let attrs = Set(attrNames(el))
+        let capable = textRoles.contains(r)
+            || attrs.contains("AXSelectedTextRange")
+            || attrs.contains("AXNumberOfCharacters")
+            || (attrs.contains("AXValue") && copyAttr(el, "AXValue") is String)
+            || paramAttrNames(el).contains("AXStringForRange")
+        if capable { found.append((d, el)) }
+        if d < 14 {
+            var kids = children(el)
+            for branch in ["AXContents", "AXChildrenInNavigationOrder"] {
+                if let extra = copyAttr(el, branch) as? [AXUIElement] { kids += extra }
+                else if let one = copyAttr(el, branch), CFGetTypeID(one) == AXUIElementGetTypeID() {
+                    kids.append(one as! AXUIElement)
+                }
+            }
+            for c in kids { queue.append((d + 1, c)) }
+        }
     }
-    log("  탐색 노드 \(seen)개, 텍스트류 요소 \(found.count)개")
+    log("  탐색 노드 \(seen)개, 텍스트 능력 후보 \(found.count)개")
     return found
 }
 
@@ -93,7 +119,22 @@ func dumpText(_ el: AXUIElement, label: String) {
     let val = (copyAttr(el, "AXValue") as? String) ?? ""
     let sel = (copyAttr(el, "AXSelectedText") as? String) ?? ""
     let n = (copyAttr(el, "AXNumberOfCharacters") as? Int)
-    log("    [\(label)] role=\(role(el)) AXValue='\(val.prefix(40))' 선택='\(sel.prefix(20))' 글자수=\(n.map(String.init) ?? "nil")")
+    let params = paramAttrNames(el)
+    log("    [\(label)] role=\(role(el)) AXValue='\(val.prefix(40))' 선택='\(sel.prefix(20))' 글자수=\(n.map(String.init) ?? "nil") 파라미터=\(params.isEmpty ? "-" : params.joined(separator: ","))")
+    // 캐럿 앞 텍스트를 실제로 읽을 수 있는지 — FocusedInputSafety가 요구하는
+    // 정확히 그 능력(AXSelectedTextRange + StringForRange)을 실측한다.
+    if params.contains("AXStringForRange"),
+       let rangeRef = copyAttr(el, "AXSelectedTextRange") {
+        var range = CFRange()
+        if AXValueGetValue(rangeRef as! AXValue, .cfRange, &range) {
+            let probe = CFRangeMake(max(0, range.location - 5), min(5, range.location))
+            if let rv = AXValueCreate(.cfRange, [probe].withUnsafeBufferPointer { UnsafeRawPointer($0.baseAddress!) }) {
+                var sv: CFTypeRef?
+                let err = AXUIElementCopyParameterizedAttributeValue(el, "AXStringForRange" as CFString, rv, &sv)
+                log("      → 캐럿=\(range.location) StringForRange(\(probe.location),\(probe.length)) = \(err == .success ? "'\((sv as? String) ?? "?")'" : "실패(\(err.rawValue))")")
+            }
+        }
+    }
 }
 
 log("\n=== 1) 활성화 전 하강 탐색 ===")
