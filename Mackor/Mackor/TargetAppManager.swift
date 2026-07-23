@@ -341,7 +341,7 @@ class TargetAppManager: ObservableObject {
     /// 넣지 않았습니다.** 추측으로 넣으면 되는 앱을 미지원으로 만듭니다 —
     /// 실사용에서 학습이 판정합니다.
     private static let knownAutoCorrectionUnsupportedKeywords = [
-        "coreldraw", "intellij", "illustrator",
+        "coreldraw", "intellij", "illustrator", "hwp",
     ]
 
     /// 앱의 자판 자동 교정 지원 상태. 학습값 > 시드 > unknown 순으로 판단합니다.
