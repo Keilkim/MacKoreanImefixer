@@ -117,18 +117,24 @@ class TargetAppManager: ObservableObject {
         let name: String
         var hangulCompositionEnabled: Bool
         var autoCorrectionEnabled: Bool
+        /// AX가 텍스트를 안 내놓는 앱(한컴 등)에서 사용자가 위험을 알고 켜는
+        /// 검증 없는 교정. 기본 꺼짐 — "파괴 전 검증" 완화라 명시적 opt-in만
+        /// 허용합니다.
+        var blindAutoCorrectionEnabled: Bool
         var id: String { bundleID }
 
         init(
             bundleID: String,
             name: String,
             hangulCompositionEnabled: Bool = true,
-            autoCorrectionEnabled: Bool = false
+            autoCorrectionEnabled: Bool = false,
+            blindAutoCorrectionEnabled: Bool = false
         ) {
             self.bundleID = bundleID
             self.name = name
             self.hangulCompositionEnabled = hangulCompositionEnabled
             self.autoCorrectionEnabled = autoCorrectionEnabled
+            self.blindAutoCorrectionEnabled = blindAutoCorrectionEnabled
         }
 
         private enum CodingKeys: String, CodingKey {
@@ -136,6 +142,7 @@ class TargetAppManager: ObservableObject {
             case name
             case hangulCompositionEnabled
             case autoCorrectionEnabled
+            case blindAutoCorrectionEnabled
         }
 
         init(from decoder: Decoder) throws {
@@ -153,6 +160,10 @@ class TargetAppManager: ObservableObject {
                 Bool.self,
                 forKey: .autoCorrectionEnabled
             ) ?? false
+            blindAutoCorrectionEnabled = try container.decodeIfPresent(
+                Bool.self,
+                forKey: .blindAutoCorrectionEnabled
+            ) ?? false
         }
 
         func encode(to encoder: Encoder) throws {
@@ -161,6 +172,7 @@ class TargetAppManager: ObservableObject {
             try container.encode(name, forKey: .name)
             try container.encode(hangulCompositionEnabled, forKey: .hangulCompositionEnabled)
             try container.encode(autoCorrectionEnabled, forKey: .autoCorrectionEnabled)
+            try container.encode(blindAutoCorrectionEnabled, forKey: .blindAutoCorrectionEnabled)
         }
     }
 
@@ -235,6 +247,17 @@ class TargetAppManager: ObservableObject {
         targetApps[index] = updatedApp
     }
 
+    func setBlindAutoCorrectionEnabled(_ enabled: Bool, bundleID: String) {
+        guard let index = targetApps.firstIndex(where: {
+            bundleIDsMatch($0.bundleID, bundleID)
+        }) else { return }
+        guard targetApps[index].blindAutoCorrectionEnabled != enabled else { return }
+
+        var updatedApp = targetApps[index]
+        updatedApp.blindAutoCorrectionEnabled = enabled
+        targetApps[index] = updatedApp
+    }
+
     func setAutoCorrectionScope(_ scope: AutoCorrectionScope) {
         guard autoCorrectionScope != scope else { return }
         autoCorrectionScope = scope
@@ -255,6 +278,10 @@ class TargetAppManager: ObservableObject {
         updateOrCreate(bundleID: bundleID, name: name) { $0.autoCorrectionEnabled = enabled }
     }
 
+    func setBlindAutoCorrection(_ enabled: Bool, bundleID: String, name: String) {
+        updateOrCreate(bundleID: bundleID, name: name) { $0.blindAutoCorrectionEnabled = enabled }
+    }
+
     /// UI 토글이 보여줄 **앱별 저장값**. `isAutoCorrectionEnabled`는 전체 Mac
     /// 범위에서 무조건 true를 돌려주므로(엔진용 유효값), 토글 표시는 이 저장값을
     /// 씁니다. 조합은 범위 영향이 없어 `isHangulCompositionEnabled`를 그대로 씁니다.
@@ -270,22 +297,25 @@ class TargetAppManager: ObservableObject {
         if let index = targetApps.firstIndex(where: { bundleIDsMatch($0.bundleID, bundleID) }) {
             var app = targetApps[index]
             mutate(&app)
-            if !app.hangulCompositionEnabled && !app.autoCorrectionEnabled {
+            if !app.hangulCompositionEnabled && !app.autoCorrectionEnabled
+                && !app.blindAutoCorrectionEnabled {
                 targetApps.remove(at: index)
             } else {
                 targetApps[index] = app
             }
         } else {
-            // 새로 만들 땐 두 토글 모두 꺼진 상태에서 시작해, 요청한 것만 켭니다.
+            // 새로 만들 땐 세 토글 모두 꺼진 상태에서 시작해, 요청한 것만 켭니다.
             // (addApp의 조합=기본 켜짐과 달리, 자동만 켜려는 의도를 훼손하지 않도록.)
             var app = TargetApp(
                 bundleID: bundleID,
                 name: name,
                 hangulCompositionEnabled: false,
-                autoCorrectionEnabled: false
+                autoCorrectionEnabled: false,
+                blindAutoCorrectionEnabled: false
             )
             mutate(&app)
-            guard app.hangulCompositionEnabled || app.autoCorrectionEnabled else { return }
+            guard app.hangulCompositionEnabled || app.autoCorrectionEnabled
+                || app.blindAutoCorrectionEnabled else { return }
             targetApps.append(app)
         }
     }
@@ -341,7 +371,7 @@ class TargetAppManager: ObservableObject {
     /// 넣지 않았습니다.** 추측으로 넣으면 되는 앱을 미지원으로 만듭니다 —
     /// 실사용에서 학습이 판정합니다.
     private static let knownAutoCorrectionUnsupportedKeywords = [
-        "coreldraw", "intellij", "illustrator",
+        "coreldraw", "intellij", "illustrator", "hwp",
     ]
 
     /// 앱의 자판 자동 교정 지원 상태. 학습값 > 시드 > unknown 순으로 판단합니다.
@@ -446,6 +476,12 @@ class TargetAppManager: ObservableObject {
 
     func isHangulCompositionEnabled(bundleID: String?, appName: String?) -> Bool {
         targetApp(bundleID: bundleID, appName: appName)?.hangulCompositionEnabled ?? false
+    }
+
+    /// AX 없는 앱에서 검증 없는 blind 교정을 켰는가. 저장값만 봅니다 — 이 기능은
+    /// 자동 켜짐이 없고 사용자가 명시적으로 켠 앱에서만 동작합니다.
+    func isBlindAutoCorrectionEnabled(bundleID: String?, appName: String?) -> Bool {
+        targetApp(bundleID: bundleID, appName: appName)?.blindAutoCorrectionEnabled ?? false
     }
 
     func isAutoCorrectionEnabled(bundleID: String?, appName: String?) -> Bool {

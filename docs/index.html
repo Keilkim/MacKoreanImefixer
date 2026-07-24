@@ -1,0 +1,620 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mackor — 한·영 몰라도 알아서 고쳐주는 맥 유틸리티</title>
+  <meta name="description" content="한/영 키를 깜빡해도, 잘못 친 글자를 당신의 Mac 안에서 알아서 되돌려주는 무료 메뉴바 유틸리티. dkssud 를 치면 안녕 으로 자동 교정.">
+  <meta name="theme-color" content="#FBFAF6">
+  <link rel="canonical" href="https://keilkim.github.io/MacKoreanImefixer/">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="ko_KR">
+  <meta property="og:title" content="Mackor — 한·영 몰라도 알아서 고쳐주는 맥 유틸리티">
+  <meta property="og:description" content="한/영 키를 깜빡해도, 잘못 친 글자를 당신의 Mac 안에서 알아서 되돌려줍니다. dkssud → 안녕.">
+  <meta property="og:url" content="https://keilkim.github.io/MacKoreanImefixer/">
+  <meta name="twitter:card" content="summary">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='7'%20fill='%23BE3A2B'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --paper:      #FBFAF6;  /* 한지 웜 화이트 */
+    --paper-veil: #F3F1E9;  /* 살짝 깊은 면 */
+    --ink:        #1B1913;  /* 먹빛 검정 */
+    --ink-2:      #3A382F;  /* 보조 먹 */
+    --ink-soft:   #7C776A;  /* 절제된 회색 (웜 바이어스) */
+    --hair:       rgba(27,25,19,0.11);
+    --hair-soft:  rgba(27,25,19,0.06);
+    --seal:       #BE3A2B;  /* 낙관 주홍 — 이 페이지의 유일한 색 */
+
+    --serif: "AppleMyungjo", "Nanum Myeongjo", ui-serif, Georgia, serif;
+    --sans:  "Apple SD Gothic Neo", -apple-system, BlinkMacSystemFont, "Pretendard", system-ui, "Malgun Gothic", sans-serif;
+    --mono:  ui-monospace, "SF Mono", Menlo, "Courier New", monospace;
+
+    --measure: 34rem;
+    --ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* 리셋 (표준 배포용 — 아티팩트 스켈레톤이 넣어주던 최소 리셋을 직접 포함) */
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  h1, h2, h3, h4, p, figure, blockquote { margin: 0; }
+  img, svg { max-width: 100%; }
+
+  /* 백의민족 — 흰 한지의 세계에 의도적으로 몰입. OS 다크여도 종이는 뒤집지 않는다(인쇄물처럼). */
+  :root[data-theme="dark"], :root[data-theme="light"] { color-scheme: light; }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 17px;
+    line-height: 1.72;
+    letter-spacing: 0;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overflow-x: hidden;
+  }
+
+  .wrap {
+    max-width: 46rem;
+    margin: 0 auto;
+    padding: 0 1.75rem;
+  }
+
+  /* ── 얇은 상단 표시선 ── */
+  .topmark {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.8rem 0 0;
+  }
+  .topmark .name {
+    font-family: var(--serif);
+    font-size: 1.15rem;
+    letter-spacing: 0.02em;
+  }
+  .topmark .src {
+    font-size: 0.82rem;
+    color: var(--ink-soft);
+    text-decoration: none;
+    border-bottom: 1px solid var(--hair);
+    padding-bottom: 2px;
+    transition: color 0.3s var(--ease-spring), border-color 0.3s var(--ease-spring);
+  }
+  .topmark .src:hover { color: var(--ink); border-color: var(--ink); }
+
+  /* ── 히어로 ── */
+  .hero {
+    padding: 8.5rem 0 7rem;
+    text-align: center;
+  }
+  .eyebrow {
+    font-size: 0.82rem;
+    letter-spacing: 0.34em;
+    color: var(--ink-soft);
+    margin: 0 0 3.2rem;
+    text-indent: 0.34em; /* letter-spacing 보정 */
+  }
+
+  /* 교정 순간 — 히어로의 논지 */
+  .morph {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.6rem;
+    min-height: 8.5rem;
+    justify-content: center;
+  }
+  .morph-typed {
+    font-family: var(--mono);
+    font-size: 1.05rem;
+    letter-spacing: 0.06em;
+    color: var(--ink-soft);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.7rem;
+  }
+  .morph-typed .keys {
+    position: relative;
+    transition: opacity 0.5s var(--ease-spring);
+  }
+  .morph-typed .keys::after { /* 캐럿 */
+    content: "";
+    display: inline-block;
+    width: 1px;
+    height: 1.05em;
+    background: var(--ink-soft);
+    margin-left: 2px;
+    vertical-align: -0.18em;
+    animation: blink 1.15s step-end infinite;
+  }
+  .morph.settled .morph-typed .keys::after { opacity: 0; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+  .morph-typed .tag {
+    font-family: var(--sans);
+    font-size: 0.72rem;
+    letter-spacing: 0.18em;
+    color: var(--ink-soft);
+    opacity: 0.7;
+  }
+
+  .morph-out {
+    font-family: var(--serif);
+    font-size: clamp(4rem, 17vw, 7.5rem);
+    line-height: 1;
+    letter-spacing: -0.015em;
+    color: var(--ink);
+    opacity: 0;
+    transform: translateY(0.5em);
+    filter: blur(6px);
+    transition:
+      opacity 0.7s var(--ease-spring),
+      transform 0.7s var(--ease-spring),
+      filter 0.7s var(--ease-spring);
+    position: relative;
+  }
+  .morph.settled .morph-out {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+  /* 낙관 — 결과가 자리잡을 때만 조용히 찍힌다 */
+  .morph-out .seal {
+    position: absolute;
+    top: 0.15em;
+    right: -0.72em;
+    width: 0.42em;
+    height: 0.42em;
+    background: var(--seal);
+    border-radius: 2px;
+    display: grid;
+    place-items: center;
+    font-family: var(--sans);
+    font-size: 0.13em;
+    color: var(--paper);
+    letter-spacing: 0;
+    opacity: 0;
+    transform: scale(0.4) rotate(-6deg);
+    transition: opacity 0.5s 0.25s var(--ease-spring), transform 0.5s 0.25s var(--ease-spring);
+  }
+  .morph.settled .morph-out .seal { opacity: 1; transform: scale(1) rotate(-6deg); }
+
+  .thesis {
+    font-family: var(--serif);
+    font-size: clamp(1.4rem, 3.6vw, 1.9rem);
+    line-height: 1.6;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+    max-width: 28rem;
+    margin: 4.4rem auto 0;
+    text-wrap: balance;
+  }
+  .thesis .em { color: var(--seal); }
+  .subthesis {
+    color: var(--ink-soft);
+    font-size: 1.02rem;
+    max-width: 26rem;
+    margin: 1.5rem auto 0;
+    text-wrap: balance;
+  }
+
+  /* ── 다운로드 ── */
+  .cta {
+    margin-top: 3.6rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+  }
+  .btn {
+    -webkit-appearance: none;
+    appearance: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    background: var(--ink);
+    color: var(--paper);
+    font-family: var(--sans);
+    font-size: 1.02rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    text-decoration: none;
+    padding: 0.95rem 2.1rem;
+    border-radius: 999px;
+    border: none;
+    cursor: pointer;
+    transition: transform 0.12s ease-out, background 0.3s var(--ease-spring);
+  }
+  .btn:hover { background: #000; }
+  .btn:active { transform: scale(0.97); } /* apple-design: pointer-down 즉각 반응 */
+  .btn:focus-visible { outline: 2px solid var(--seal); outline-offset: 3px; }
+  .btn .apple { width: 1.05em; height: 1.05em; fill: currentColor; margin-top: -0.12em; }
+  .cta-note {
+    font-size: 0.86rem;
+    color: var(--ink-soft);
+  }
+  .cta-note b { color: var(--ink-2); font-weight: 600; }
+
+  /* ── 섹션 공통 ── */
+  section { padding: 5.5rem 0; }
+  .rule {
+    width: 100%;
+    height: 1px;
+    background: var(--hair-soft);
+    border: 0;
+    margin: 0;
+  }
+  .label {
+    font-size: 0.76rem;
+    letter-spacing: 0.28em;
+    color: var(--seal);
+    margin: 0 0 2rem;
+    text-indent: 0.28em;
+  }
+  h2.sec {
+    font-family: var(--serif);
+    font-size: clamp(1.8rem, 5vw, 2.6rem);
+    line-height: 1.28;
+    letter-spacing: -0.015em;
+    margin: 0 0 1.4rem;
+    text-wrap: balance;
+  }
+  .sec-lead {
+    color: var(--ink-2);
+    font-size: 1.08rem;
+    max-width: var(--measure);
+    margin: 0;
+  }
+
+  /* 예시 — 잘못 친 것 → 고쳐진 것 */
+  .examples {
+    margin-top: 3rem;
+    display: grid;
+    gap: 1px;
+    background: var(--hair-soft);
+    border-top: 1px solid var(--hair-soft);
+    border-bottom: 1px solid var(--hair-soft);
+  }
+  .ex {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 1.2rem;
+    background: var(--paper);
+    padding: 1.35rem 0.4rem;
+  }
+  .ex .from {
+    font-family: var(--mono);
+    font-size: 1.05rem;
+    color: var(--ink-soft);
+    text-align: right;
+    letter-spacing: 0.04em;
+  }
+  .ex .arrow { color: var(--seal); font-size: 1rem; }
+  .ex .to {
+    font-family: var(--serif);
+    font-size: 1.7rem;
+    color: var(--ink);
+    text-align: left;
+  }
+
+  /* 로컬 처리 */
+  .privacy {
+    background: var(--paper-veil);
+    border-radius: 20px;
+    padding: 3rem 2.4rem;
+    margin-top: 2.6rem;
+  }
+  .privacy p { margin: 0; color: var(--ink-2); font-size: 1.06rem; max-width: var(--measure); }
+  .privacy .big {
+    font-family: var(--serif);
+    font-size: clamp(1.5rem, 4vw, 2rem);
+    color: var(--ink);
+    line-height: 1.4;
+    margin: 0 0 1.1rem;
+    letter-spacing: -0.01em;
+  }
+
+  /* 설치 3단계 */
+  .steps {
+    margin-top: 2.8rem;
+    display: grid;
+    gap: 1.6rem;
+    counter-reset: step;
+  }
+  .step {
+    display: grid;
+    grid-template-columns: 2.6rem 1fr;
+    gap: 1.3rem;
+    align-items: baseline;
+    padding-bottom: 1.6rem;
+    border-bottom: 1px solid var(--hair-soft);
+  }
+  .step:last-child { border-bottom: none; }
+  .step .n {
+    font-family: var(--serif);
+    font-size: 1.5rem;
+    color: var(--seal);
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .step h3 {
+    margin: 0 0 0.35rem;
+    font-size: 1.12rem;
+    font-weight: 600;
+    letter-spacing: -0.005em;
+  }
+  .step p { margin: 0; color: var(--ink-soft); font-size: 0.98rem; }
+  .step p code {
+    font-family: var(--mono);
+    font-size: 0.86em;
+    background: var(--paper-veil);
+    padding: 0.12em 0.42em;
+    border-radius: 5px;
+    color: var(--ink-2);
+  }
+
+  /* 솔직한 한계 */
+  .limits { margin-top: 2.4rem; display: grid; gap: 1.3rem; }
+  .limit {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.9rem;
+    color: var(--ink-2);
+    font-size: 1rem;
+    align-items: baseline;
+  }
+  .limit .dot {
+    width: 5px; height: 5px; border-radius: 50%;
+    background: var(--ink-soft);
+    transform: translateY(-0.35em);
+  }
+  .limit b { color: var(--ink); font-weight: 600; }
+  .limit p { margin: 0; }
+
+  /* 마무리 다운로드 */
+  .closer {
+    text-align: center;
+    padding: 7rem 0 4rem;
+  }
+  .closer .mark {
+    font-family: var(--serif);
+    font-size: clamp(2.4rem, 8vw, 4rem);
+    letter-spacing: -0.02em;
+    margin: 0 0 0.6rem;
+    position: relative;
+    display: inline-block;
+  }
+  .closer .mark .seal {
+    position: absolute; right: -0.85em; top: 0.05em;
+    width: 0.4em; height: 0.4em; background: var(--seal); border-radius: 2px;
+    display: grid; place-items: center; color: var(--paper);
+    font-family: var(--sans); font-size: 0.16em; transform: rotate(-6deg);
+  }
+  .closer p { color: var(--ink-soft); margin: 0 0 2.6rem; }
+
+  footer {
+    text-align: center;
+    padding: 3rem 0 4rem;
+    border-top: 1px solid var(--hair-soft);
+    color: var(--ink-soft);
+    font-size: 0.84rem;
+    line-height: 1.9;
+  }
+  footer a { color: var(--ink-2); text-decoration: none; border-bottom: 1px solid var(--hair); }
+  footer a:hover { border-color: var(--ink-2); }
+  footer .dim { opacity: 0.7; }
+
+  /* 스크롤 진입 — 스프링 리빌 */
+  .reveal {
+    opacity: 0;
+    transform: translateY(18px);
+    transition: opacity 0.8s var(--ease-spring), transform 0.8s var(--ease-spring);
+  }
+  .reveal.in { opacity: 1; transform: translateY(0); }
+
+  @media (max-width: 480px) {
+    body { font-size: 16px; }
+    .hero { padding: 5.5rem 0 4.5rem; }
+    .ex { grid-template-columns: 1fr auto 1fr; gap: 0.7rem; }
+    .ex .to { font-size: 1.4rem; }
+    .privacy { padding: 2.2rem 1.5rem; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition-duration: 0.001ms !important; animation: none !important; }
+    .morph-out { opacity: 1; transform: none; filter: none; }
+    .morph-out .seal { opacity: 1; transform: rotate(-6deg); }
+    .reveal { opacity: 1; transform: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="topmark">
+    <span class="name">Mackor</span>
+    <a class="src" href="https://github.com/Keilkim/MacKoreanImefixer" target="_blank" rel="noopener">소스 보기 (오픈소스)</a>
+  </div>
+</div>
+
+<div class="wrap">
+  <header class="hero">
+    <p class="eyebrow">MAC 메뉴바 유틸리티</p>
+
+    <div class="morph" id="morph" aria-label="dkssud 라고 잘못 쳐도 안녕 으로 자동 교정됩니다">
+      <div class="morph-typed"><span class="keys" id="mKeys">dkssud</span><span class="tag">라고 쳤는데</span></div>
+      <div class="morph-out" id="mOut">안녕<span class="seal" aria-hidden="true">맥</span></div>
+    </div>
+
+    <p class="thesis">한/영 키를 <span class="em">깜빡해도</span>,<br>친 대로 알아서 되돌려 드립니다.</p>
+    <p class="subthesis">입력 소스를 잘못 두고 친 글자를, 이 기기 안에서 판단해 제 글자로 바꿉니다. 다시 지우고 칠 필요가 없습니다.</p>
+
+    <div class="cta">
+      <a class="btn" id="dl" href="https://github.com/Keilkim/MacKoreanImefixer/releases/latest/download/Mackor.dmg">
+        <svg class="apple" viewBox="0 0 384 512" aria-hidden="true"><path d="M318.7 268c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-92.6zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></svg>
+        Mac용 다운로드
+      </a>
+      <p class="cta-note">무료 · 설치 후 <b>손쉬운 사용 권한</b> 한 번이면 끝납니다.</p>
+    </div>
+  </header>
+</div>
+
+<div class="wrap"><hr class="rule"></div>
+
+<div class="wrap">
+  <section class="reveal">
+    <p class="label">무엇을 고치나</p>
+    <h2 class="sec">한글로 치려다 영문 자판으로 친 단어를 되돌립니다.</h2>
+    <p class="sec-lead">키보드 배열은 그대로 두고, 자판만 잘못 선택한 채 친 글자를 자동으로 판단해 바꿉니다. 등록한 앱에서는 깨진 한글 조합도 함께 잡아 줍니다.</p>
+
+    <div class="examples" aria-label="교정 예시">
+      <div class="ex"><span class="from">dkssud</span><span class="arrow">→</span><span class="to">안녕</span></div>
+      <div class="ex"><span class="from">gksrmf</span><span class="arrow">→</span><span class="to">한글</span></div>
+      <div class="ex"><span class="from">tkfkd</span><span class="arrow">→</span><span class="to">사랑</span></div>
+      <div class="ex"><span class="from">rkatk</span><span class="arrow">→</span><span class="to">감사</span></div>
+    </div>
+  </section>
+</div>
+
+<div class="wrap"><hr class="rule"></div>
+
+<div class="wrap">
+  <section class="reveal">
+    <p class="label">사생활</p>
+    <div class="privacy">
+      <p class="big">친 글자는 이 기기를 떠나지 않습니다.</p>
+      <p>교정은 전부 당신의 Mac 안에서 이뤄집니다. 입력한 내용도, 교정한 결과도, 어떤 앱을 쓰는지도 서버로 보내지 않습니다. 네트워크를 쓰는 건 오직 새 버전이 있는지 확인할 때뿐입니다.</p>
+    </div>
+  </section>
+</div>
+
+<div class="wrap"><hr class="rule"></div>
+
+<div class="wrap">
+  <section class="reveal">
+    <p class="label">설치</p>
+    <h2 class="sec">세 걸음이면 됩니다.</h2>
+    <div class="steps">
+      <div class="step">
+        <span class="n">一</span>
+        <div>
+          <h3>받아서 엽니다</h3>
+          <p>위 <code>Mac용 다운로드</code>를 누르면 바로 내려받습니다. 받은 파일을 열고 <code>Mackor</code>를 응용 프로그램으로 옮깁니다.</p>
+        </div>
+      </div>
+      <div class="step">
+        <span class="n">二</span>
+        <div>
+          <h3>손쉬운 사용 권한을 켭니다</h3>
+          <p>처음 실행하면 <code>시스템 설정 › 개인정보 보호 및 보안 › 손쉬운 사용</code>에서 Mackor를 켜라고 안내합니다. 교정을 하려면 이 권한 한 번이 필요합니다.</p>
+        </div>
+      </div>
+      <div class="step">
+        <span class="n">三</span>
+        <div>
+          <h3>메뉴바에서 조용히 동작합니다</h3>
+          <p>이제 평소처럼 치기만 하면 됩니다. 적용 범위는 메뉴바 아이콘에서 <code>모든 앱</code> 또는 <code>선택한 앱만</code>으로 고를 수 있습니다.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="wrap"><hr class="rule"></div>
+
+<div class="wrap">
+  <section class="reveal">
+    <p class="label">미리 알아 두면 좋은 것</p>
+    <h2 class="sec">할 수 있는 것만 정직하게 적습니다.</h2>
+    <div class="limits">
+      <div class="limit"><span class="dot"></span><p><b>캔버스에 직접 글자를 그리는 앱</b>(예: Illustrator)은 자동 교정이 원리적으로 어렵습니다. 입력란이라는 것 자체가 없기 때문입니다.</p></div>
+      <div class="limit"><span class="dot"></span><p><b>앱을 방금 전환한 직후 첫 단어</b>는 놓칠 수 있습니다. 다음 단어부터는 정상입니다.</p></div>
+      <div class="limit"><span class="dot"></span><p>어떤 앱에서 되는지는 <b>실제로 쳐 봐야</b> 확인됩니다. 안 되는 앱은 앱 안에서 제보할 수 있습니다.</p></div>
+    </div>
+  </section>
+</div>
+
+<div class="wrap">
+  <section class="closer reveal">
+    <p class="mark">Mackor<span class="seal" aria-hidden="true">맥</span></p>
+    <p>깜빡해도 괜찮습니다.</p>
+    <a class="btn" href="https://github.com/Keilkim/MacKoreanImefixer/releases/latest/download/Mackor.dmg">
+      <svg class="apple" viewBox="0 0 384 512" aria-hidden="true"><path d="M318.7 268c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-92.6zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></svg>
+      Mac용 다운로드
+    </a>
+  </section>
+</div>
+
+<footer>
+  <div class="wrap">
+    <div>Mackor · macOS 10.15+ · 오픈소스 <span class="dim">(MIT)</span></div>
+    <div class="dim">© 2026 Draftup · 이름 "Mackor"와 로고는 코드 라이선스와 별개입니다.</div>
+    <div><a href="https://github.com/Keilkim/MacKoreanImefixer" target="_blank" rel="noopener">GitHub</a></div>
+  </div>
+</footer>
+
+<script>
+  (function () {
+    var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    // ── 히어로 교정 순환 ──
+    var pairs = [
+      ["dkssud", "안녕"],
+      ["gksrmf", "한글"],
+      ["dhsmf",  "오늘"],
+      ["rkatk",  "감사"]
+    ];
+    var morph = document.getElementById("morph");
+    var keys = document.getElementById("mKeys");
+    var out = document.getElementById("mOut");
+    var i = 0;
+
+    function render(idx, animate) {
+      keys.textContent = pairs[idx][0];
+      // 한글 텍스트만 교체하고 낙관은 유지
+      out.childNodes[0].nodeValue = pairs[idx][1];
+      if (animate) {
+        morph.classList.remove("settled");
+        requestAnimationFrame(function () {
+          requestAnimationFrame(function () { morph.classList.add("settled"); });
+        });
+      } else {
+        morph.classList.add("settled");
+      }
+    }
+
+    render(0, !reduce);
+
+    if (!reduce) {
+      setInterval(function () {
+        morph.classList.remove("settled");
+        setTimeout(function () {
+          i = (i + 1) % pairs.length;
+          render(i, true);
+        }, 520);
+      }, 2900);
+    }
+
+    // ── 스크롤 진입 리빌 ──
+    var els = document.querySelectorAll(".reveal");
+    if (!("IntersectionObserver" in window) || reduce) {
+      els.forEach(function (el) { el.classList.add("in"); });
+    } else {
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) {
+          if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
+        });
+      }, { threshold: 0.16 });
+      els.forEach(function (el) { io.observe(el); });
+    }
+
+    // ── 버튼: pointer-down 즉각 반응 (apple-design) ──
+    document.querySelectorAll(".btn").forEach(function (b) {
+      b.addEventListener("pointerdown", function () { b.style.transform = "scale(0.97)"; });
+      b.addEventListener("pointerup", function () { b.style.transform = ""; });
+      b.addEventListener("pointerleave", function () { b.style.transform = ""; });
+    });
+  })();
+</script>
+</body>
+</html>

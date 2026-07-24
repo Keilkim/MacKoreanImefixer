@@ -691,6 +691,28 @@ final class EventTapManagerTests: XCTestCase {
         )
     }
 
+    /// `현재'ㄷ`(guswo'e): 합친 조합이 현잳 — KS X 1001 밖 접합 음절이라 정책의
+    /// modernKorean 게이트를 빠져나가지만, 완전 조합 보존 가드가 잡는다.
+    /// (적대적 검증에서 발견된 오탐 — 열린 음절 + ' + 자음 하나 + 경계.)
+    func testKoreanJunctionSyllableWithApostropheIsPreserved() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .koreanTwoSet
+        manager.isAutoCorrectionEnabled = true
+
+        type("guswo", into: manager)  // 현재
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(Self.apostropheKeycode)))
+        type("e", into: manager)      // ㄷ
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(
+            output.actions.isEmpty,
+            "현재'ㄷ이 라틴으로 오교정됐습니다: \(output.actions)"
+        )
+    }
+
     /// 영자판에서는 이 규칙이 발동하지 않는다 — 이미 영어로 찍히고, `didn't`→야웃
     /// 오교정이 측정됐다(G1: koreanTwoSet 방향 한정).
     func testApostropheInLatinModeIsUntouched() {
@@ -751,6 +773,232 @@ final class EventTapManagerTests: XCTestCase {
         XCTAssertTrue(
             output.actions.isEmpty,
             "선행 어퍼스트로피가 교정을 일으켰습니다: \(output.actions)"
+        )
+    }
+
+    // MARK: - blind 교정 (AX 없는 앱 · 사용자 opt-in)
+    //
+    // 한컴처럼 AX에 텍스트를 안 내놓지만 합성 입력은 받는 앱에서, 사용자가
+    // 위험을 알고 켠 경우에만 검증 없이 교정한다. 커서가 방금 친 단어 뒤에
+    // 고정되는 latinToKorean·8자 이하·즉시 경계로만 제한한다.
+
+    /// blind opt-in + AX 미지원 role + 영자판 + 짧은 토큰 → 검증 없이 교정.
+    /// 같은 조건이 blind 없이는 미지원으로 아무것도 안 되던 것과 대비.
+    func testBlindCorrectionFiresWhenOptedIn() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.alwaysUnsupportedRole = true
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+        manager.blindAutoCorrectionEnabled = true
+
+        type("gksrmf", into: manager)   // 한글
+        XCTAssertNil(
+            manager.handleKeyDown(keyDown(0x31)),
+            "blind 교정은 경계키를 삼키고 스스로 재주입합니다"
+        )
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(
+            output.actions.contains(.text("한글")),
+            "blind 교정이 발동하지 않았습니다: \(output.actions)"
+        )
+    }
+
+    /// 한컴처럼 AX가 무거운 앱은 50ms 프로브가 .unavailable(느림)을 오간다.
+    /// blind opt-in이면 그 경우에도 발동해야 한다 — 이게 없으면 교정이 토큰마다
+    /// 간헐적으로 빠진다(실기에서 관측된 회귀).
+    func testBlindCorrectionFiresWhenProbeIsSlowUnavailable() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.transientFailuresRemaining = 1000   // 모든 프로브가 .unavailable
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+        manager.blindAutoCorrectionEnabled = true
+
+        type("gksrmf", into: manager)
+        XCTAssertNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(
+            output.actions.contains(.text("한글")),
+            "느린 AX(.unavailable)에서 blind가 발동하지 않았습니다: \(output.actions)"
+        )
+    }
+
+    /// 한→영 blind: 한글 IME 조합이라 경계키를 통과시켜 확정한 뒤 keyUp에서
+    /// AX 검증 없이 교정한다. `nice`를 한글자판으로 친 ㅜㅑㅊㄷ → nice.
+    func testBlindKoreanToLatinCorrectsViaDeferredKeyUp() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.alwaysUnsupportedRole = true
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .koreanTwoSet
+        manager.isAutoCorrectionEnabled = true
+        manager.blindAutoCorrectionEnabled = true
+
+        type("nice", into: manager)   // ㅜㅑㅊㄷ
+        // 경계키는 통과(조합 확정을 위해). 즉시 삭제하지 않는다.
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        // keyUp에서 지연 blind 교정이 실행된다(테스트는 동기 스케줄).
+        _ = manager.handleKeyUp(keyUp(0x31))
+
+        XCTAssertTrue(
+            output.actions.contains(.text("nice")),
+            "한→영 blind가 교정하지 않았습니다: \(output.actions)"
+        )
+    }
+
+    /// blind 교정도 결과 언어로 입력 소스를 전환한다 — 한컴은 시스템 입력
+    /// 소스를 따르므로, 전환하면 dkwn→아주 뒤 한글, ㅎㄱㄷㅁㅅ→great 뒤 영문으로
+    /// 자연스럽게 이어진다.
+    func testBlindCorrectionSwitchesInputSource() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.alwaysUnsupportedRole = true
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+        manager.blindAutoCorrectionEnabled = true
+        var switchedTo: CorrectionDirection?
+        manager.onInputSourceSwitch = { switchedTo = $0; return nil }
+
+        type("gksrmf", into: manager)
+        XCTAssertNil(manager.handleKeyDown(keyDown(0x31)))
+        _ = manager.handleKeyUp(keyUp(0x31))
+
+        XCTAssertTrue(output.actions.contains(.text("한글")))
+        XCTAssertEqual(switchedTo, .latinToKorean, "blind 교정이 입력 소스를 전환하지 않았습니다")
+    }
+
+    /// 대비: 일반(AX) 교정도 기존대로 입력 소스를 전환한다.
+    func testNonBlindCorrectionStillSwitchesInputSource() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+        var switched = false
+        manager.onInputSourceSwitch = { _ in switched = true; return nil }
+
+        type("gksrmf", into: manager)
+        _ = manager.handleKeyDown(keyDown(0x31))
+        _ = manager.handleKeyUp(keyUp(0x31))
+
+        XCTAssertTrue(output.actions.contains(.text("한글")))
+        XCTAssertTrue(switched, "일반 교정의 입력 소스 전환이 사라졌습니다")
+    }
+
+    /// 8자 초과 영→한도 지연 경로(탭 밖 비동기)로 교정된다 — 되는건가(11자).
+    /// 즉시 경로만 8자로 제한되고, 긴 토큰은 지연으로 흘러 길이 제한이 없다.
+    func testBlindLongLatinToKoreanCorrectsViaDeferred() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.alwaysUnsupportedRole = true
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+        manager.blindAutoCorrectionEnabled = true
+
+        type("ehlsmsrjsrk", into: manager)   // 되는건가 (11자)
+        // 즉시가 아니라 지연 — 경계키 통과.
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        _ = manager.handleKeyUp(keyUp(0x31))
+
+        XCTAssertTrue(
+            output.actions.contains(.text("되는건가")),
+            "긴 영→한 blind가 교정하지 않았습니다: \(output.actions)"
+        )
+    }
+
+    /// opt-in이 없으면 오늘과 동일 — 미지원 앱은 아무것도 안 한다.
+    func testBlindCorrectionRequiresOptIn() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.alwaysUnsupportedRole = true
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+        // blindAutoCorrectionEnabled 기본 false
+
+        type("gksrmf", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(
+            output.actions.isEmpty,
+            "opt-in 없이 blind 교정이 발동했습니다: \(output.actions)"
+        )
+    }
+
+    /// 제출 경계(Enter)에는 blind를 넣지 않는다 — 전송·포커스 이동 위험.
+    func testBlindCorrectionSkipsSubmitBoundary() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.alwaysUnsupportedRole = true
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+        manager.blindAutoCorrectionEnabled = true
+
+        type("gksrmf", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x24)))  // Return
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x24)))
+
+        XCTAssertTrue(
+            output.actions.isEmpty,
+            "제출 경계에서 blind 교정이 발동했습니다: \(output.actions)"
+        )
+    }
+
+    /// 보안/보호 필드(.ineligible)에는 opt-in이어도 절대 발동하지 않는다.
+    /// blindFieldActive는 `.ineligibleUnsupportedRole`에서만 켜지고, 그 값은
+    /// 구조적으로 보안 필드가 아님이 보장된다.
+    func testBlindCorrectionNeverFiresInIneligibleField() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.tokenAvailable = false   // 프로브가 .ineligible 반환
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+        manager.blindAutoCorrectionEnabled = true
+
+        type("gksrmf", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(
+            output.actions.isEmpty,
+            "보호 필드에서 blind 교정이 발동했습니다: \(output.actions)"
+        )
+    }
+
+    /// blind 교정 직후 ⌘Z는 AX 검증 없이 원문을 되돌린다.
+    func testBlindCorrectionUndoneByCommandZ() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.alwaysUnsupportedRole = true
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+        manager.blindAutoCorrectionEnabled = true
+
+        type("gksrmf", into: manager)
+        XCTAssertNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+        XCTAssertTrue(output.actions.contains(.text("한글")))
+
+        output.actions.removeAll()
+        XCTAssertNil(
+            manager.handleKeyDown(keyDown(0x06, flags: .maskCommand)),
+            "blind 교정의 ⌘Z는 Mackor이 처리해 삼켜야 합니다"
+        )
+
+        XCTAssertTrue(
+            output.actions.contains(.text("gksrmf")),
+            "⌘Z가 원문을 되돌리지 않았습니다: \(output.actions)"
         )
     }
 
