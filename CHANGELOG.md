@@ -6,6 +6,12 @@ Mackor의 사용자에게 보이는 변경 사항을 이 파일에 기록합니�
 
 ## [Unreleased]
 
+## [1.5] — 2026-07-25
+
+### 변경
+
+- **"AX 없이 강제 교정" 토글을 켤 때 확인 창이 뜹니다.** 한컴오피스 한글처럼 접근성으로 글자를 읽을 수 없는 앱의 `자판자동`(강제 교정)은 화면을 확인하지 않고 지웠다 다시 쓰는 방식이라 드물게 글자를 잘못 지울 수 있습니다. 이제 켜기 전에 이 위험과 ⌘Z 복구를 명시한 확인 창을 띄우고, 확인해야 활성화됩니다(끄기는 즉시). 일반 자판자동을 미확인 앱에서 처음 켤 때와 같은 안전장치입니다.
+
 ## [1.4] — 2026-07-25
 
 ### 추가
@@ -122,6 +128,7 @@ v1.3부터 Return·숫자패드 Enter·Tab에서 흐름을 뒤집어 처리합�
 함께 표시하고, 수명을 ⌘Z 트랜잭션과 같은 6초로 맞췄습니다. 칩은 사라졌는데
 되돌리기는 아직 되는 간극이 없어집니다.
 
-[Unreleased]: https://github.com/Keilkim/MacKoreanImefixer/compare/v1.4...HEAD
+[Unreleased]: https://github.com/Keilkim/MacKoreanImefixer/compare/v1.5...HEAD
+[1.5]: https://github.com/Keilkim/MacKoreanImefixer/compare/v1.4...v1.5
 [1.4]: https://github.com/Keilkim/MacKoreanImefixer/compare/v1.3...v1.4
 [1.3]: https://github.com/Keilkim/MacKoreanImefixer/compare/v1.1...v1.3
