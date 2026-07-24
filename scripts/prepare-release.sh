@@ -42,6 +42,22 @@ identity_exists() {
         | /usr/bin/grep -F -- "\"$1\"" > /dev/null
 }
 
+# appcast의 모든 item에서 가장 큰 sparkle:version(빌드 번호)을 출력한다. item이 없으면 0.
+max_published_build() {
+    local feed="$1" total index value max=0
+    total="$(/usr/bin/xmllint --xpath 'count(//*[local-name()="item"])' "$feed" 2>/dev/null || echo 0)"
+    case "$total" in ''|*[!0-9]*) total=0 ;; esac
+    index=1
+    while [ "$index" -le "$total" ]; do
+        value="$(/usr/bin/xmllint --xpath "string((//*[local-name()='item'])[$index]/*[local-name()='version'])" "$feed" 2>/dev/null || echo '')"
+        [ -n "$value" ] || value="$(/usr/bin/xmllint --xpath "string((//*[local-name()='item'])[$index]/*[local-name()='enclosure']/@*[local-name()='version'])" "$feed" 2>/dev/null || echo '')"
+        case "$value" in ''|*[!0-9]*) fail "appcast 항목 $index의 sparkle:version이 정수가 아닙니다: ${value:-없음}" ;; esac
+        [ "$value" -le "$max" ] || max="$value"
+        index=$((index + 1))
+    done
+    printf '%s\n' "$max"
+}
+
 usage() {
     cat <<'USAGE'
 사용법: scripts/prepare-release.sh <version> <build-number> <release-notes.md>
@@ -131,10 +147,28 @@ if [ -n "$(git -C "$ROOT_DIR" status --porcelain --untracked-files=all)" ]; then
     fail "공식 릴리스는 커밋된 깨끗한 작업 트리에서만 준비할 수 있습니다."
 fi
 
-/usr/bin/grep -F -- "## [$VERSION]" "$ROOT_DIR/CHANGELOG.md" > /dev/null \
-    || fail "CHANGELOG.md에 ## [$VERSION] 항목이 없습니다."
-if /usr/bin/grep -F -- "## [$VERSION] - 배포 전 초안" "$ROOT_DIR/CHANGELOG.md" > /dev/null; then
-    fail "CHANGELOG.md의 $VERSION 항목을 실제 배포일로 확정해야 합니다."
+# CHANGELOG의 해당 버전 섹션이 실제 배포일로 확정되었는지 검사한다. 리터럴 문자열에
+# 의존하지 않고 "## [<version>] <대시> YYYY-MM-DD" 형식을 강제하므로, 초안 표기나
+# 날짜 없는 제목("배포 전" 등)은 어떤 문구든 구조적으로 차단된다.
+CHANGELOG_PATH="$ROOT_DIR/CHANGELOG.md"
+ESCAPED_VERSION="${VERSION//./\\.}"
+CHANGELOG_HEADING_COUNT="$(/usr/bin/grep -Ec "^## \[$ESCAPED_VERSION\]" "$CHANGELOG_PATH" || true)"
+[ "$CHANGELOG_HEADING_COUNT" = "1" ] \
+    || fail "CHANGELOG.md에 '## [$VERSION]' 섹션 제목이 정확히 하나여야 합니다(현재 ${CHANGELOG_HEADING_COUNT}개)."
+CHANGELOG_HEADING="$(/usr/bin/grep -E -m 1 "^## \[$ESCAPED_VERSION\]" "$CHANGELOG_PATH")"
+printf '%s\n' "$CHANGELOG_HEADING" \
+    | /usr/bin/grep -Eq "^## \[$ESCAPED_VERSION\] (-|–|—) [0-9]{4}-[0-9]{2}-[0-9]{2}$" \
+    || fail "CHANGELOG의 $VERSION 제목을 '## [$VERSION] - YYYY-MM-DD'(실제 배포일)로 확정해야 합니다: $CHANGELOG_HEADING"
+if printf '%s\n' "$CHANGELOG_HEADING" | /usr/bin/grep -Eiq '배포 전|미배포|초안|아직|태그되지|unreleased|draft|tbd|todo'; then
+    fail "CHANGELOG의 $VERSION 제목에 초안 표기가 남아 있습니다: $CHANGELOG_HEADING"
+fi
+CHANGELOG_DATE="${CHANGELOG_HEADING##* }"
+[ "$(/bin/date -j -f '%Y-%m-%d' "$CHANGELOG_DATE" '+%Y-%m-%d' 2>/dev/null)" = "$CHANGELOG_DATE" ] \
+    || fail "CHANGELOG의 $VERSION 배포일이 실제 달력 날짜가 아닙니다: $CHANGELOG_DATE"
+[ "$(/bin/date -j -f '%Y-%m-%d' "$CHANGELOG_DATE" '+%s')" -le "$(/bin/date '+%s')" ] \
+    || fail "CHANGELOG의 $VERSION 배포일이 미래입니다: $CHANGELOG_DATE"
+if /usr/bin/grep -Eq "^\[$ESCAPED_VERSION\]:.*\.\.\.HEAD[[:space:]]*$" "$CHANGELOG_PATH"; then
+    fail "CHANGELOG 하단의 [$VERSION] 비교 링크가 HEAD를 가리킵니다. v$VERSION 태그 범위로 확정하세요."
 fi
 /usr/bin/grep -F -- "$VERSION" "$RELEASE_NOTES_FILE" > /dev/null \
     || fail "릴리스 노트에 버전 $VERSION이 없습니다."
@@ -158,6 +192,29 @@ require_real_directory_or_absent "$DIST_ROOT" "dist"
 require_real_directory_or_absent "$RELEASES_ROOT" "releases"
 [ ! -e "$FINAL_DIR" ] && [ ! -L "$FINAL_DIR" ] \
     || fail "같은 버전의 로컬 릴리스 폴더가 이미 있습니다: $FINAL_DIR"
+
+# 빌드 번호 단조 증가를 기계적으로 강제한다. 이미 공개된 sparkle:version보다 크지 않으면
+# Sparkle이 새 버전으로 인식하지 못해 사용자가 업데이트를 영구히 못 받는다. 공증도 온라인이
+# 필수이므로 라이브 피드를 못 가져오면(오프라인/404) 하드 실패한다.
+echo "[사전 점검] 공개된 빌드 번호와의 단조 증가 확인 중..."
+LIVE_APPCAST="$WORK_ROOT/live-appcast.xml"
+/usr/bin/curl --fail --silent --show-error --location --proto '=https' \
+    --max-time 30 --retry 2 \
+    --output "$LIVE_APPCAST" \
+    "${MACKOR_UPDATE_FEED_URL}?mackor-preflight=$(/bin/date +%s)" \
+    || fail "라이브 appcast를 내려받지 못했습니다: $MACKOR_UPDATE_FEED_URL — 공식 릴리스 준비는 네트워크가 필요합니다(공증도 마찬가지)."
+/usr/bin/xmllint --noout "$LIVE_APPCAST" \
+    || fail "라이브 appcast가 유효한 XML이 아닙니다(호스팅 오류 또는 404 페이지일 수 있습니다)."
+MAX_PUBLISHED_BUILD="$(max_published_build "$LIVE_APPCAST")"
+LOCAL_FEED_SNAPSHOT="$ROOT_DIR/docs/appcast.xml"
+if [ -f "$LOCAL_FEED_SNAPSHOT" ]; then
+    LOCAL_MAX_BUILD="$(max_published_build "$LOCAL_FEED_SNAPSHOT")"
+    [ "$LOCAL_MAX_BUILD" = "$MAX_PUBLISHED_BUILD" ] \
+        || fail "docs/appcast.xml(build $LOCAL_MAX_BUILD)과 라이브 피드(build $MAX_PUBLISHED_BUILD)의 최신 빌드가 다릅니다. 미완료 게시가 있거나 git pull이 필요합니다."
+fi
+[ "$BUILD_NUMBER" -gt "$MAX_PUBLISHED_BUILD" ] \
+    || fail "빌드 번호 $BUILD_NUMBER는 이미 공개된 최대 빌드 $MAX_PUBLISHED_BUILD보다 커야 합니다."
+echo "[사전 점검] 통과: 새 빌드 $BUILD_NUMBER > 공개된 최대 빌드 $MAX_PUBLISHED_BUILD"
 
 echo "[1/5] 전체 테스트 실행 중..."
 xcodebuild \

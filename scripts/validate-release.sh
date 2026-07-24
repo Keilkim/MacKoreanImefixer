@@ -310,6 +310,10 @@ xmllint --noout "$APPCAST_PATH"
     || fail "appcast 표시 버전이 일치하지 않습니다."
 /usr/bin/grep -F -- "$ARCHIVE_NAME" "$APPCAST_PATH" > /dev/null \
     || fail "appcast가 업데이트 ZIP을 가리키지 않습니다."
+# 과거 항목을 보존하는 다중 항목 피드에서도 이번 릴리스가 첫 항목(최신)이어야 한다.
+APPCAST_FIRST_BUILD="$(xmllint --xpath 'string((//*[local-name()="item"])[1]/*[local-name()="version"])' "$APPCAST_PATH")"
+[ "$APPCAST_FIRST_BUILD" = "$BUILD_NUMBER" ] \
+    || fail "appcast 첫 항목이 이번 릴리스(build $BUILD_NUMBER)가 아닙니다: ${APPCAST_FIRST_BUILD:-없음}"
 
 ARCHIVE_SIGNATURE="$(xmllint --xpath 'string((//*[local-name()="enclosure"])[1]/@*[local-name()="edSignature"])' "$APPCAST_PATH")"
 NOTES_SIGNATURE="$(xmllint --xpath 'string((//*[local-name()="releaseNotesLink"])[1]/@*[local-name()="edSignature"])' "$APPCAST_PATH")"
