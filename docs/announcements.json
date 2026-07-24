@@ -1,0 +1,12 @@
+{
+  "announcements": [
+    {
+      "id": "2026-07-25-mackor-1-3",
+      "date": "2026-07-25",
+      "kind": "notice",
+      "title": "Mackor 1.3 — 첫 공식 릴리스",
+      "body": "서명·공증된 첫 공식 릴리스가 나왔습니다. 한컴오피스 한글 등 접근성 없는 앱을 위한 'AX 없이 강제 교정', 영어 축약형(it's·don't)·구어체 교정, 자주 쓰는 한 글자 교정이 추가되었습니다. 예전 CorelHangulFix·MacKR 사용자는 옛 앱을 정리한 뒤 새로 설치해 주세요.",
+      "url": "https://github.com/Keilkim/MacKoreanImefixer/releases/tag/v1.3"
+    }
+  ]
+}

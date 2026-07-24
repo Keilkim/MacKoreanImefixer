@@ -168,12 +168,42 @@ trap 'rm -rf "$STAGING_DIR"' EXIT
 cp "$ARCHIVE_PATH" "$STAGING_DIR/$ARCHIVE_NAME"
 cp "$RELEASE_NOTES_FILE" "$STAGING_DIR/$NOTES_NAME"
 
+# 이미 게시된 피드(docs/appcast.xml = 라이브 피드의 git 원본)를 시드로 넣어
+# generate_appcast의 내장 병합으로 과거 항목을 보존한다. 과거 항목의 EdDSA 서명은
+# 파싱된 그대로 유지되므로 과거 ZIP 파일도, 서명 재계산도 필요 없다.
+LIVE_FEED_SNAPSHOT="$ROOT_DIR/docs/appcast.xml"
+OLD_ITEM_COUNT=0
+OLD_ITEM_URLS=()
+OLD_ITEM_SIGNATURES=()
+if [ -f "$LIVE_FEED_SNAPSHOT" ]; then
+    /usr/bin/xmllint --noout "$LIVE_FEED_SNAPSHOT" \
+        || fail "기존 docs/appcast.xml이 유효한 XML이 아닙니다: $LIVE_FEED_SNAPSHOT"
+    OLD_ITEM_COUNT="$(/usr/bin/xmllint --xpath 'count(//*[local-name()="item"])' "$LIVE_FEED_SNAPSHOT")"
+    case "$OLD_ITEM_COUNT" in ''|*[!0-9]*) fail "기존 피드의 item 수를 셀 수 없습니다." ;; esac
+    OLD_INDEX=1
+    while [ "$OLD_INDEX" -le "$OLD_ITEM_COUNT" ]; do
+        OLD_BUILD="$(/usr/bin/xmllint --xpath "string((//*[local-name()='item'])[$OLD_INDEX]/*[local-name()='version'])" "$LIVE_FEED_SNAPSHOT")"
+        OLD_URL="$(/usr/bin/xmllint --xpath "string((//*[local-name()='item'])[$OLD_INDEX]/*[local-name()='enclosure']/@url)" "$LIVE_FEED_SNAPSHOT")"
+        OLD_SIGNATURE="$(/usr/bin/xmllint --xpath "string((//*[local-name()='item'])[$OLD_INDEX]/*[local-name()='enclosure']/@*[local-name()='edSignature'])" "$LIVE_FEED_SNAPSHOT")"
+        case "$OLD_BUILD" in ''|*[!0-9]*) fail "기존 피드 항목 $OLD_INDEX의 빌드 번호가 정수가 아닙니다: ${OLD_BUILD:-없음}" ;; esac
+        [ "$BUILD_NUMBER" -gt "$OLD_BUILD" ] \
+            || fail "빌드 번호 $BUILD_NUMBER는 기존 피드의 빌드 $OLD_BUILD보다 커야 합니다."
+        [ -n "$OLD_URL" ] || fail "기존 피드 항목 $OLD_INDEX에 enclosure URL이 없습니다."
+        [ -n "$OLD_SIGNATURE" ] || fail "기존 피드 항목 $OLD_INDEX에 EdDSA 서명이 없습니다."
+        OLD_ITEM_URLS+=("$OLD_URL")
+        OLD_ITEM_SIGNATURES+=("$OLD_SIGNATURE")
+        OLD_INDEX=$((OLD_INDEX + 1))
+    done
+    cp "$LIVE_FEED_SNAPSHOT" "$STAGING_DIR/appcast.xml"
+fi
+
 GENERATED_APPCAST="$STAGING_DIR/appcast.xml"
 "$SPARKLE_GENERATE_APPCAST" \
     --account "$SPARKLE_KEY_ACCOUNT" \
     --download-url-prefix "${DOWNLOAD_BASE_URL%/}/" \
     --release-notes-url-prefix "${RELEASE_NOTES_BASE_URL%/}/" \
     --maximum-deltas 0 \
+    --maximum-versions 0 \
     --link "$PRODUCT_URL" \
     -o "$GENERATED_APPCAST" \
     "$STAGING_DIR"
@@ -184,6 +214,23 @@ GENERATED_APPCAST="$STAGING_DIR/appcast.xml"
     || fail "SURequireSignedFeed용 서명 경고 블록이 없습니다."
 /usr/bin/grep -F -- "sparkle-signatures:" "$GENERATED_APPCAST" > /dev/null \
     || fail "SURequireSignedFeed용 appcast 서명 블록이 없습니다."
+
+# 병합 검증: 항목 수가 정확히 (기존 + 1)이고, 첫 항목이 이번 빌드이며, 과거 항목의
+# 다운로드 URL과 EdDSA 서명이 결과 피드에 그대로 보존되었는지 확인한다.
+NEW_ITEM_COUNT="$(/usr/bin/xmllint --xpath 'count(//*[local-name()="item"])' "$GENERATED_APPCAST")"
+[ "$NEW_ITEM_COUNT" = "$((OLD_ITEM_COUNT + 1))" ] \
+    || fail "병합 후 항목 수가 예상과 다릅니다: 기존 $OLD_ITEM_COUNT + 1 != $NEW_ITEM_COUNT (과거 항목이 소실되었을 수 있습니다)."
+FIRST_ITEM_BUILD="$(/usr/bin/xmllint --xpath 'string((//*[local-name()="item"])[1]/*[local-name()="version"])' "$GENERATED_APPCAST")"
+[ "$FIRST_ITEM_BUILD" = "$BUILD_NUMBER" ] \
+    || fail "appcast 첫 항목이 이번 빌드($BUILD_NUMBER)가 아닙니다: ${FIRST_ITEM_BUILD:-없음}"
+PRESERVE_INDEX=0
+while [ "$PRESERVE_INDEX" -lt "$OLD_ITEM_COUNT" ]; do
+    /usr/bin/grep -F -- "${OLD_ITEM_URLS[$PRESERVE_INDEX]}" "$GENERATED_APPCAST" > /dev/null \
+        || fail "기존 항목의 다운로드 URL이 보존되지 않았습니다: ${OLD_ITEM_URLS[$PRESERVE_INDEX]}"
+    /usr/bin/grep -F -- "${OLD_ITEM_SIGNATURES[$PRESERVE_INDEX]}" "$GENERATED_APPCAST" > /dev/null \
+        || fail "기존 항목의 EdDSA 서명이 보존되지 않았습니다(index $PRESERVE_INDEX)."
+    PRESERVE_INDEX=$((PRESERVE_INDEX + 1))
+done
 
 ARCHIVE_SIGNATURE="$(/usr/bin/xmllint --xpath 'string((//*[local-name()="enclosure"])[1]/@*[local-name()="edSignature"])' "$GENERATED_APPCAST")"
 NOTES_SIGNATURE="$(/usr/bin/xmllint --xpath 'string((//*[local-name()="releaseNotesLink"])[1]/@*[local-name()="edSignature"])' "$GENERATED_APPCAST")"

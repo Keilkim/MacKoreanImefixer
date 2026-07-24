@@ -18,20 +18,20 @@ Developer ID, notarytool 프로필과 Sparkle 개인키는 공식 배포 관리�
 
 GitHub 소스 공개와 Apple 공증은 별개입니다. 공개 저장소에서 기여를 받고, 검토·테스트를 통과한 커밋만 관리자의 Developer ID와 Sparkle 키로 공식 배포합니다.
 
-## 현재 공식 배포 차단 조건
+## 공식 배포 게이트 (첫 릴리스에서 전부 통과)
 
-2026-07-22 현재 `Developer ID Application: SEONGHUN KIM (TZQ9JL6R7R)`와 `Developer ID Installer: SEONGHUN KIM (TZQ9JL6R7R)`가 모두 유효하며, `build-installer.sh`의 공식 경로(`REQUIRE_SIGNING=1`)를 실제로 완주해 다음을 확인했습니다. 따라서 서명은 더 이상 차단 조건이 아닙니다.
+첫 공식 릴리스 **v1.3(build 9)**이 2026-07-25에 아래 게이트를 모두 통과해 게시되었습니다. `Developer ID Application: SEONGHUN KIM (TZQ9JL6R7R)`와 `Developer ID Installer: SEONGHUN KIM (TZQ9JL6R7R)`가 유효하며, `build-installer.sh`의 공식 경로(`REQUIRE_SIGNING=1`, `REQUIRE_NOTARIZATION=1`)를 완주해 다음을 확인했습니다.
 
-- 전체 XCTest 213개 통과
+- 전체 XCTest 통과
 - 앱이 `x86_64 arm64` 유니버설
 - 최상위 앱 `valid on disk` + `satisfies its Designated Requirement`, 중첩 Sparkle XPC(Downloader·Installer)와 Updater.app까지 validated
 - PKG가 `Developer ID Installer` 서명 + 신뢰된 타임스탬프, 체인이 `Developer ID Certification Authority` → `Apple Root CA`까지 완결
 - DMG 서명·검증 통과
-- `spctl -a -t install` 결과가 `rejected / source=Unnotarized Developer ID` — 서명은 정상이고 공증만 남았다는 뜻
+- 앱·PKG·DMG 각각 Apple 공증 `Accepted` + staple, `spctl` 결과가 `accepted / source=Notarized Developer ID`
 
-남은 차단 조건은 공증과 Sparkle 배포 입력값입니다. `notarytool` 자격 증명을 Keychain에 저장한 것은 제출 준비일 뿐이며, 현재 Mackor 최종 산출물은 아직 제출·`Accepted`·staple되지 않았습니다. 또한 `REQUIRE_NOTARIZATION=1` 경로는 `MACKOR_UPDATE_FEED_URL`과 `MACKOR_SPARKLE_PUBLIC_ED_KEY`를 요구하는데, feed URL은 빌드 시점에 앱에 박히므로(`Info.plist`의 `SUFeedURL`) 호스팅 위치를 확정하기 전에 공증본을 만들면 그 빌드는 영구히 자동 업데이트를 받을 수 없습니다. Sparkle 배포 도구(`generate_appcast`)도 SPM checkout에는 포함되지 않아 별도로 받아야 합니다.
+feed URL은 빌드 시점에 앱에 박히므로(`Info.plist`의 `SUFeedURL`) 호스팅 위치를 먼저 확정한 뒤 공증본을 만들어야 그 빌드가 자동 업데이트를 받을 수 있습니다. v1.3은 `https://keilkim.github.io/MacKoreanImefixer/appcast.xml`로 확정한 뒤 구웠습니다. Sparkle 배포 도구(`generate_appcast`)는 SPM checkout에 포함되지 않아 별도로 받아야 합니다.
 
-스크립트는 이 문제를 숨기지 않습니다. 다음 중 하나라도 충족되지 않으면 실패합니다.
+이후 모든 릴리스도 같은 게이트를 통과해야 합니다. 스크립트는 이 문제를 숨기지 않으며, 다음 중 하나라도 충족되지 않으면 실패합니다.
 
 - 전체 테스트 통과
 - arm64와 x86_64가 모두 포함된 앱
@@ -71,6 +71,8 @@ Developer ID와 notarytool 프로필은 macOS Keychain에 둡니다. Sparkle 개
 
 `RELEASE_NOTES_TEMPLATE.md`를 복사해 모든 자리표시자를 실제 내용으로 바꿉니다. 같은 버전을 `CHANGELOG.md`에도 추가합니다. 새 기능뿐 아니라 수정 사항, 권한 변경, 기본 동작 변경을 사용자 관점으로 적습니다.
 
+`CHANGELOG.md`의 해당 버전 제목은 `## [<version>] - YYYY-MM-DD`(하이픈·en/em 대시 모두 허용, 실제 배포일)로 확정하고, 하단 비교 링크도 `v<이전>...v<version>` 태그 범위로 바꿉니다. `prepare-release.sh`는 날짜 없는 제목, "배포 전"·"초안" 등 미배포 표기, 실제 달력에 없는 날짜, 미래 날짜, `...HEAD`를 가리키는 비교 링크를 모두 거부합니다.
+
 ## 2. 로컬 릴리스 후보 준비
 
 먼저 PR/`main` GitHub Actions의 전체 XCTest와 Release Analyze가 통과했는지 확인하고, 깨끗하게 커밋된 작업 트리에서 필요한 환경변수를 설정한 뒤 실행합니다. `prepare-release.sh`는 공식 산출물을 만들기 전에 전체 XCTest를 다시 실행합니다.
@@ -93,7 +95,7 @@ dist/releases/<version>-<build>/
 └── appcast.xml.pending
 ```
 
-`<new-build-number>`는 이전에 공개된 모든 `CFBundleVersion`보다 커야 합니다. marketing version만 바꾸고 build 번호를 재사용하면 Sparkle이 새 버전으로 판단하지 못할 수 있습니다.
+`<new-build-number>`는 이전에 공개된 모든 `CFBundleVersion`보다 커야 합니다. 이 규칙은 이제 `prepare-release.sh`가 라이브 appcast(`MACKOR_UPDATE_FEED_URL`)의 모든 `sparkle:version`을 조회해 기계적으로 강제하며(테스트·빌드 전에 먼저 검사), 피드를 가져오지 못하면 실패합니다(공증도 네트워크가 필요하므로 오프라인 준비는 지원하지 않습니다). 저장소의 `docs/appcast.xml`과 라이브 피드의 최신 빌드가 다르면(미완료 게시 또는 `git pull` 필요) 역시 중단합니다. marketing version만 바꾸고 build 번호를 재사용하면 Sparkle이 새 버전으로 판단하지 못합니다.
 
 현재 인증서가 유효하지 않거나 테스트가 실패하면 이 단계에서 종료되는 것이 정상입니다.
 
@@ -103,12 +105,12 @@ dist/releases/<version>-<build>/
 
 1. 정확히 `v<version>` 태그의 GitHub **Draft Release**를 만들고 PKG, DMG, ZIP, 릴리스 노트, SHA-256 파일을 업로드합니다.
    - 여기에 더해 **버전 없는 고정 이름 `Mackor.dmg`** 를 같은 릴리스에 하나 더 올립니다. 이는 `Mackor-<version>-<build>.dmg`와 **바이트가 동일한 복사본**이며, 웹사이트(`docs/index.html`)의 다운로드 버튼이 가리키는 `releases/latest/download/Mackor.dmg` 링크가 버전이 올라가도 항상 최신을 주도록 하기 위한 별칭입니다. Sparkle 자동 업데이트는 이 별칭을 쓰지 않고 계속 버전 이름 자산을 사용합니다.
-2. 업로드한 파일을 다시 내려받아 크기와 SHA-256을 확인합니다. 고정 이름 `Mackor.dmg`의 SHA-256이 그 릴리스의 `Mackor-<version>-<build>.dmg`와 정확히 일치하는지 함께 확인합니다.
-3. Draft Release를 공개하여 다운로드 URL이 실제로 동작하는지 확인합니다.
-4. `appcast.xml.pending`의 URL이 모두 동작하는지 마지막으로 확인합니다.
-5. 그 파일을 `appcast.xml`로 게시합니다. **appcast가 항상 마지막입니다.**
+2. Draft Release를 공개합니다.
+3. `scripts/verify-published.sh <version> <build> before-appcast`를 실행합니다. 자산 6종의 존재·크기·SHA-256과 재다운로드 바이트 대조, 별칭 `Mackor.dmg`==버전 DMG, `releases/latest`==태그, 랜딩 버튼 URL, 그리고 **appcast에 새 빌드가 아직 없는지**(순서 위반 감지)를 확인합니다. 실패하면 appcast를 게시하기 전에 자산을 바로잡습니다.
+4. `appcast.xml.pending`으로 `docs/appcast.xml`을 교체해 커밋·푸시합니다. **appcast가 항상 마지막입니다.** 이 pending 파일은 기존 `docs/appcast.xml`의 모든 과거 항목을 보존한 **전체 피드**이므로, 통째로 교체하면 됩니다(과거 릴리스 ZIP 보관이나 수동 병합 불필요).
+5. `scripts/verify-published.sh <version> <build>`(final)를 실행합니다. 라이브 피드의 새 항목·enclosure URL/length·EdDSA 서명(도구가 있으면)과 라이브==`docs/appcast.xml` 동일성까지 확인합니다.
 
-이 저장소의 스크립트는 위 1~5의 공개 작업을 어느 것도 자동 수행하지 않습니다. 피드 호스팅 위치가 확정되고 별도의 명시적 승인 장치가 마련되기 전에는 로컬 준비와 검증까지만 담당합니다.
+이 저장소의 스크립트는 위 업로드·공개·appcast 게시를 어느 것도 자동 수행하지 않습니다. `verify-published.sh`는 `gh api`·`curl`의 읽기 전용 조회만 하므로 이 정책의 예외가 아니라, 정책이 요구하는 수동 게시의 검증 단계를 자동화한 것입니다.
 
 ## 4. 공개 후 확인
 
@@ -125,9 +127,10 @@ dist/releases/<version>-<build>/
 일반 사용자가 GitHub 화면을 거치지 않고 받도록, 저장소 `docs/index.html`에 정적 랜딩 페이지를 둡니다. 파일 자체는 GitHub Releases에 있고, 페이지는 **얼굴 역할만** 합니다.
 
 - 호스팅: **GitHub Pages** — 저장소 **Settings → Pages → Source: `Deploy from a branch` → `main` / `/docs`**. 게시 주소는 `https://keilkim.github.io/MacKoreanImefixer/`입니다.
-- 다운로드 버튼은 `https://github.com/Keilkim/MacKoreanImefixer/releases/latest/download/Mackor.dmg`를 가리킵니다. 이 링크는 위 3-1에서 올린 **고정 이름 별칭**이 있어야 동작합니다. 별칭이 없는 릴리스에서는 404가 납니다.
-- 페이지는 순수 정적 HTML/CSS/JS 한 파일이며 외부 요청·추적이 없습니다. 문구·예시는 README와 앱의 실제 동작 범위에 맞춰 유지합니다.
+- 다운로드 버튼은 `https://github.com/Keilkim/MacKoreanImefixer/releases/latest/download/Mackor.dmg`를 가리킵니다. 이 링크는 §3 1단계에서 올린 **고정 이름 별칭**이 있어야 동작하며, `verify-published.sh`가 그 존재·동일성을 검사합니다. 별칭이 없는 릴리스에서는 404가 납니다.
+- 페이지는 순수 정적 HTML/CSS/JS 한 파일이며 외부(서드파티) 요청·추적이 없습니다. 유일한 요청은 같은 오리진의 `announcements.json`(앱과 공유하는 공지 소스)을 읽어 "새 소식"을 릴리스처럼 표시하는 것뿐이며, 파일이 없거나 JS가 없으면 그 섹션은 조용히 숨깁니다. 문구·예시는 README와 앱의 실제 동작 범위에 맞춰 유지합니다.
+- 공지 게시는 릴리스와 별개입니다. `docs/announcements.json`의 `announcements` 배열 맨 앞에 `{ "id", "date", "kind": "apps"|"fix"|"notice", "title", "body", "url"(선택) }` 항목을 추가해 커밋·push하면, 설치된 앱의 알림과 이 랜딩이 같은 소스로 함께 갱신됩니다. `id`는 한 번 정하면 바꾸지 않습니다(수정은 새 항목으로).
 
 ### Sparkle 피드와의 순서 주의
 
-`SUFeedURL`은 빌드 시점에 앱에 박히므로(위 "현재 공식 배포 차단 조건" 참고), 자동 업데이트 피드도 여기서 호스팅할 계획이면 **호스팅 주소(GitHub Pages 또는 커스텀 도메인)를 먼저 확정한 뒤 공증 빌드를 만들어야** 합니다. 웹사이트 주소와 피드 주소를 함께 정하고 나서 첫 공증본을 굽는 것이 안전합니다.
+`SUFeedURL`은 빌드 시점에 앱에 박히므로(위 "공식 배포 게이트" 참고), 자동 업데이트 피드도 여기서 호스팅할 계획이면 **호스팅 주소(GitHub Pages 또는 커스텀 도메인)를 먼저 확정한 뒤 공증 빌드를 만들어야** 합니다. v1.3은 `https://keilkim.github.io/MacKoreanImefixer/appcast.xml`로 확정한 뒤 구웠습니다.

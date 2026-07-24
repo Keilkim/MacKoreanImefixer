@@ -6,6 +6,10 @@ Mackor의 사용자에게 보이는 변경 사항을 이 파일에 기록합니�
 
 ## [Unreleased]
 
+## [1.3] — 2026-07-25
+
+첫 공식 Mackor 릴리스입니다. Developer ID 서명·Apple 공증·Sparkle EdDSA 서명을 모두 통과해 게시되었습니다.
+
 ### 추가
 
 - **한컴오피스 한글처럼 접근성(AX)에 텍스트를 안 내놓는 앱에서도 자판자동을 쓸 수 있게 하는 "AX 없이 강제 교정"을 추가합니다.** 한컴 본문은 자체 캔버스라 AX로 글자를 읽을 수 없어 원래는 자판자동이 불가능했습니다. 다만 실측 결과 한컴은 합성 입력(타이핑·백스페이스)은 받아들이므로, 미지원 앱의 `자판자동` 토글을 켜면 화면을 읽지 않고 **검증 없이** 지우고 다시 쓰는 방식으로 교정합니다(위험을 아는 사용자용 opt-in, ⌘Z로 복구). 영→한·한→영 양방향, 교정 후 입력 소스 전환까지 동작합니다. 앱 이름을 코드에 넣지 않고 "AX 없음"이라는 공통 조건으로 판정하므로 같은 부류 앱이 함께 열립니다.
@@ -46,13 +50,6 @@ Mackor의 사용자에게 보이는 변경 사항을 이 파일에 기록합니�
 ### 알려진 제한
 
 - legacy MacKR·CorelHangulFix 설치, 설정, 손쉬운 사용 권한은 아직 자동 이전하지 않음
-
-## [1.3] — 배포 전 (아직 태그되지 않음)
-
-> **주의.** 1.3은 아직 공개 배포되지 않았습니다. 저장소의 최신 태그는 `v1.1`이고
-> 앱 버전만 1.3(빌드 9)입니다. 위 `[Unreleased]` 항목과 아래 1.3 상세는 **같은 작업 트리**를
-> 설명하며, 실제 공개 시점에 하나로 합쳐 배포일을 확정해야 합니다.
-> 배포 차단 조건은 `RELEASING.md`를 참고하세요 (공증 미제출, Developer ID Installer 부재).
 
 ### 규칙 기반 교정 엔진 (Rule-Based Correction Engine)
 
@@ -115,5 +112,5 @@ v1.3부터 Return·숫자패드 Enter·Tab에서 흐름을 뒤집어 처리합�
 함께 표시하고, 수명을 ⌘Z 트랜잭션과 같은 6초로 맞췄습니다. 칩은 사라졌는데
 되돌리기는 아직 되는 간극이 없어집니다.
 
-[Unreleased]: https://github.com/Keilkim/MacKoreanImefixer/compare/v1.1...HEAD
-[1.3]: https://github.com/Keilkim/MacKoreanImefixer/compare/v1.1...HEAD
+[Unreleased]: https://github.com/Keilkim/MacKoreanImefixer/compare/v1.3...HEAD
+[1.3]: https://github.com/Keilkim/MacKoreanImefixer/compare/v1.1...v1.3

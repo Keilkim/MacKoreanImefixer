@@ -11,15 +11,52 @@ struct MackorApp: App {
         MenuBarExtra {
             MackorPanel(coordinator: appDelegate.coordinator)
         } label: {
-            MenuBarStatusLabel()
+            MenuBarStatusLabel(announcementCenter: appDelegate.coordinator.announcementCenter)
         }
         .menuBarExtraStyle(.window)
     }
 }
 
 private struct MenuBarStatusLabel: View {
+    @ObservedObject var announcementCenter: AnnouncementCenter
+
     var body: some View {
-        Text("Mackor")
+        // 메뉴바 아이템은 시스템이 단색 template로 그리고 애니메이션 지원이 제한적이라
+        // 글로우 대신 미확인 공지가 있을 때 점(●)만 덧붙여 확실히 보이게 한다. 실제
+        // 점멸 글로우는 제약이 없는 패널 안 알림 종 버튼이 담당한다.
+        if announcementCenter.unreadCount > 0 {
+            Text("Mackor ●")
+        } else {
+            Text("Mackor")
+        }
+    }
+}
+
+/// 미확인 공지가 있을 때 알림 종 버튼을 부드럽게 점멸시키는 글로우.
+/// 패널은 일반 SwiftUI라 메뉴바 라벨과 달리 애니메이션 제약이 없다.
+private struct GlowPulse: ViewModifier {
+    let active: Bool
+    @State private var pulsing = false
+
+    func body(content: Content) -> some View {
+        content
+            .shadow(
+                color: active ? Color.accentColor.opacity(pulsing ? 0.85 : 0.15) : .clear,
+                radius: active ? (pulsing ? 6 : 1) : 0
+            )
+            .scaleEffect(active && pulsing ? 1.08 : 1.0)
+            .onAppear { updateAnimation() }
+            .onChange(of: active) { _ in updateAnimation() }
+    }
+
+    private func updateAnimation() {
+        if active {
+            withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
+                pulsing = true
+            }
+        } else {
+            withAnimation(.default) { pulsing = false }
+        }
     }
 }
 
@@ -108,6 +145,7 @@ class AppCoordinator: ObservableObject {
     let appMonitor = AppMonitor()
     let targetAppManager = TargetAppManager()
     let updaterController = UpdaterController()
+    let announcementCenter = AnnouncementCenter()
     let installedAppsCatalog = InstalledAppsCatalog()
     private let eventTapManager = EventTapManager()
     private let correctionNoticeController = CorrectionNoticeController()
@@ -126,6 +164,7 @@ class AppCoordinator: ObservableObject {
         appMonitor.targetAppManager = targetAppManager
         refreshLaunchAtLoginStatus()
         refreshReleaseNotesState()
+        announcementCenter.start()
         installedAppsCatalog.refresh()
 
         let started = eventTapManager.start()
@@ -600,10 +639,12 @@ struct MackorPanel: View {
     @ObservedObject private var appMonitor: AppMonitor
     @ObservedObject private var targetAppManager: TargetAppManager
     @ObservedObject private var updaterController: UpdaterController
+    @ObservedObject private var announcementCenter: AnnouncementCenter
     @ObservedObject private var catalog: InstalledAppsCatalog
 
     @State private var query = ""
     @State private var showingSettings = false
+    @State private var showingAnnouncements = false
     @State private var pendingAutoApp: PanelAppItem?
     @State private var pendingAllAppsScope = false
 
@@ -612,6 +653,7 @@ struct MackorPanel: View {
         _appMonitor = ObservedObject(wrappedValue: coordinator.appMonitor)
         _targetAppManager = ObservedObject(wrappedValue: coordinator.targetAppManager)
         _updaterController = ObservedObject(wrappedValue: coordinator.updaterController)
+        _announcementCenter = ObservedObject(wrappedValue: coordinator.announcementCenter)
         _catalog = ObservedObject(wrappedValue: coordinator.installedAppsCatalog)
     }
 
@@ -632,6 +674,8 @@ struct MackorPanel: View {
         Group {
             if showingSettings {
                 settingsScreen
+            } else if showingAnnouncements {
+                announcementsScreen
             } else {
                 appsScreen
             }
@@ -640,7 +684,10 @@ struct MackorPanel: View {
         // 메뉴바 앱은 며칠씩 떠 있어 한 번 스캔한 목록이 굳습니다. 패널을 열 때마다
         // 다시 스캔해 그 사이 설치·실행한 앱도 나타나게 합니다(비어 있지 않으면
         // 로딩 표시 없이 제자리에서 갱신되어 깜빡이지 않습니다).
-        .onAppear { coordinator.installedAppsCatalog.refresh() }
+        .onAppear {
+            coordinator.installedAppsCatalog.refresh()
+            coordinator.announcementCenter.refreshIfEnabled()
+        }
         // 확인창은 NSAlert.runModal 대신 SwiftUI .alert로 띄웁니다. window 스타일
         // 메뉴바 패널에서 runModal은 패널을 닫고 런루프를 막습니다.
         .alert(
@@ -772,6 +819,7 @@ struct MackorPanel: View {
                 .font(.caption)
                 .foregroundColor(.secondary)
             Spacer()
+            announcementBell
             Button {
                 showingSettings = true
             } label: {
@@ -780,6 +828,19 @@ struct MackorPanel: View {
             .buttonStyle(.borderless)
         }
         .padding(12)
+    }
+
+    private var announcementBell: some View {
+        let hasUnread = announcementCenter.unreadCount > 0
+        return Button {
+            showingAnnouncements = true
+        } label: {
+            Label("새 소식", systemImage: hasUnread ? "bell.badge" : "bell")
+                .foregroundColor(hasUnread ? .accentColor : nil)
+        }
+        .buttonStyle(.borderless)
+        .modifier(GlowPulse(active: hasUnread))
+        .help(hasUnread ? "확인하지 않은 새 소식 \(announcementCenter.unreadCount)개" : "새 소식")
     }
 
     // MARK: 앱 행
@@ -1156,6 +1217,14 @@ struct MackorPanel: View {
                         updaterController.checkForUpdates()
                     }
                     .disabled(!updaterController.isConfigured || !updaterController.canCheckForUpdates)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Toggle("새 소식 확인", isOn: Binding(
+                            get: { announcementCenter.checkEnabled },
+                            set: { announcementCenter.checkEnabled = $0 }
+                        ))
+                        Text("새 지원 앱·버그픽스 같은 운영자 공지를 업데이트와 같은 GitHub Pages에서 확인합니다. 추적이나 식별자는 없으며, 끄면 네트워크 요청을 하지 않습니다.")
+                            .font(.caption2).foregroundColor(.secondary)
+                    }
                     Divider()
                     Button("앱 삭제 (Uninstall)") { showUninstallConfirm() }
                         .foregroundColor(.red)
@@ -1184,6 +1253,90 @@ struct MackorPanel: View {
             ))
             Text("켜면 앱 목록으로 제한하지 않고, 지원하는 모든 앱·웹사이트의 입력란에서 한/영 오입력을 자동 보정합니다. 접근성으로 글자를 읽을 수 없는 앱(목록에 '미지원'으로 표시)에서는 동작하지 않습니다. 비밀번호·주소·보안 필드도 제외됩니다. 앱별로만 켜려면 이 스위치를 끄고 목록에서 앱마다 '자판자동'을 켜세요.")
                 .font(.caption2).foregroundColor(.secondary)
+        }
+    }
+
+    // MARK: 새 소식
+
+    private var announcementsScreen: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Button {
+                    showingAnnouncements = false
+                } label: {
+                    Label("뒤로", systemImage: "chevron.left")
+                }
+                .buttonStyle(.borderless)
+                Spacer()
+                Text("새 소식").font(.headline)
+                Spacer()
+                Color.clear.frame(width: 44, height: 1)
+            }
+            .padding(12)
+            Divider()
+            ScrollView {
+                if announcementCenter.announcements.isEmpty {
+                    Text("아직 새 소식이 없습니다.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 40)
+                } else {
+                    VStack(alignment: .leading, spacing: 14) {
+                        ForEach(announcementCenter.announcements) { announcement in
+                            announcementRow(announcement)
+                            if announcement.id != announcementCenter.announcements.last?.id {
+                                Divider()
+                            }
+                        }
+                    }
+                    .padding(12)
+                }
+            }
+            .frame(height: 460)
+        }
+        // 화면을 열면 현재 목록을 모두 확인 처리해 배지·글로우를 해제합니다.
+        .onAppear { announcementCenter.acknowledgeAll() }
+    }
+
+    @ViewBuilder
+    private func announcementRow(_ announcement: Announcement) -> some View {
+        let style = announcementKindStyle(announcement.kind)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Label(style.label, systemImage: style.icon)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                Spacer()
+                if !announcement.date.isEmpty {
+                    Text(announcement.date)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+            }
+            Text(announcement.title)
+                .font(.system(size: 13, weight: .semibold))
+                .fixedSize(horizontal: false, vertical: true)
+            if !announcement.body.isEmpty {
+                Text(announcement.body)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let urlString = announcement.url, let url = URL(string: urlString) {
+                Button("자세히 보기") { NSWorkspace.shared.open(url) }
+                    .font(.caption)
+                    .buttonStyle(.link)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func announcementKindStyle(_ kind: Announcement.Kind) -> (icon: String, label: String) {
+        switch kind {
+        case .apps: return ("app.badge", "새 지원 앱")
+        case .fix: return ("wrench.and.screwdriver", "버그 수정")
+        case .notice: return ("megaphone", "공지")
         }
     }
 
