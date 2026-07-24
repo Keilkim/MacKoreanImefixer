@@ -3,617 +3,440 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Mackor — 한·영 몰라도 알아서 고쳐주는 맥 유틸리티</title>
-  <meta name="description" content="한/영 키를 깜빡해도, 잘못 친 글자를 당신의 Mac 안에서 알아서 되돌려주는 무료 메뉴바 유틸리티. dkssud 를 치면 안녕 으로 자동 교정.">
-  <meta name="theme-color" content="#FBFAF6">
+  <title>Mackor — 한 ⇄ 영, 몰라도 알아서 고쳐주는 맥 유틸리티</title>
+  <meta name="description" content="한/영 키를 깜빡해도, 자판을 잘못 두고 친 글자를 당신의 Mac 안에서 양방향으로 되돌려주는 무료 메뉴바 유틸리티. dkssud → 안녕, ㅗ디ㅣㅐ → hello.">
+  <meta name="theme-color" content="#F5F5F6" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#070708" media="(prefers-color-scheme: dark)">
   <link rel="canonical" href="https://keilkim.github.io/MacKoreanImefixer/">
   <meta property="og:type" content="website">
   <meta property="og:locale" content="ko_KR">
-  <meta property="og:title" content="Mackor — 한·영 몰라도 알아서 고쳐주는 맥 유틸리티">
-  <meta property="og:description" content="한/영 키를 깜빡해도, 잘못 친 글자를 당신의 Mac 안에서 알아서 되돌려줍니다. dkssud → 안녕.">
+  <meta property="og:title" content="Mackor — 한 ⇄ 영, 몰라도 알아서 고쳐주는 맥 유틸리티">
+  <meta property="og:description" content="한/영 키를 깜빡해도, 친 대로 양방향으로 되돌려 드립니다. dkssud → 안녕 · ㅗ디ㅣㅐ → hello.">
   <meta property="og:url" content="https://keilkim.github.io/MacKoreanImefixer/">
   <meta name="twitter:card" content="summary">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='7'%20fill='%23BE3A2B'/%3E%3C/svg%3E">
+  <link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIwIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjRjE1NDNDIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjQzgzNTFGIi8+PC9saW5lYXJHcmFkaWVudD48L2RlZnM+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTQiIGZpbGw9InVybCgjZykiLz48aW1hZ2UgaHJlZj0iZGF0YTppbWFnZS9wbmc7YmFzZTY0LGlWQk9SdzBLR2dvQUFBQU5TVWhFVWdBQUFJQUFBQUNBQ0FZQUFBRERQbUhMQUFBQUFYTlNSMElBcnM0YzZRQUFBSmhsV0VsbVRVMEFLZ0FBQUFnQUJBRWFBQVVBQUFBQkFBQUFQZ0ViQUFVQUFBQUJBQUFBUmdFb0FBTUFBQUFCQUFJQUFJZHBBQVFBQUFBQkFBQUFUZ0FBQUFBQUFBRXNBQUFBQVFBQUFTd0FBQUFCQUFTUUJBQUNBQUFBRkFBQUFJU2dBUUFEQUFBQUFRQUJBQUNnQWdBRUFBQUFBUUFBQUlDZ0F3QUVBQUFBQVFBQUFJQUFBQUFBTWpBeU5qb3dNem95TkNBd01Ub3pPRG95TUFCMVkrWEpBQUFBQ1hCSVdYTUFBQzRqQUFBdUl3RjRwVDkyQUFBQnMybFVXSFJZVFV3NlkyOXRMbUZrYjJKbExuaHRjQUFBQUFBQVBIZzZlRzF3YldWMFlTQjRiV3h1Y3pwNFBTSmhaRzlpWlRwdWN6cHRaWFJoTHlJZ2VEcDRiWEIwYXowaVdFMVFJRU52Y21VZ05pNHdMakFpUGdvZ0lDQThjbVJtT2xKRVJpQjRiV3h1Y3pweVpHWTlJbWgwZEhBNkx5OTNkM2N1ZHpNdWIzSm5MekU1T1Rrdk1ESXZNakl0Y21SbUxYTjViblJoZUMxdWN5TWlQZ29nSUNBZ0lDQThjbVJtT2tSbGMyTnlhWEIwYVc5dUlISmtaanBoWW05MWREMGlJZ29nSUNBZ0lDQWdJQ0FnSUNCNGJXeHVjenA0YlhBOUltaDBkSEE2THk5dWN5NWhaRzlpWlM1amIyMHZlR0Z3THpFdU1DOGlQZ29nSUNBZ0lDQWdJQ0E4ZUcxd09rTnlaV0YwYjNKVWIyOXNQa0ZrYjJKbElGQm9iM1J2YzJodmNDQXlOaTR4TVNBb1RXRmphVzUwYjNOb0tUd3ZlRzF3T2tOeVpXRjBiM0pVYjI5c1Bnb2dJQ0FnSUNBZ0lDQThlRzF3T2tOeVpXRjBaVVJoZEdVK01qQXlOaTB3TXkweU5GUXdNVG96T0RveU1Ed3ZlRzF3T2tOeVpXRjBaVVJoZEdVK0NpQWdJQ0FnSUR3dmNtUm1Pa1JsYzJOeWFYQjBhVzl1UGdvZ0lDQThMM0prWmpwU1JFWStDand2ZURwNGJYQnRaWFJoUGdydExlMEdBQUFxV0VsRVFWUjRBZTFkQ1poY1ZaVit0VmQxVlcrVmRIZTYweUVKSklCRUdaQkZ3WVdBRS9tTW80Z09xS1B6RFM0em4zNHE4NkVzaXVqMERPQ0lLUHE1NHlndXVBSnVFMVFNNG9jTURJc0tJcklyRUVLUzdxVDM2dHBmMVp2L1ArZmVxa3BnbEhUU3o2cEszKzU2NzkxN3oxM2VPZWVlZSs2NXkzT2NSYmVJZ1VVTUxHSmdFUU9MR0ZqRXdDSUdGakd3aUlGRkRDeGlZQkVEQnhBR0FnZkt1ejc2NktPeDN0N2VsNVNyNWVVQkp4RGllM3VPNStFNTRGU2RnQk4wbkdnNG1uZGQ5OEgrL3Y1N0RoUzhoQStFRjMzc3NjY0dDb1hjZDUxQVpYMW5Nb0ZYQnRsQjhVQVEvTytKVjBJWVhxMjY3dFRVNUJkNmVucmZHd2dFM0hiSHp3SEJBRnUyYkQwM3ZhUjcvZXpNckZNcXhkSG1RWHo4cWNOZC84RVFqcE5LSnNPcHpzUjdkazJPM29MNDY5cWRBZkRLN2UxR1JrYUMyN2VObmpRN2szR0t4YkpUY1N2bVYzVmN0K3BVS3Vvdkk3eGNkdUYzaFRsQ1R1Z1Y3WTBaZmJ1Mmx3Q0RnNE9oWXJHVTlMd3F4RDE3ZlVQV0FEcCtkUDgxaDNDUGtYSjNuRWdrMmxPTGErT0h0cGNBVVB3Q29WQW9RSFhQRTRJYmVZOTJYalVNNGRudUFERFVDYVZQYUdPaU43NWEyelBBNk9nb0d6citiZE1IdWVXUlRSMmhmS1owNEswQkJqeGhFMGhjdTE3YW5nRWNadzJwRDcwUExkdTBlSktiNHA1dG5XVFhHL3pLR2VLRmROQm9qVzNiYTlzendKbzFsT3A4VFhLQjB0UTJibTN4OUNIY3hKSFNJaFdxc0E0Y0FLN3RHV0JzYkF4MDU2Q1BSQVpGOGJOdFgraUxWaThNSVZRM01BY0E0ZTBydGowREtKRkIyQ0RIL2lIOERCZElCUFVBN1FScUNxS0VzL0ZYQ2RqMnJ1MkhnYVFnYVMvVU5DVEZrQUNoOEZpL0pYTk5CNENkTUJneXlvR05iTS83QWNFQUhQK0ZRa0VuYVBwNUlYK3R6N2U2djRvQzZTeWdNRUpKakxVbnlYZC9xN2J2QW1abTNHNW85MHVpMFRCYU5aczhTQ3d0bjJ3QVVTK0NRTWd1Y1c2bGFrYUZ3VU92dWVZYW1UVGFIV1h0NVROQzBQK1gycjU5KzlMWjJka29TODdoTDE2dGVvV0NVTWlKeCtOUEU3K0ZRaUhRMFFIWW5OYVZNSFRVOEhJSTdHQ2tjUXpQNHJtYXlhVHoyZXg1c1VUc3JIUnZyeE9MZHpqaE1JUWV1d0RoQXQ2RkpRQXRyUjVsaDUzT1ZCZm1DME5lMlhVL1BUczkrOFZkdTNiTnNieDhQdThrRWdtSGRmRllSL2l0czNWbVhCWHZZc09ENERxbXllT1AvNFJqZlRzN080T2xVaWtZalVhcmdNa2Njc2doTXphTm4zZmZHZUR1dSs4K29uOVozOGRUSGFsamdLZ0lpVUdMSE1nRnNyRjU0cEYwQ2VJcWNkVGgxZkdKUUFTWE1OcjNUS1JvOWg0VnQ2Q0hmTVhHNzViZEpFQmpicm1NL0lJZ2ZnUUpLUUZZSHB3TTlUVXpLb2lxRGxhZFpDcmh4S0lKNmdGZ3VHd0I5Q3lTUDdSZ2xSYXNoOEtiRytOWkdWNjFtalpDM29uVlpCSjBRMUk0aWdacmlQTWlrY2hzdVZ5K2ZtNHU5NkhoNGVFSmdQcm1EUHI4S2UvNjY2L3Y3ZTd1K3AvVnExZXZ3MHVyU0NZNldBdkIwSjcxMEVEQnRUd0s3Z1NZK0picE85N3BURHluZWNGU1lDZXdGTVM1NjVZeHhWc0JWZER5Q1NPZzdQZVZrRXBFUGpNL3BSeHBGSWxDT0FtVnFFRWlvYlVXeWpQTGxBSnhaeStxZFdCVXJSQVR4cEI2bUhtcWxjT1Vuc1B1cVRQVjQweFBUMS8vdTkvZGUvckpKNS9zMnpTMHIwb2d1SHlENjFiV1RVMVBVd1E2SWJRd3BZa2kzeUt5ampRaVhwSExNSDNpRlFTVGhQcmNpR0JOYThLWkZ2OGtQZ21zV2VGSkRFT0VvV05HSkFOdmZDWVRWSjBTWmc3RmdBUm1ZRnFCTS9HYWhQcURWYUZNdk9hQ2NLMjNzaG5pUE1BaFNObHNkMWlXUlVFWWljeUJFVUliMTYxYjl6d1U1dHVDRkY4WllHNnV1TEtqdzBWam9xS0ZIL0dFdDZVVDVKQkNsSkNDYUEzWEsyT0piRFhPZVFKajBrb0dOaGR0MStxellVd241SmU3cEdMKytGZG40UWpEcFVINGt3VkRCRUFjWUFuQk9EcFR0RVNwVk5DTVZMSURrZ0RvaVN6Zk1xM1VXeDU0SVh5dGNPVExhV2dIWFZiVmlVYWlRV2d2S3dIUW5neFFLQldCR0UrR1l4WUZRbk40Rk1HS09CS0JHRlFUTHBDbVhtbFlGTG1hVm9tdGdZSmRnM1JKRFJ6Q0tTQWVMT0lsVy9WckVuMFdjY0x5RUNqL1NteEV3cGxXTGhRMUdiSTc0S05rYXpPeWNYd0hVemNBYUd5dElralUrRXdmcFNETFFOZUZkRkFpZlcyVTV1MVF2Zy9PTFpXZ241bFdiTXRUV1E1a0ttSnE1Qk10MEFBSjhpMHlMY0laeDJmbVo5QnNDRW1mWm1kYW9rbWlpaHNpalpNY2pSZ1hFRk1IelkreENQVXErRUZxU2ZVZ3RkQmlHVS9STGZHRXdjLzY2Tld1Z3duSXJMaVRzUVJPM3hHZW1wTlhReHlacjRvOHNTYVJ3TDQ1WDduTnJicXE4SU5RbHRBZ2tlS0dyeXo0c2UrdnlDS1NMZHJzWFJNUXpvYndtVVN4ZnZFeVozVU0zc09qeEVNRXdxVTI4aWdlcFpkSnF1VWpuUCs3NVFNQUVnMjNJT0lra1JmU1lraFZNRmF0VzVEUVA5ZldGQjlzSEs2c1hER0YrM0R6bFFIUXpkWEZJNUVKeEdnTE1HOUtEQU9wQVNwTlJKckFtRGkwUEEvaFZtRHNGa25pQ0JpdmhrcVNWak5RWW1zK1RFOUdFY1l6V2R0VXpDV0FPTTFMSS9XWitVaENNSUhlR2FKVkpMeStoejZSSlFpRHV3RGhYZmo4RjV4MEc0QVArVW9SeC9HMXVKcFpqWWdCb2FFTjRFZkZpODRRSFNHTUUrd2lobEFDTHJBSU5kVFIvdHA0QUswU1JVZ2hQZ1cwOGN3Qnp5Q2V0bGw0SllSNUV3WlhZVDR0ajM3NW9UQ3BtMXlVaUZJMUNVVTZTU3FScURJOVlGTGhVRElTT2dXSkY0TUdVaGpHQUpTbXMzbHI2MmN5c1ZXSVBZSkEvamhmR1FBSXFaUzQrQkkvaWp2RkZiQmtrUWJNc0pXVGpPcjBYaUZ5YXZoZ09rQUlQU3o1R01sZTJFRFZHSWg5TVBPczU2Y3BDQS9FSTFoR0ZDeVBEQ0N1bGd0OHBpYVMzTVlUeU9iSFIzMW12c0xLVWkrVGp1OGw4Y1l2NlZnV3BRTC8rUmR3S3FoSW9WZ1VhMll3R0czSW5HVXRyUE9YQVVLQlIzYnVuSENTeVE0WWdVQWNtYUpGMnhmMjU0c1N5ZnhwYTJPSVlFcWtBOE9KTHVLSFAwb01oRW13Q1dPL2kxQ050ekRxRXdsaHdHMElzMUc2RTFaVDJpdERTRHplaFV4Q1RNYmF1dkVaTVFDdzBnY0JBbHNMRVVhRUQ0Vkl2cmdveWZFV0ptOW1FSVpSTEFCRkFvYk1haXdXZTV6NStPVjhaWUJLTWYycnFlejR6ZFhIUjlkUFR1ZWRTQXpXUUNCV1NHa3dKSWpuTTM0a3AyemJFVTBkQWZxdmFVSkl4N1Q0Y2JrWGY4d0huQVVERTJmK3lHQVlaREVPendJbitWcFl4TU12NWJFNHh2SE9Fa0VVZWpsZ1VlbEI2VUtQa1IrOFMwSmxBQTltUi81UnF2Rlh3VThJYk1Kck1rVVNhWWtzZzdseWtKSHFnT2w1ZU5ESmxIUGZYbm5RUWZkSlJYeTZtTmYycVRRVWM5N0l4NWFGQThHTDRvbkU2VEI4eU5KckVHc1dVY1FhT2xIY2Jjc0pVcjlXdXdGSVNIUUpZWUlnZmhnL1MrQndNQXpsQ2VRbnpXRmRqRWJDMk9ZVklmRUR0UCtIOFJEQ0pCRHVzTkY0WGlnUXFwSWhvTDd6bVRRUFl1VXdrb0picWg3bnBUcEFRQUFFSWdnTFZiRjNBSGVSV3NoSkdFVG1lMUE3SVRqM0U2RGFER3RrQVBwcDRDR3h5UkF5Qk9Lem9GdkRYQmg5VVlOYzM5TGV6eGZ5TXlPbm5ub3E1N0Y4Yzc0emdIMnp0NTF6VGpvUlNuWVhFQkRMVjJhcm5WM1ZjTGJJZlJwV3hxSlBUSHBqenBoTm92Yzl2TFhJQWNmcHpPWE0rL1E3L2YyY09jd0ZkdXpZVWIzNjZxdExnS3V1V2JNbS9PWjN2U3R4ekpvMXlXQXdrVXdrZ2dsT3g0QTRlUlNjeC83QnpDT1A3UFQ2K2lLSm5wNmVjQ2plbFE1N2xhV0lDMVc4NnZKZ01KekFiQ0o0QUlrcWdRQWtkb0R6RGRieGlWNHlBYVlFQTFVd0RRTW9FU29WbEFKSE13Sm1KM1RxQ1g0d1JXa3VtN3Z0SXlQbi9jSG00K2Y5cjhZQWZyM2sxcTFiMHlqckJkRjQ5RGlZSVk3RTh5cElsYVZva2tuSS9TaTdDdWdqUllpQUxDVEJLS1RFbnlBYzdrYTd2QjN6RmI4RnFjazhiZXZha2dHd2tDUDZ2T2NkY1hJOGxud2pXdXlHZUR3MkZFL0VRWE9kSnFiRlRlVU1oREdvRFNMTHhGUVEzVWdFQTNFcXA3bDhEbHZJcW4rRS92QVR4RitiVHFmL0YxeWcwcnVOMktHdEdPQTN2L2xOQlBQTlo0YkQwWDhOaGdQSGRYVEVhVnBWcFF3MFY4dWNmV1dxaktRbmY4b0VqSUZBZ0VRQVEwQjhSNk14TE9Eb2dIMitTT0Y5YzdsYytFUTYzZmNUZ0xXTnM5aG8rUmU2ODg3YlRrZ3Y2Zi9QVkVmSFNTU295MDJlOG5hMjBVS0psRWNHVWdFalEvQzExYThJSUNQb0U1VytjQ2lFYVZvb2p4RW9sbGdmVUM2VkhiZnMvWEI2WnZxRHExYXRlbEFoVy90cVhyZDFYd0s3ZjhPdmV1VXJ6KzlJZGx5WVRLYVMxTFRaZXBXd2plOWxDVzN2aE5uVFdXYWhPcWVvNFVoRFJoVmNVNGg4WTVFWXVvZmlaTWt0WHpqUU4zRGxuam0wbXIrbEdlQ09PKzRZd0JxN0w4S3c5Qm9PNjJUbGJ3aEdGZHVNYTlUZ2ExckNNNUNFZnFaWHR3eGc3ellObWFYcXhHQzNTS0Jia1lVc1dHUlNLcFd2eGlqalhZY2ZmbmlHdWJhaWV5WXN0TVI3M0g3NzdhdXdFUFE2YU9ySFVMa1Q0b3ZSaHpNT2phMjc4Ulhac3Zkd1pCWkw3eHBUMkFDbVZXbEFFd1daaHQxQk1obm45bkhSRDdKenVWK096czI5WWUzZzRLNDljbTRKYnlPbVdxTENyT1NtVFRjdHg3RHRoNmxrNmhoU0QwWWNLRzVZV0JIZ29rKzhrdERjRXBGMy9xeFlaNlFBNEc1ZEkrd3poY0VBaFh6NWM4c1ZKNVBKby9XWG9CeHlOWExpbEtYeCtBL3V2MStHbXpaeHk5eGJqZ0Z1dU9HR2RLb3pjaTJVdmFOSVZMWFFnYVFpOWtGSUd2QnFqb1N0KzNXcW5RWllUaTJESVdRNFNEOVpoQXlpMWptRll5WjdNQTNLWURtTXh3cGVNRUFlcDQ3a0hDeDBmZkhRVU9wclBJaUtxVnJKK1RvWHNLK0k0WEV2NFhEczA3MDkzU2RRTzRjVUVKdS9tbzR0c1ZDS05HZ2xQc2R2Rk4rV2NEVFB5aCtpU1VpUVZLdUZHOW80QkFpNkVOTXRDRS9aZUVKSnZnQ1VQRDBubDhWcWNaaUdQU2ZyZEhXbFhvV3lMZ2JVK1pwaGExenJ6YU1GNm52VFRUZTlNNWxLZmI2bnE5T0p4cUlRL1dBQ3M5emJjM2kyRHgxYmFGMndLUU5veTZaSkZxdVNaYW00M0dHbTVidzlFM0oya2wwSk5mNEk1eEdnOFZPNnlISnlrUVRNVS9OcFpBemFERktkMEFra1RhU2FMZVpmays1S2I1S3F0TUNsWlJoZzgrYk5heVBoNk8xTCs5SkxPaExZNFFObGpIMHlXNnUyWWpaUGJmWEtCQ1FXUXJBbm9JSldENDBkYys0RnA0aSt1MVIweFYvaWhoR2taeXJNQzhtRUVoa2dFVTg0SFZEMFlFRVVaVThtamxpV1liRTZYYWtZY2hWUGtCSUF6QlBuUVZTUGpvK1BINzk2OWVycE9senpQclZNRjVEUGxmNnRlMW5Qa2dobTlYRGtqeEsvaGxjbFBsdTdDSEkyVWJScytzdG81WVY4VVU0QXkrWHl6czd4OGR6VVZPYlJiRGIzTUpoaUd0Ti9uQkJjR1kvRzFxYVNpWlZkM2QzT1ZDQURDUk54MHIzZFRpK2tUUXlNZ0lrZ1V5YmJETXVwdHgyZVBKYlBGeEFTNU5heHRWMWRYZThGd0lmeGEzcFhmNHNtcnVwM3ZuUGRzUmg2M1hiUWl1WFJWQ29weEpGV2pqcUxkZzdFa3lReXVXNklRMTdnMUNKYmV6WlhjTFk4OGRUdmQ0M3YvQW9taDM1K3lTVWZlZ3pRV0kxZmQyZWNjVWIzYzU5NzFQTzd1dE92eDZLTTEvWDA5aXhOSkdMT0VqREIwcVZwN3VuRDFqSWpkV3JKTFBvNFNnaEFHZVRld3lpa2l6c0ZCanRxYUdqb3lScG9rejdZTjJqUzZtbTF2dmU5NzM5emFMRC9UWDE5UzZRMWhrQUlkdDFrQWpaMlVjU2t4YU5QcHgrVHJaenc0YlRzeE9STS9wRS9icm40YTErNTd0T2JOMS85ck9iYXp6NzdvclhEQncxZE90Qy81SXl1cnFUVDA5UGw5QzFkNGlTeGNNUHVMMVFwb0hYZ2FJRU1GNDlIWlY5aEhQc0tNM081U3pHbGZKRytRZk5lbTU0QmZuekREV3VxK2VMZGFQMmQwczlDTkR0VS9JaHhqczNSNGlrRlpBNmVMQUdsakk1aDR4UFRrL2MvOU5BL3Z1bjFmLzlUQ2R6THkyV1hmL2FDZ1lHK2ozUjNwWUxkM1NsbmNLQ1BheFJrOUxFN0EzQmNnU0VwR0srckd4SUtrMGlRQWx0d1BNMlJhOWV1NVdLWHBuWFViSnJhbFRMNTEyS2MzUmxENitLcUhwN3pUS0x6ajA0VVFUeHpwbythUEExQ3ZFL1BaT1llZmV6Sk44NlgrTXo3Z3ZQZWZkbTJiV1B2bjVuSmVKblpMUEtjaFM1UkV0MkN1Z1pLVjBaa1ZURHlvTlFwWW5Fbm1SSGR5TW9sU3daZXlueWEyVFUxQTBDSkMySXE5cFZBSmtRdngvMktjQkpmcDNZdGF0a1ZnUENNeHo5ME1tZDB4OWdIenpoOTQyWUxNZC83Qno5dzl1WGJSbmRla2N1WG5KbVpPVXdFNVlYQW1wK09JSlFWR1JKd09MS293dTZBaFVOZ1JPZTArWmJyVjdxbVpvRHZmdmU3eXl0Vjl5aEZwcGhwQkMvY09NS2hIMmlOMXNqK2wzTUJiUGxoc2M5UFRrM2ZkczAxMy83Qy9rTGk3LzYwN2VLZHUzWTlWTUxhZ3N6Y25KRUNPZ1FFNTZFWS90UnhEYUFvbjVBVVlNVVgzWC8vL1hJSWhvMXZ0bnRUTTBBbVV6b01CcFl1bmlYQVZUcnM4d1hYc21pMGpuUnE0Q0wrWWJpcFZDdGVvWlQvMkplKzlLWGR0UHg5UWZ5MVg3cHNwbFIyUDFjdXViQWxsR0JMNENaWDBVSU5HOXJjSVF2d3ova0NMaVNGQkZ1Rnlhb1ZOcllaNzAzTkFQbFMva2dlL2FLdEd3U1h2bGJVUG5tMHE0ZTE3dy9BR2hkMjh0bkN3MU83ZHYxOGZ5TzdXaTcvYUdZMk00VlRSOURQbDZRYmtFWE13Z2djZlZpWnhDN0lsUlhBT0dTQ2kwNFAyOTkxMlovNU5UVURZQXZSS3M3QlU4eHk4YVk2OVAvVUFTZ0tNUEdqclI5M1JJZXhGcURrbG03YXVIRmpjWDhpaVhsZGNNSFpUODNOemQwbEptVDA4eFR6NmlnSmpEU1NHNmFhcUlSZ2xFTEpoZCtoQnJBcGJ4YXJ6Vm01Y0dnNEROTXNMV3hHOWtzOU9RSlVxeCs5eWdSa0JJaC94eTI1WEx5NUlDNmJuYnVEUjg2d0hESUE2MkhMcjljUDdJa0kvc2dQVUU2SEZxUXkreW5UcG1ZQWtMbWY0bCtjRUIydHpUUTJIUVp5TkVBa1ErUEdqNGRCWVMvSjF2MkVtNmRsZ3pJZjU4a21WRUdzRHNBS0NTTW9ON0F5a0UvNDQ2d2p3bUMyWHZxMGpKb29vR2taQU1nTDRNeStCRHQ3RHZtRTBFU2NZcHRvWnhTY1VRQ2hKTExONFlTTi9hYjhTZllObDFRaU5rbUdwTFJodVZJWFlVaXRTWTBSNEpVdUFuZE1XVGYxZkV2VE1nQ1FESHg2SlZuRHIvZzFCQ2RGcE5tVDlOTEtPRnRIUlpBemhLbWV2Z1ZET0pneXpYNjlSbE5EZkdFSVlRckRsSGptRENRZGpFSTZYQkJmODEwV0RGbjc0MVhkY25VTUo0dUJ5QmpyQTlsQkdmNDE1bXc0ZzNGZ0FNN05Rd25BcHJBRmN0WHdVSmhyRUdUdFlXUGJFVTVBb1ZSTkVXNnFSVDVGdC9SWE9RRHkyV0tnOFMyZWJScmY0SEJTNXk0c3dZWTQxWlBGcE9XemRIenZoMDVYZjJGQ0Ywb1p3N2lJSXhhTEhpMlJDM0FKUnlQUEQwRXBwVW1hWmFrWm1zUW54YldiWXJFaURPQ25Eb0RmVXd4clZ0ZmNERkNwUEpyRkhENFBsQ0F5bGVKc1lXaHBpbk1KcC9XTlNDZWpRT2w2eFVLYzhYdk95RWk2cDd2enhIaFVWd3VSQVhUTklFbHJKWUErcVk2QTFvOTY0OHluUHpZcjhWbXZwbVlBN08xK0VNdXVZVitINFlYTHNrMC95NHBUNGVPVjNRTXRiN0lORzVJZzFaazY2dm5ISDM4U1lmYW5lODdReXRjc0crb2Y0cVNVV2lZNU9xSEl0eEtBdFpFZ2RGV3FrMkJpcU9TR2lrMjlnNmlwR1NEcUJlN0xaSE56V1hZRCtNYWZ0TGlhSHFBc1FKeGo2ellXZnBSRUxHTkpWNmc3bGZyZ3lNaklmbnUzdDc3MS9FNThmZXg5dlZnWHdJa3BZUUJwT3l4Q1c3K09BRmdiT09nSVhMT0FOWWhibktMemhJUTE2V1cvSVdraDNxOVluSGtLOCtyM1oyWnptSUNCTW9oQzVOd0c3ZnkxV3lBQjhGL0Vtai9HYzdvMmxlbzQ1ZTMvOHZhMzc2ODZyVjkvMUlXRFEvMUg2QjVCSERnQkhVRFdIUWp0S1lWWWtseFVHWVVFNENKUnhOeXhldlZxSG9IUXRLNnBHUUN0Mk1VTTcwOXhnQUwzNDhuWVdnYUhYSUZEcWhQbmxBaWdBTHVBUEpaK2NTV3Y2NWFjem1USHh4OSsrT0dYN1N2bXYvM3Q2LzVwMWFxRDNwZkVsckFZRm5wd1J4Q1ZQeXY4bWIvMFRLZ01SeWw4dHNxaFZ3azAvVTdpcG1ZQUl0Y0xSWCtFeFIzRjZlbFpwMWpnWWd3Mk81S2ZPZ0dKVHovTlFnNjNjZE1RSkswVEJwdk93Y0dCYTdadTNYNDZvdWJsTnYza2huY2NkdGpCVjZiVFBSSHNBTUlKNGp6aG5DTm5sbWtkU3pZLzZmdTVSeEdUVXZuQ2pxbXAwaThzVkxQZW01NEJManozbmZjVmM4V2JKaWRtbkd3Mkt6TnRTbkFpM1ZRZkVvQzhRTnNMbFVhYWhOa1VNV2JIZHlJNnI4WFNySS9mZWVlRFM1NHRFYjcxcmU4ZmZPdXR0MzkxOWNvVlgranM3RUMzSDVYdDRUVURrR1NrSm1BeUpFUzk4QVMxZi82b0o3alY2clhQZVk2L1ovOC8yL2RyaEd0NkJnQkNQU3pyL3ZpT3NZbktydkZwT2NaZGhvRkNmS0tlakdCYkpBOWljcHk1REhRRzZnU3dEWGhWTndRaXZtLzE2dlJkMjBlM1gvalFZNDhkaHE3bGFRYXdLNi9jMUhIWFhmZWNlTys5OTMzcXlDT2ZjOGZ3OE9CWkNXajg3Tyt0OVkvekRaYklpa1NXRGFmMEZ3TVJqVVQ0RWtxMmtNdDlVU09iKzJveDE5UzFoQTBnY01sSFAzdjlRU3VHTmg2Nlp0anB4K3Bnbmd4V081V1R6VjhjWGtmNlovYkhNQXJGSTlJYWFVNFdVekdtaTdFM0lBY3o3U1BsUXVFUnBOOVpMbGRpbU5jZlFyKzlGbVA3dFlsRVI2Q0VEU1J5d0VTdFphdllKL0hKZk1wMExKQWpFNklRa3o2d1JIS0RDSmVTejg3bVBydGl4WXIzRUtMWlhVc3dBSkY0NmNjKysveFlKUEtyTlFldlNCMjhhaGpqZmF6T0JkSkZCU2ZkaFE1b29UUUhrM0JDR0QwemdGL2s0Q1FPRDQ4Z1kzQjlQdzA1aE1JQ0l2bXlDS3lPYW0rQTZaNHplY3hEekxxQUYyZXlWSTJmSVpKYTdvVGpzSStuaU9RTHhXMFoxejN1aUZXcmRraTZKcitZdWRZbXJ5V3E5OHNiZjdyamxBMGJXZDlUSXBqMDRScDhFbFlvTDRvZ05YTVN4VGd5QjBQUStqa3p4MUVDcDNLNU9aUkRTbTRWWXpmQmJkNWxudk5IYzdPa0J3TlJweURoc2RDMDVzaFg0Z3dueURNa0FPQmtIZ0ozcGlua1MrOCtkUFdxMnd4dzA5K2UxaGMyYzQyandhV2ZtSjJkT21Wc1orUmtUc3FFbG5FUktOWmNDbkZJUHFVU3I3cnBrd1JVa2MyTm9TUytEdEVzRVFtSmROS3NkWDZCaXFXSWVzbUxjQXFyekVFbWt5dzFIUi9KS0hBaHpCTE9ackwvdGViZ1ZWZExRSXRjakh4cmpkcSs5NzFuNWl2bDB0c21KcWNlMlRVKzZZemgzR0Vlc3F4RVVsSmJGaENhOGlJL2ZUOTBBTUlFbktCbGQwRENLL0ZKWHFaVXFWRy9rL2gwaUtPVUlUeDgzQVNpVHhwR0pUR1R5ZDQyUFRsK25vQzMwS1ZCeHJWR3JXKzg4V2ZUcDc3ODFiY1UzZExwNFdBd1JmSE9qWnc4TDZEZWNodmVCVFFTZXozdUpCMXBLWnE4Z1BEMUtlclpzcFdZdkttekQ3emJaejRxQ3pBck1rMEkzZEZjSnZ1SDZlbkoxeDE3N0xFN1RlS1d1YlVjQXhDek45eXdhZXprOVJ2dXhGTHhVN0Jtc0tjSUE1QWM1d1pGVEJURFdrc21zVWh3WENnSlFMRGFCeDhra0MwWjRnQjZndmI1QWdpNFJzRm9HRUJ1Z0Fjc3MrTElnbmFCYkRaL3o5ak05R3RQT082NEo1Q3c1VnhMTWdDeHZIbnpUNTk4eVV0T3VoR0Vld0YyNUE1aE42NW8rRlFReVFRcURaVG9oQmZTZ3VpOEswZklFMzBHbGp4Q0hVRW9MZUhDTUpLRkVwNnRuaE5Qb2xCaWN3cU1UcHRtWjBxdmY5RUxqbjdLSkdpNVc4c3lBREc5ZWZQUGRoMS8vTWsvcUFhOVpkamsvemZjbHNVMSt6ekdqUVlaWlFSQ1dtS0Rnb1lKU0ZjNjBsdUdleFRveHA1ZzlRTEdxNTdBQlNsYzVnVjdBa1lHbk9iTnp1WC9IU2VIbm4zODhVYzM5ZVpQdnNPZmN4WXpmdzZtSmVLdS9QSTMvd0gyK290eE9NUEJFWjdZZ2MrL2RzSldFSWRoSmdJREVQY05DckhSMzB0THgxc0pFeUJRVGdDaG4wWWVjeHdjUlQzRlBCY2JjZlJBTnFISVIzZHpEMDRadWVEb281OTNZMHNnNWk5VXNtMFlnTy81alcvOG9MOWNLYi9UOWFyL25FckVsM2QxZGpoZFlBSitvWVREUlpwMU9YemtaNzc0NHZyeTlva2pBclViNkFpQi9UeW9EeWhZQzBuNGgyRGovMXhvd3ZuYXVwUFh6Ykc4ZG5CdHhRQ1dJSi81ekZlR2dwSG9HZEFIenV5SWg0L3Y2ZWtPSjNCYXVEQUFGRVYrT0lLdDJTN3VGQ1JBL0hOck9jOEg1cG8vRGhVeCtWUUdNOXlHNzBoOGZYSnkvSWNiTm14bzZnV2U5djMzNXQ2V0RHQVJ3TFdCbVVMbDZHZ28vRExzMHpzQkhmbWgwWEI0T1U0WTYwcmhvQWNlKzBxbWtCTkh1TlBIOFhKZ2pCMlk4bjJ3VkNyY2dxQWIwY2ZmaS95c3ltQ3picHQ3V3pQQW5sUWFHZmxxL0lnamt0aHRGQjlDdDlBVGpVYTZJTmFya1VpaWlCMUZVMWpHdVdOaVltTFU3OCsyN0ZsUFAvMEhGQU0wSXZhc3M4Nkt2L1NsRzRZQzBkQ1NZTVdaZWVDQko4WXV1K3o5YlNmaUc5LzVtWjRQTEFaWXZ6Nzh5dzlmOHVyZTNwNDNKanBpTDRRdU1BQXpMZzRmd0p5ZzU0eGo0ZW1ORXhNem40YlkvL1V6SWFzZHcvNXFESERsbFZkR3NOSTI4TUFERDloWkdHZHdjREN3SXhvTk9WdTJ1Q05ZRDdnL0VYN2RkVDg1OXBCRERyb2NDMGJYcHpCRWxDR2g3UFBEb0FBMkEzNHFob2M3WVZrWmRML2NoNGVIaDYvWW4rVTNhMTQrTThCSThONzdYdmNXbkpweEZoVHhYclM2RUxaYWx6bi9MaFk0YnZMMUFsRm80Z1czV25sNGRQdkU1U2VlZU54ZCs0cThUWnQrdG43NThxRWY5UFoyOStKYlg3SVdnT1hKK2o1Z2dFc0k5REJJZmlXRTh3cFJaM3g4K24xRFF3TnR6d1MrTXNDZGQvNzZvOHVYRDE2UXd2aGNGMTJ3ZUk2L2FZUlJTeHh0OGx5OHdZTWhSc2ZHSjNmc0duLzVDNDg1NXJmelpZS3JycnBxeGVyVmg5elczOSszSW82MWZUUVZTL09uWWkvMkhhMERGNGtrK0FGSFNBSGFBd0JVbUo2ZU9YSDU4dVgzekxmc1Zram4yM29BblBWN1V0Vnp6eXNVODdES3NkWFZKMXhvb1ZmVERDbmlnZmh4aU9JeXZ2M1hsOGJtMnY4QWMvd2RXaXdqOTlwMTlTdzlGNHM2VjhDc284Y0xNZ2ZrcExNQ1FtaDRjTlMwNjJGV0QwdjRrL2hFREJlQlJxSnhmSFRxQTRBK2M2OExiYUVFZFNvc2NLVW5wNlkyWWlvT1p6TGpnMDdscXF6QzRYazczRDlYeG1vY3Q4SmpWMXhacmNQTm5ySytYelo1SkkrOTZhNjcwdk9wM2xlL2VzMnlTRER3ZXFZTlJ5QlpaSVVQcHovSWNIUzRrNi9VUml4U2lIc1FlQW9JVndyQk1MVGh5U2VmYk9vVFB1UTE5dUhpR3dQZzFNNU90djRLa0VzQ0MrR3gzVXMrNnlhYktCbUd3NVVReHc4eGxFRUFPZHZmOHhMWWxKK2F6enNPREhTL0dHSWRtajZNUGJLZVg0bFB3dE54S2xqa2lwRXRaQWJPQWZCd2FacUJrYTRIZG9KMTh5bTdWZEw0eGdBdXREcWFWK2s0KzZaTHJPbmo1QXdJQWgzQXRrcXV2dUc1Q2pJVFY4RU1maUNoRkNQNFhyaFFJSGc0VHU4V3BVOG5mRmlHbHFOWHZENi9MY0FsQVZJNGlvRTA0QUpSU2dFdThzU000c3E5S0xMbFFIM1RBYkJ5QjJzeWdYWWdtc2pueVo0RzYzam1KSXhFa1BZMUoyRTEzOTQvbEN1VnFDMlBqVjVtK2xDV1R2K3lJRENaWkV2SlVKY0xyS0VjOFFKWTZLTytOUktwaE04WDMxNk9SNlp3SVlXaW1jZ242dlZIc1ZzUFJ4eWoyU3pwUUFTYzFENHZoOWFiWlpuVU9XUkdGeG1yeUZkbWsrUGxoUVBBa0F4U01TQU15UUIyUTVnUEdKMVg0UzJTeURjSllLZ0t0SkM2UW1IY0Jmc0dWU2JNRU1RRUVnSUNBbHd3SHhjTzNjUERtNE1oWGZzZndGM0tscjZldks5akFXYXRYUUtLQVJPd09INktCaGFoZkxWYXVKL3g3ZXA4a3dCRXJKS2JWMzJxSTFYcHF4RHNrQm1ETUFuMjVBVHVPdXl6ZnlybjUyN1A1NHNQbDRvVjdDNHVtR3hSaXVUUGdTY0xvS1N4ZGNJeml3VURSTEcvRDMzV1hWL29YL0g0c3kreDlTRDlZd0EyWXVCWnhLdzBhS0d1WWt6a3NxRzNrSU5VRUNyQmgyY1FZejd1dE5OT3k2QjcrUlNYaUUxUFplU3pMa3A4bG0wSUwzWFJZaGhHNG9kZ0RhUnlXSFlEbnhxaDZiQ05uVzhNd1BWNXdnRkNkN1kwRU5naUg1b2ZXNy85VTA3UjlpbmdzdlovZmxSdzNmelhjY1Q3TDNqQ3lOam91SVBqUnFBUHNHemtKM1V3cFVKSmtJMGppT0Q1eExPek05KzU5ZFpmdGN6WHYrYUhIWTdCL0hJeUJxUUlZSUhBUHUvMkdmN0dQOFpyTk9CQUpHNjNucTg3ODB4c0pxbUUzcHpOWlgvSktreE1URHVUazFOWTBadkhwaElhZkdCOGdyTEhFOEJaQjA0SVRjM00vaGdUUXU5QVdxNEphMnZuSHdNb3RZRk1vYnE1U2pNVUJHdW9yUTc3WjJVQlJBYjR3YVo5Y2FlZDlyZGpzVmp3MVRodDdCS3M3NXZNNG9PUGM5a0N1Z1RzRHl4aktSaEVmZ3lmaWtOUjIzQWc5TGxqTzNhYzBleWZldGtYZkRTbTlXMFVnRzkzVXIxRzJTQ3NpR0FsTVVQbzJQcDBHRWJDRy9LanhXTGJkV1FtNXlZRmFCOHVacFhQaDM3KzN6Ky9xaG92YmNUVXducE1Sd3lqYS9MQ29jQVRzRkQrcWx5Ty9IamR1b1BiZXRpM0p3cDlZd0NjN1FPcWFvdlhjVCtyVXBjQVdqRkRmTEVMcUFSSUpwT1JKVjBsVHNqOFFXSDI3WHJxcTA5OUhEbDh6dnoyTGJNMlNPMGJBMGpydDBvZkVRZjZOZzd2MmZycEozTlFTZU1HRE03TGw4dEZCL1A0NTIvZnZqMndZOGY0ajU3YXRYMm1tcys3T1doc09JaTVXcG1iODNBdVVDNlRDVld4WDhPYm5KeXVQajYzeFN0czNWcTlaM3pjYzdadXJaR3BPakFRZU82U0pZSGg0YU9DZlgzcDRLcFZRN0hCUVN3TDdPNE9wZkJkR3BoK1BjeEg0UHZFNFpybWowa2hXS0x3U1RqOHlUTnlnNW1hM0VsVE1jdUdvVXE3S01ZekRLY1ZBUmFXQk9URE1NWVREdExHQ2p5cEUyRTF2aHVLWjJqbnVuWCtMemYzalFIWXUrdmJOK0NBYU56RFM4encwQVpPREFFcFFDUm1DOTFpREo5eXZTaWQ3cnl3TTdXNjZNSzhoNlNVSjFoV0FHN3hQUElEbG5YQjJBdUxNNWdJRXcrWWVzRE9EajFtMWhTRTFTYllDQXErQ1dJaE1NNFlpWVR3ZFZoTS9tSW5TU1FTTXp3cXN3Yk1CRHdLUG1CQmtGN3NvbXhkeWFmaUVSakx1S3c1UW9YSm1RN3pHV0JtTVR2ekhaa1BMNGlBNDRQY0NjL2w2UGdnNXVqbzZQYXJicm5sMXN2OFZENTlZd0IrODRlNDRRdUx3MndiWjkvcWRua05Gc1FDVVR6eEt4TE55UUtOSXI3K1dhbncvTDhFbWxCUzEzUFpjVHdHTXNpeXE1N2E1STlBSVJvalRKQThzbndRem9iSm84UWJlSW5YTkpSRzBsMUoxOFhVUWpjKzFCeERSTDJwaFRCN0xWa1lpQVhSei9PSzVKbndGbGdmeUUrUURvZjA5L2RmZXRKSkozRmk0bUlMc2RCMzN4Z0FTQ0ltOEQ2S3hEb3FEUktBZURabWlZZDJ4bW5oek95YzQ4YTVOSkF3WnJ5T3V6S05qdEFramRocU5FZk5qZUNRT1NRbUdVVWFIUHlTdngxcG1HamhBTU9jVWdvdWNEWWY1aXBWbGtDdGgvb2xScGlZMFB3andaWDBnSlBxYUowMHQxcXZvbDVoS28zSExBa094a2N3NmdzbVB4K2k0SnZMbGkxN25FVXV0UE9OQVZ5SVpocGplRXlMNDFtaWt0bnJTS0prdEZQRE5GR3dxNFVwbDYwRGtwdXRpT2dnb2tGOFNTWnRxdmFNZG9SWVJUUmJyc0l6RFlsT2htRUd2RE9kSVNaOFBHbmNpR2Y2RUVONHdKQ093alJTc01Sb3VZUmlCVXpkeVdCQ1VJWWJXR0VzNjlleUpFWXFwV2tsYTVOTGtIVkFjTElqbWNMcXBCY2orSEdtWG1qbkd3T2dYMzhpQjdHT3I0QUFiZHJpRkZkRWhpSkk3d1paWERJR2pFaGZ6UE43d0F5MTFpVllJUngvalMzTFJXT3Z0L0RHL0ZWU01BODlISXBzWklrbGpDZTVhNTRpcmhsTkdBVHBjVFAwbXpKRm9oanlXempKenpJYTY4UnlDRThBKzJNT0NLT1hVZUlVaHJ1YUtRR3dESTF6SC9OYUFXVnozSnQ3QTdiMkp0bmV3NWJLeFljbUppZEZHeGFjQ1NMWTR1dklxYmMyVmd1SWtkWkNVc0h2NFlQUklLNk1KcEZFWUNXcGtwTElabnhqVzJiVytpT1NtUWZTaS9ySWNNTHpQWGhIdlBFempKSkhvaGh0WWZqQWJOamRtRWpEQndnMDlVV0U1cW5FVjdENmxlOGg5WlF5V1FmRWlaNmhlT0FpR1AxaGdhSlB6amNKTUQwK2R5ZU1PdHZ3VmUzbDJLenBZTXdsTHk5SU5SaFZrYXR2VHVTd1JWaWxVVW5DOWtQY2tCSFl5dkJNR01tRTFER3VNU01FTWFhT1VRdkh0SVRYL0ZTU05FQ2lmQktMNWVGb0FFZ0JNcURKaktuQU1KcThJWTNrUmIrbWt3U1NGaUdRYUZJSHljUm14REE4eTdzZ0daeElQSDA1RFZqZ0sxblhGL2ZKVDQ1TVpuUEZIMkp0SUd6d1dIMUxCTXU3ODJNUTlWYkZ5bGpDQzRKdDdZZ3prd1lQRXFwWEM0Qzc0SDYzVkUrSFE3UzJRa29FdG42VkdSSzJXNFpTb0pURUhHczBrVFRNUkRKaWpKU2hGMEl5aEhuU1dUL1RhMzRTTEJmRHdIaVdoYWtTUnB3Z3RjeWIxQ0VYOHNrM0J1QkxGTFBGejJ4NWN0dnM5SFJHRG1Va2VraHNSWmhxOWJiRkU5NmlWbG9KVzdWeGlrejE4TG1HWEl0a3VWdm94cnZtWVhOU2twQVJ5SUR3SWFMV05aZzhsREZJTE1hWnNvVDRJREtTNkk4UEFrRW8vRXdKNkNQMHovaE5uclY0VVdaWnFNWkxGa2dCNjdRK01zc0ZkcjR5d0JWWGpEeUNyN3BmK3FmSHRqcllkSUd2ZlBJTGJ4U1hySVpwalNJTzdmc3JZb3l3RlVqRkI4TXRqQ1JWUkZ0Q0t0Q2Z2ZHFjcFZ6bXh1d2FzcFJIQ1ZOQ1MxOHRBQWlrRGFNR3dHTEl4UHd6V1JBRUFKcW4xbFdsanNJUlhuKzhhU28yQXBNcEFqazY4c2Y1cGdQWTE4RnB2VmVBQVk0T0JFTnZXSHZJc0pQdTdZYkoxMzZLRFVnQWJsVHBZd3A0R3ZwendiblIrb2xRb2xINmJtbEJqRlVtTWowd3ZCb21KZ2lDU3Q0Q0pRUXk1RUlBeXdHc1VsWDl6RXVHakV4SVNNWmJBaktFWlNITWpGYVl0N1JreVlmd0NpTTNYSmpTaHBvR2I3eVVMaHFueGZPMDhlaUNmZnZRMXNmZS9XTTFVK0xOTjk5Y1BmeXdGLzBzVTV6cnplZUt4K0VMTDV6eGc5Z0QyVUFJUVpRZzF1SUZ5SkdXelF5SUxDVTdrYWJrSUZYSk9Nb1FTaWhlNnl5aTZaamVFb0g1V01ldzNaMlVZSmhIbUVQSzFIS1ZTTXliYnZlMFVyWUUyM0xvb1hRanZORUxrQy9UU3JkSE1LazNReUFIc1hjaGd1TnZTMFgzeTVkZmZ2bkRDRnh3cCsreDRNVThjd0VmdU9qeXQzVjJkWHdJbXpCWER2YW5hUStYMDdaNVRBdjNEVmowMWlxSkJ4M0hBNGxBcFBiOWlqeExETXNVYk5TRXJqdkJkdDFiZTdMaHRqUkdNSjJHaTQ2aVZOY1VFbHlIdFNXUXJLcS9NRTdUNmcwUTBxMHh1ZFpPOGtld3BEV01TMk5YZDNjUGJBQUZFdjZFbFN0WDRzQ0toWGUyL2d0ZjB2OVR3anZPSGVsZjJ0MzFwbmcwK3NwNExIWTBUS0ZwTWdMWDhVbnJJQ1dCVDUwL0lkSkVSaGpra1FtUU1kK0Nkemo3V0hzeGVjQkZHSVpFVXBoNlBnU3diZGRrb3JscmZpWTltVTBlQ2QzSUVNcHBRbnpHY3hqSHZPbnNYVnU3bHNHa1Z0SGx0Qk43a0JobVBYdTZ1NXp1cnRUdlErSElXNDQ0WXUzZGtvRVBGL3RPUGhUMWw0czQ1NXhMbGtjNklpdHcvT29Ra01OTndtcTUzU01wNTlQTThlK0dZaHhCUEZOdmhuQ0pxc2VocGVFN0V0V0FUUkVJaEdIYW9VK0loOUUrbkMyMzVtRWduYzFQbUFCV2JhVytCUXQ2UWErTVFJWEZkTEc4Z0RFK2sydXd5VUNjVGFDVmN6bzdFcUVWQncxTk9tNzJkc3dFdHMwSlpCWVBpL2RGREN4aVlCRURpeGhZeE1BaUJoWXhzSWlCUlF3c1ltQVJBNHNZYUJvTS9CL2tzS2JrMG8zQ3dnQUFBQUJKUlU1RXJrSmdnZz09IiB4PSI5IiB5PSI5IiB3aWR0aD0iNDYiIGhlaWdodD0iNDYiLz48L3N2Zz4=">
+  <script>document.documentElement.classList.add('js');try{var t=localStorage.getItem('mackor-theme');if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);}}catch(e){}</script>
 <style>
   :root {
-    --paper:      #FBFAF6;  /* 한지 웜 화이트 */
-    --paper-veil: #F3F1E9;  /* 살짝 깊은 면 */
-    --ink:        #1B1913;  /* 먹빛 검정 */
-    --ink-2:      #3A382F;  /* 보조 먹 */
-    --ink-soft:   #7C776A;  /* 절제된 회색 (웜 바이어스) */
-    --hair:       rgba(27,25,19,0.11);
-    --hair-soft:  rgba(27,25,19,0.06);
-    --seal:       #BE3A2B;  /* 낙관 주홍 — 이 페이지의 유일한 색 */
+    --bg:          #F5F5F6;
+    --panel:       #FFFFFF;
+    --soft:        #FAFAFA;
+    --text:        #131316;
+    --text-strong: #000000;
+    --muted:       #5D5D66;
+    --faint:       #8B8B93;
+    --grid:        rgba(18,18,22,0.11);
+    --gridx:       rgba(18,18,22,0.26);
+    --grid-bg:     rgba(18,18,22,0.035);
+    --accent:      #E5432E;
+    --accent-ink:  #FFFFFF;
+    --accent-weak: rgba(229,67,46,0.09);
+    --btn-bg:      #121216;
+    --btn-fg:      #FFFFFF;
+    --kbd-bg:      #FFFFFF;
+    --kbd-sh:      0 1px 0 rgba(18,18,22,0.10), 0 1.5px 3px rgba(18,18,22,0.07), inset 0 1px 0 rgba(255,255,255,0.8);
+    --chip-bg:     rgba(18,18,22,0.045);
 
-    --serif: "AppleMyungjo", "Nanum Myeongjo", ui-serif, Georgia, serif;
-    --sans:  "Apple SD Gothic Neo", -apple-system, BlinkMacSystemFont, "Pretendard", system-ui, "Malgun Gothic", sans-serif;
-    --mono:  ui-monospace, "SF Mono", Menlo, "Courier New", monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Apple SD Gothic Neo", "Pretendard", "Segoe UI", system-ui, "Malgun Gothic", sans-serif;
+    --mono: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, "Cascadia Code", monospace;
 
-    --measure: 34rem;
-    --ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
+    --maxw: 54rem;
+    --pad: 2.1rem;
+    --spring: cubic-bezier(0.22, 1, 0.36, 1);
   }
 
-  /* 리셋 (표준 배포용 — 아티팩트 스켈레톤이 넣어주던 최소 리셋을 직접 포함) */
-  * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; }
-  h1, h2, h3, h4, p, figure, blockquote { margin: 0; }
-  img, svg { max-width: 100%; }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#070708; --panel:#0C0C0E; --soft:#101013;
+      --text:#ECECEF; --text-strong:#FFFFFF; --muted:#98989F; --faint:#66666E;
+      --grid:rgba(255,255,255,0.11); --gridx:rgba(255,255,255,0.27); --grid-bg:rgba(255,255,255,0.032);
+      --accent:#FF5B47; --accent-ink:#1A0603; --accent-weak:rgba(255,91,71,0.13);
+      --btn-bg:#FFFFFF; --btn-fg:#0A0A0B;
+      --kbd-bg:#17171C; --kbd-sh:0 1px 0 rgba(0,0,0,0.6), 0 2px 5px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.08);
+      --chip-bg:rgba(255,255,255,0.06);
+    }
+  }
+  :root[data-theme="light"]{--bg:#F5F5F6;--panel:#FFFFFF;--soft:#FAFAFA;--text:#131316;--text-strong:#000;--muted:#5D5D66;--faint:#8B8B93;--grid:rgba(18,18,22,0.11);--gridx:rgba(18,18,22,0.26);--grid-bg:rgba(18,18,22,0.035);--accent:#E5432E;--accent-ink:#fff;--accent-weak:rgba(229,67,46,0.09);--btn-bg:#121216;--btn-fg:#fff;--kbd-bg:#fff;--kbd-sh:0 1px 0 rgba(18,18,22,0.10),0 1.5px 3px rgba(18,18,22,0.07),inset 0 1px 0 rgba(255,255,255,0.8);--chip-bg:rgba(18,18,22,0.045);}
+  :root[data-theme="dark"]{--bg:#070708;--panel:#0C0C0E;--soft:#101013;--text:#ECECEF;--text-strong:#fff;--muted:#98989F;--faint:#66666E;--grid:rgba(255,255,255,0.11);--gridx:rgba(255,255,255,0.27);--grid-bg:rgba(255,255,255,0.032);--accent:#FF5B47;--accent-ink:#1A0603;--accent-weak:rgba(255,91,71,0.13);--btn-bg:#fff;--btn-fg:#0A0A0B;--kbd-bg:#17171C;--kbd-sh:0 1px 0 rgba(0,0,0,0.6),0 2px 5px rgba(0,0,0,0.5),inset 0 1px 0 rgba(255,255,255,0.08);--chip-bg:rgba(255,255,255,0.06);}
 
-  /* 백의민족 — 흰 한지의 세계에 의도적으로 몰입. OS 다크여도 종이는 뒤집지 않는다(인쇄물처럼). */
-  :root[data-theme="dark"], :root[data-theme="light"] { color-scheme: light; }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+  html, body { margin: 0; padding: 0; }
+  h1,h2,h3,h4,p,figure,blockquote { margin: 0; }
+  img, svg { max-width: 100%; display: block; }
 
   body {
-    background: var(--paper);
-    color: var(--ink);
-    font-family: var(--sans);
-    font-size: 17px;
-    line-height: 1.72;
-    letter-spacing: 0;
-    -webkit-font-smoothing: antialiased;
-    text-rendering: optimizeLegibility;
-    overflow-x: hidden;
+    background: var(--bg); color: var(--text); font-family: var(--sans);
+    font-size: 16.5px; line-height: 1.66; letter-spacing: -0.011em;
+    -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility; overflow-x: hidden;
+    transition: background 0.4s var(--spring), color 0.4s var(--spring);
   }
+  ::selection { background: var(--accent); color: var(--accent-ink); }
 
-  .wrap {
-    max-width: 46rem;
-    margin: 0 auto;
-    padding: 0 1.75rem;
+  /* ─── 그리드 프레임 ─── */
+  .stage { padding: 0 16px; }
+  .frame {
+    position: relative; max-width: var(--maxw); margin: 0 auto;
+    background: var(--panel);
+    border-left: 1px solid var(--grid); border-right: 1px solid var(--grid);
   }
+  .rule { position: relative; height: 0; border-top: 1px solid var(--grid); z-index: 3; }
+  .rule::before, .rule::after {
+    content: ""; position: absolute; top: -4.5px; width: 9px; height: 9px; z-index: 4;
+    background:
+      linear-gradient(var(--gridx), var(--gridx)) center / 1px 9px no-repeat,
+      linear-gradient(var(--gridx), var(--gridx)) center / 9px 1px no-repeat;
+  }
+  .rule::before { left: -5px; }
+  .rule::after  { right: -5px; }
+  .cell { padding: var(--pad); }
 
-  /* ── 얇은 상단 표시선 ── */
-  .topmark {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 1.8rem 0 0;
+  /* ─── 내비 ─── */
+  .nav-cell { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding-top: 1.05rem; padding-bottom: 1.05rem; }
+  .brand { display: inline-flex; align-items: center; gap: 0.6rem; text-decoration: none; color: var(--text-strong); }
+  .brand .logo {
+    width: 27px; height: 27px; border-radius: 7px;
+    background: linear-gradient(155deg, #F1543C, #C8351F);
+    display: grid; place-items: center; overflow: hidden;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.35);
   }
-  .topmark .name {
-    font-family: var(--serif);
-    font-size: 1.15rem;
-    letter-spacing: 0.02em;
-  }
-  .topmark .src {
-    font-size: 0.82rem;
-    color: var(--ink-soft);
-    text-decoration: none;
-    border-bottom: 1px solid var(--hair);
-    padding-bottom: 2px;
-    transition: color 0.3s var(--ease-spring), border-color 0.3s var(--ease-spring);
-  }
-  .topmark .src:hover { color: var(--ink); border-color: var(--ink); }
+  .brand .logo img { width: 74%; height: 74%; object-fit: contain; }
+  .brand .wm { font-weight: 640; font-size: 1.03rem; letter-spacing: -0.02em; }
+  .nav-right { display: inline-flex; align-items: center; gap: 0.3rem; }
+  .nav-link { color: var(--muted); text-decoration: none; font-size: 0.9rem; font-weight: 500; padding: 0.4rem 0.7rem; border-radius: 8px; transition: color 0.25s var(--spring), background 0.25s var(--spring); }
+  .nav-link:hover { color: var(--text-strong); background: var(--chip-bg); }
+  .icon-btn { -webkit-appearance: none; appearance: none; border: 1px solid var(--grid); background: transparent; color: var(--muted); width: 34px; height: 34px; border-radius: 9px; cursor: pointer; display: grid; place-items: center; transition: color 0.25s var(--spring), background 0.25s var(--spring), border-color 0.25s var(--spring), transform 0.12s ease-out; }
+  .icon-btn:hover { color: var(--text-strong); background: var(--chip-bg); }
+  .icon-btn:active { transform: scale(0.92); }
+  .icon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .icon-btn svg { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .icon-btn .moon { display: none; }
+  :root[data-theme="dark"] .icon-btn .sun { display: none; }
+  :root[data-theme="dark"] .icon-btn .moon { display: block; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .icon-btn .sun { display: none; } :root:not([data-theme="light"]) .icon-btn .moon { display: block; } }
 
-  /* ── 히어로 ── */
-  .hero {
-    padding: 8.5rem 0 7rem;
-    text-align: center;
+  /* ─── 히어로 ─── */
+  .hero { position: relative; text-align: center; padding: 5.2rem var(--pad) 4.6rem; overflow: hidden; }
+  .hero::before {
+    content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+    background-image:
+      repeating-linear-gradient(to right, var(--grid-bg) 0 1px, transparent 1px 46px),
+      repeating-linear-gradient(to bottom, var(--grid-bg) 0 1px, transparent 1px 46px);
+    -webkit-mask-image: radial-gradient(120% 90% at 50% 12%, #000 30%, transparent 78%);
+    mask-image: radial-gradient(120% 90% at 50% 12%, #000 30%, transparent 78%);
   }
-  .eyebrow {
-    font-size: 0.82rem;
-    letter-spacing: 0.34em;
-    color: var(--ink-soft);
-    margin: 0 0 3.2rem;
-    text-indent: 0.34em; /* letter-spacing 보정 */
-  }
+  .hero > * { position: relative; z-index: 1; }
 
-  /* 교정 순간 — 히어로의 논지 */
-  .morph {
-    display: inline-flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 1.6rem;
-    min-height: 8.5rem;
-    justify-content: center;
-  }
-  .morph-typed {
-    font-family: var(--mono);
-    font-size: 1.05rem;
-    letter-spacing: 0.06em;
-    color: var(--ink-soft);
-    display: inline-flex;
-    align-items: center;
-    gap: 0.7rem;
-  }
-  .morph-typed .keys {
-    position: relative;
-    transition: opacity 0.5s var(--ease-spring);
-  }
-  .morph-typed .keys::after { /* 캐럿 */
-    content: "";
-    display: inline-block;
-    width: 1px;
-    height: 1.05em;
-    background: var(--ink-soft);
-    margin-left: 2px;
-    vertical-align: -0.18em;
-    animation: blink 1.15s step-end infinite;
-  }
-  .morph.settled .morph-typed .keys::after { opacity: 0; }
-  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
-  .morph-typed .tag {
-    font-family: var(--sans);
-    font-size: 0.72rem;
-    letter-spacing: 0.18em;
-    color: var(--ink-soft);
-    opacity: 0.7;
-  }
+  .js .anim { opacity: 0; transform: translateY(13px); }
+  body.ready .anim { opacity: 1; transform: none; transition: opacity 0.72s var(--spring), transform 0.72s var(--spring); transition-delay: var(--d, 0s); }
 
-  .morph-out {
-    font-family: var(--serif);
-    font-size: clamp(4rem, 17vw, 7.5rem);
-    line-height: 1;
-    letter-spacing: -0.015em;
-    color: var(--ink);
-    opacity: 0;
-    transform: translateY(0.5em);
-    filter: blur(6px);
-    transition:
-      opacity 0.7s var(--ease-spring),
-      transform 0.7s var(--ease-spring),
-      filter 0.7s var(--ease-spring);
-    position: relative;
-  }
-  .morph.settled .morph-out {
-    opacity: 1;
-    transform: translateY(0);
-    filter: blur(0);
-  }
-  /* 낙관 — 결과가 자리잡을 때만 조용히 찍힌다 */
-  .morph-out .seal {
-    position: absolute;
-    top: 0.15em;
-    right: -0.72em;
-    width: 0.42em;
-    height: 0.42em;
-    background: var(--seal);
-    border-radius: 2px;
-    display: grid;
-    place-items: center;
-    font-family: var(--sans);
-    font-size: 0.13em;
-    color: var(--paper);
-    letter-spacing: 0;
-    opacity: 0;
-    transform: scale(0.4) rotate(-6deg);
-    transition: opacity 0.5s 0.25s var(--ease-spring), transform 0.5s 0.25s var(--ease-spring);
-  }
-  .morph.settled .morph-out .seal { opacity: 1; transform: scale(1) rotate(-6deg); }
+  .badge { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.79rem; font-weight: 500; color: var(--muted); background: var(--panel); border: 1px solid var(--grid); border-radius: 999px; padding: 0.32rem 0.85rem 0.32rem 0.68rem; margin-bottom: 1.9rem; }
+  .badge .pulse { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: pulse 2.6s var(--spring) infinite; }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 var(--accent-weak); } 70% { box-shadow: 0 0 0 7px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
 
-  .thesis {
-    font-family: var(--serif);
-    font-size: clamp(1.4rem, 3.6vw, 1.9rem);
-    line-height: 1.6;
-    letter-spacing: -0.01em;
-    color: var(--ink);
-    max-width: 28rem;
-    margin: 4.4rem auto 0;
-    text-wrap: balance;
-  }
-  .thesis .em { color: var(--seal); }
-  .subthesis {
-    color: var(--ink-soft);
-    font-size: 1.02rem;
-    max-width: 26rem;
-    margin: 1.5rem auto 0;
-    text-wrap: balance;
-  }
+  h1.thesis { font-size: clamp(2.1rem, 6vw, 3.35rem); line-height: 1.08; font-weight: 660; letter-spacing: -0.033em; color: var(--text-strong); max-width: 18ch; margin: 0 auto; text-wrap: balance; }
+  h1.thesis .em { color: var(--accent); }
+  .subthesis { color: var(--muted); font-size: 1.05rem; line-height: 1.6; max-width: 33rem; margin: 1.3rem auto 0; text-wrap: balance; }
 
-  /* ── 다운로드 ── */
-  .cta {
-    margin-top: 3.6rem;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 1rem;
-  }
-  .btn {
-    -webkit-appearance: none;
-    appearance: none;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.6rem;
-    background: var(--ink);
-    color: var(--paper);
-    font-family: var(--sans);
-    font-size: 1.02rem;
-    font-weight: 600;
-    letter-spacing: 0.01em;
-    text-decoration: none;
-    padding: 0.95rem 2.1rem;
-    border-radius: 999px;
-    border: none;
-    cursor: pointer;
-    transition: transform 0.12s ease-out, background 0.3s var(--ease-spring);
-  }
-  .btn:hover { background: #000; }
-  .btn:active { transform: scale(0.97); } /* apple-design: pointer-down 즉각 반응 */
-  .btn:focus-visible { outline: 2px solid var(--seal); outline-offset: 3px; }
-  .btn .apple { width: 1.05em; height: 1.05em; fill: currentColor; margin-top: -0.12em; }
-  .cta-note {
-    font-size: 0.86rem;
-    color: var(--ink-soft);
-  }
-  .cta-note b { color: var(--ink-2); font-weight: 600; }
+  /* 교정 순간 (한 ⇄ 영 양방향) */
+  .showcase { margin: 3rem auto 0; display: inline-flex; flex-direction: column; align-items: center; gap: 1.1rem; }
+  .io { display: inline-flex; align-items: center; gap: 1.05rem; min-height: 3.4rem; }
+  .io .src { font-family: var(--mono); font-size: 1.02rem; color: var(--muted); letter-spacing: 0.01em; transition: opacity 0.4s var(--spring); min-width: 4.5ch; text-align: right; }
+  .io .swap { color: var(--accent); width: 22px; height: 22px; flex: none; }
+  .io .dst { position: relative; font-weight: 680; color: var(--text-strong); font-size: clamp(2.4rem, 8.5vw, 3.5rem); line-height: 1; letter-spacing: -0.03em; min-width: 3.5ch; text-align: left;
+    transition: opacity 0.55s var(--spring), transform 0.55s var(--spring), filter 0.55s var(--spring); }
+  .js .io .dst { opacity: 0; transform: translateY(0.2em); filter: blur(6px); }
+  .io.settled .dst { opacity: 1; transform: none; filter: blur(0); }
+  .io .dst .u { position: absolute; left: -0.02em; right: -0.02em; bottom: -0.08em; height: 0.08em; border-radius: 999px; background: var(--accent); transform: scaleX(1); transform-origin: left; transition: transform 0.55s 0.12s var(--spring); }
+  .js .io .dst .u { transform: scaleX(0); }
+  .io.settled .dst .u { transform: scaleX(1); }
+  .dirtag { font-family: var(--mono); font-size: 0.74rem; letter-spacing: 0.04em; color: var(--faint); border: 1px solid var(--grid); border-radius: 999px; padding: 0.2rem 0.7rem; transition: opacity 0.4s var(--spring); }
+  .dirtag b { color: var(--accent); font-weight: 600; }
 
-  /* ── 섹션 공통 ── */
-  section { padding: 5.5rem 0; }
-  .rule {
-    width: 100%;
-    height: 1px;
-    background: var(--hair-soft);
-    border: 0;
-    margin: 0;
-  }
-  .label {
-    font-size: 0.76rem;
-    letter-spacing: 0.28em;
-    color: var(--seal);
-    margin: 0 0 2rem;
-    text-indent: 0.28em;
-  }
-  h2.sec {
-    font-family: var(--serif);
-    font-size: clamp(1.8rem, 5vw, 2.6rem);
-    line-height: 1.28;
-    letter-spacing: -0.015em;
-    margin: 0 0 1.4rem;
-    text-wrap: balance;
-  }
-  .sec-lead {
-    color: var(--ink-2);
-    font-size: 1.08rem;
-    max-width: var(--measure);
-    margin: 0;
-  }
+  /* CTA */
+  .cta { margin-top: 2.9rem; display: flex; flex-direction: column; align-items: center; gap: 1rem; }
+  .cta-row { display: inline-flex; gap: 0.65rem; flex-wrap: wrap; justify-content: center; }
+  .btn { -webkit-appearance: none; appearance: none; display: inline-flex; align-items: center; gap: 0.55rem; font-family: var(--sans); font-size: 0.97rem; font-weight: 560; letter-spacing: -0.01em; text-decoration: none; cursor: pointer; white-space: nowrap; height: 2.85rem; padding: 0 1.3rem; border-radius: 10px; border: 1px solid transparent; transition: transform 0.14s var(--spring), background 0.26s var(--spring), border-color 0.26s var(--spring), box-shadow 0.26s var(--spring), color 0.26s var(--spring); }
+  .btn-primary { background: var(--btn-bg); color: var(--btn-fg); box-shadow: 0 1px 2px rgba(0,0,0,0.12); }
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 7px 20px rgba(0,0,0,0.15); }
+  .btn-ghost { background: transparent; color: var(--text-strong); border-color: var(--grid); }
+  .btn-ghost:hover { background: var(--chip-bg); transform: translateY(-1px); }
+  .btn:active { transform: scale(0.975); }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .btn .apple { width: 1.02em; height: 1.02em; fill: currentColor; margin-top: -0.14em; }
+  .btn .gh { width: 1.05em; height: 1.05em; fill: currentColor; }
+  .cta-note { font-size: 0.85rem; color: var(--faint); }
+  .cta-note b { color: var(--muted); font-weight: 600; }
 
-  /* 예시 — 잘못 친 것 → 고쳐진 것 */
-  .examples {
-    margin-top: 3rem;
-    display: grid;
-    gap: 1px;
-    background: var(--hair-soft);
-    border-top: 1px solid var(--hair-soft);
-    border-bottom: 1px solid var(--hair-soft);
-  }
-  .ex {
-    display: grid;
-    grid-template-columns: 1fr auto 1fr;
-    align-items: center;
-    gap: 1.2rem;
-    background: var(--paper);
-    padding: 1.35rem 0.4rem;
-  }
-  .ex .from {
-    font-family: var(--mono);
-    font-size: 1.05rem;
-    color: var(--ink-soft);
-    text-align: right;
-    letter-spacing: 0.04em;
-  }
-  .ex .arrow { color: var(--seal); font-size: 1rem; }
-  .ex .to {
-    font-family: var(--serif);
-    font-size: 1.7rem;
-    color: var(--ink);
-    text-align: left;
-  }
+  /* ─── 섹션 ─── */
+  .label { display: inline-block; font-family: var(--mono); font-size: 0.73rem; font-weight: 500; letter-spacing: 0.13em; text-transform: uppercase; color: var(--accent); margin: 0 0 1.05rem; }
+  h2.sec { font-size: clamp(1.5rem, 4vw, 2.1rem); line-height: 1.18; font-weight: 640; letter-spacing: -0.026em; color: var(--text-strong); margin: 0 0 0.85rem; text-wrap: balance; }
+  .sec-lead { color: var(--muted); font-size: 1.03rem; line-height: 1.6; max-width: 40rem; margin: 0; }
 
-  /* 로컬 처리 */
-  .privacy {
-    background: var(--paper-veil);
-    border-radius: 20px;
-    padding: 3rem 2.4rem;
-    margin-top: 2.6rem;
-  }
-  .privacy p { margin: 0; color: var(--ink-2); font-size: 1.06rem; max-width: var(--measure); }
-  .privacy .big {
-    font-family: var(--serif);
-    font-size: clamp(1.5rem, 4vw, 2rem);
-    color: var(--ink);
-    line-height: 1.4;
-    margin: 0 0 1.1rem;
-    letter-spacing: -0.01em;
-  }
+  /* 예시 — 그리드형 (양방향) */
+  .examples { margin-top: 2.1rem; border: 1px solid var(--grid); border-radius: 14px; overflow: hidden; background: var(--soft); }
+  .ex { display: grid; grid-template-columns: 1fr auto 1fr auto; align-items: center; gap: 1rem; padding: 1rem 1.3rem; border-bottom: 1px solid var(--grid); transition: background 0.22s var(--spring); }
+  .ex:last-child { border-bottom: none; }
+  .ex:hover { background: var(--panel); }
+  .ex .from { font-family: var(--mono); font-size: 0.98rem; color: var(--muted); text-align: right; letter-spacing: 0.01em; }
+  .ex .arrow { color: var(--accent); width: 15px; height: 15px; }
+  .ex .to { font-size: 1.32rem; font-weight: 620; color: var(--text-strong); text-align: left; letter-spacing: -0.02em; }
+  .ex .dir { font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.03em; color: var(--faint); background: var(--chip-bg); border-radius: 6px; padding: 0.18rem 0.5rem; justify-self: end; white-space: nowrap; }
 
-  /* 설치 3단계 */
-  .steps {
-    margin-top: 2.8rem;
-    display: grid;
-    gap: 1.6rem;
-    counter-reset: step;
-  }
-  .step {
-    display: grid;
-    grid-template-columns: 2.6rem 1fr;
-    gap: 1.3rem;
-    align-items: baseline;
-    padding-bottom: 1.6rem;
-    border-bottom: 1px solid var(--hair-soft);
-  }
-  .step:last-child { border-bottom: none; }
-  .step .n {
-    font-family: var(--serif);
-    font-size: 1.5rem;
-    color: var(--seal);
-    line-height: 1;
-    font-variant-numeric: tabular-nums;
-  }
-  .step h3 {
-    margin: 0 0 0.35rem;
-    font-size: 1.12rem;
-    font-weight: 600;
-    letter-spacing: -0.005em;
-  }
-  .step p { margin: 0; color: var(--ink-soft); font-size: 0.98rem; }
-  .step p code {
-    font-family: var(--mono);
-    font-size: 0.86em;
-    background: var(--paper-veil);
-    padding: 0.12em 0.42em;
-    border-radius: 5px;
-    color: var(--ink-2);
-  }
+  /* 사생활 */
+  .privacy { margin-top: 2.1rem; padding: 2.3rem 2rem; border: 1px solid var(--grid); border-radius: 16px; background: radial-gradient(120% 100% at 0% 0%, var(--accent-weak), transparent 44%), var(--soft); }
+  .privacy .big { font-size: clamp(1.35rem, 3.4vw, 1.85rem); font-weight: 640; line-height: 1.32; letter-spacing: -0.022em; color: var(--text-strong); margin: 0 0 0.85rem; text-wrap: balance; }
+  .privacy p { margin: 0; color: var(--muted); font-size: 1.02rem; line-height: 1.6; max-width: 40rem; }
 
-  /* 솔직한 한계 */
-  .limits { margin-top: 2.4rem; display: grid; gap: 1.3rem; }
-  .limit {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 0.9rem;
-    color: var(--ink-2);
-    font-size: 1rem;
-    align-items: baseline;
-  }
-  .limit .dot {
-    width: 5px; height: 5px; border-radius: 50%;
-    background: var(--ink-soft);
-    transform: translateY(-0.35em);
-  }
-  .limit b { color: var(--ink); font-weight: 600; }
+  /* 설치 */
+  .steps { margin-top: 2.1rem; display: grid; }
+  .step { display: grid; grid-template-columns: 3rem 1fr; gap: 1.15rem; align-items: start; padding: 1.5rem 0; border-bottom: 1px solid var(--grid); }
+  .step:first-child { padding-top: 0.3rem; }
+  .step:last-child { border-bottom: none; padding-bottom: 0.2rem; }
+  .step .n { font-family: var(--mono); font-size: 0.92rem; font-weight: 600; color: var(--accent); font-variant-numeric: tabular-nums; padding-top: 0.15rem; }
+  .step h3 { margin: 0 0 0.28rem; font-size: 1.08rem; font-weight: 620; letter-spacing: -0.015em; color: var(--text-strong); }
+  .step p { margin: 0; color: var(--muted); font-size: 0.98rem; line-height: 1.58; }
+  code { font-family: var(--mono); font-size: 0.85em; background: var(--chip-bg); padding: 0.12em 0.44em; border-radius: 6px; color: var(--text); border: 1px solid var(--grid); }
+
+  /* 한계 */
+  .limits { margin-top: 2rem; display: grid; gap: 1.1rem; }
+  .limit { display: grid; grid-template-columns: auto 1fr; gap: 0.8rem; align-items: start; color: var(--muted); font-size: 1rem; line-height: 1.56; }
+  .limit .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin-top: 0.58em; opacity: 0.85; }
+  .limit b { color: var(--text-strong); font-weight: 600; }
   .limit p { margin: 0; }
 
-  /* 마무리 다운로드 */
-  .closer {
-    text-align: center;
-    padding: 7rem 0 4rem;
-  }
-  .closer .mark {
-    font-family: var(--serif);
-    font-size: clamp(2.4rem, 8vw, 4rem);
-    letter-spacing: -0.02em;
-    margin: 0 0 0.6rem;
-    position: relative;
-    display: inline-block;
-  }
-  .closer .mark .seal {
-    position: absolute; right: -0.85em; top: 0.05em;
-    width: 0.4em; height: 0.4em; background: var(--seal); border-radius: 2px;
-    display: grid; place-items: center; color: var(--paper);
-    font-family: var(--sans); font-size: 0.16em; transform: rotate(-6deg);
-  }
-  .closer p { color: var(--ink-soft); margin: 0 0 2.6rem; }
+  /* 마무리 */
+  .closer { text-align: center; padding: 4.6rem var(--pad); }
+  .closer .mark { font-size: clamp(2rem, 6.5vw, 3.1rem); font-weight: 680; letter-spacing: -0.035em; color: var(--text-strong); margin: 0 0 0.45rem; }
+  .closer .mark .dot { color: var(--accent); }
+  .closer .tagline { color: var(--muted); margin: 0 0 2rem; font-size: 1.04rem; }
 
-  footer {
-    text-align: center;
-    padding: 3rem 0 4rem;
-    border-top: 1px solid var(--hair-soft);
-    color: var(--ink-soft);
-    font-size: 0.84rem;
-    line-height: 1.9;
-  }
-  footer a { color: var(--ink-2); text-decoration: none; border-bottom: 1px solid var(--hair); }
-  footer a:hover { border-color: var(--ink-2); }
-  footer .dim { opacity: 0.7; }
+  .foot { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; color: var(--faint); font-size: 0.84rem; padding-top: 1.5rem; padding-bottom: 1.5rem; }
+  .foot a { color: var(--muted); text-decoration: none; border-bottom: 1px solid var(--grid); transition: color 0.25s var(--spring), border-color 0.25s var(--spring); }
+  .foot a:hover { color: var(--text-strong); border-color: var(--gridx); }
+  .foot .dim { opacity: 0.82; }
 
-  /* 스크롤 진입 — 스프링 리빌 */
-  .reveal {
-    opacity: 0;
-    transform: translateY(18px);
-    transition: opacity 0.8s var(--ease-spring), transform 0.8s var(--ease-spring);
-  }
-  .reveal.in { opacity: 1; transform: translateY(0); }
+  /* 리빌 */
+  .reveal { transition: opacity 0.8s var(--spring), transform 0.8s var(--spring); }
+  .js .reveal { opacity: 0; transform: translateY(18px); }
+  .reveal.in { opacity: 1; transform: none; }
 
-  @media (max-width: 480px) {
+  @media (max-width: 560px) {
+    :root { --pad: 1.3rem; }
     body { font-size: 16px; }
-    .hero { padding: 5.5rem 0 4.5rem; }
-    .ex { grid-template-columns: 1fr auto 1fr; gap: 0.7rem; }
-    .ex .to { font-size: 1.4rem; }
-    .privacy { padding: 2.2rem 1.5rem; }
+    .hero { padding: 3.8rem var(--pad) 3.4rem; }
+    h1.thesis { font-size: clamp(1.55rem, 6.6vw, 2rem); }
+    .subthesis { font-size: 0.99rem; }
+    .io { gap: 0.7rem; }
+    .io .src { min-width: 0; font-size: 0.92rem; }
+    .ex { grid-template-columns: 1fr auto 1fr; row-gap: 0.35rem; }
+    .ex .dir { grid-column: 1 / -1; justify-self: start; }
+    .ex .to { font-size: 1.18rem; }
+    .privacy { padding: 1.8rem 1.3rem; }
+    .foot { flex-direction: column; align-items: flex-start; }
+    .nav-link.hide-sm { display: none; }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    * { transition-duration: 0.001ms !important; animation: none !important; }
-    .morph-out { opacity: 1; transform: none; filter: none; }
-    .morph-out .seal { opacity: 1; transform: rotate(-6deg); }
-    .reveal { opacity: 1; transform: none; }
+    html { scroll-behavior: auto; }
+    *, *::after, *::before { transition-duration: 0.001ms !important; animation: none !important; }
+    .anim, .reveal { opacity: 1 !important; transform: none !important; }
+    .io .dst { opacity: 1; transform: none; filter: none; }
+    .io .dst .u { transform: scaleX(1); }
+    .hero::before { -webkit-mask-image: none; mask-image: none; }
   }
 </style>
 </head>
 <body>
 
-<div class="wrap">
-  <div class="topmark">
-    <span class="name">Mackor</span>
-    <a class="src" href="https://github.com/Keilkim/MacKoreanImefixer" target="_blank" rel="noopener">소스 보기 (오픈소스)</a>
-  </div>
-</div>
+<div class="stage">
+  <div class="frame">
+    <div class="rule"></div>
 
-<div class="wrap">
-  <header class="hero">
-    <p class="eyebrow">MAC 메뉴바 유틸리티</p>
-
-    <div class="morph" id="morph" aria-label="dkssud 라고 잘못 쳐도 안녕 으로 자동 교정됩니다">
-      <div class="morph-typed"><span class="keys" id="mKeys">dkssud</span><span class="tag">라고 쳤는데</span></div>
-      <div class="morph-out" id="mOut">안녕<span class="seal" aria-hidden="true">맥</span></div>
+    <div class="cell nav-cell">
+      <a class="brand" href="https://keilkim.github.io/MacKoreanImefixer/" aria-label="Mackor 홈">
+        <span class="logo" aria-hidden="true"><img src="data:image/png;base64,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" alt=""></span>
+        <span class="wm">Mackor</span>
+      </a>
+      <div class="nav-right">
+        <a class="nav-link hide-sm" href="https://github.com/Keilkim/MacKoreanImefixer" target="_blank" rel="noopener">소스</a>
+        <button class="icon-btn" id="themeBtn" type="button" aria-label="라이트·다크 전환">
+          <svg class="sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.4M12 19.6V22M22 12h-2.4M4.4 12H2M18.7 5.3l-1.7 1.7M7 17l-1.7 1.7M18.7 18.7L17 17M7 7 5.3 5.3"/></svg>
+          <svg class="moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.4A8.2 8.2 0 1 1 9.6 4a6.4 6.4 0 0 0 10.4 10.4z"/></svg>
+        </button>
+      </div>
     </div>
 
-    <p class="thesis">한/영 키를 <span class="em">깜빡해도</span>,<br>친 대로 알아서 되돌려 드립니다.</p>
-    <p class="subthesis">입력 소스를 잘못 두고 친 글자를, 이 기기 안에서 판단해 제 글자로 바꿉니다. 다시 지우고 칠 필요가 없습니다.</p>
+    <div class="rule"></div>
 
-    <div class="cta">
-      <a class="btn" id="dl" href="https://github.com/Keilkim/MacKoreanImefixer/releases/latest/download/Mackor.dmg">
+    <header class="hero cell">
+      <span class="badge anim" style="--d:0s"><span class="pulse" aria-hidden="true"></span>macOS 메뉴바 유틸리티 · 한 ⇄ 영</span>
+      <h1 class="thesis anim" style="--d:.06s">한/영 키를 <span class="em">깜빡해도</span>,<br>친 대로 되돌려 드립니다.</h1>
+      <p class="subthesis anim" style="--d:.12s">자판을 잘못 두고 친 글자를, 이 기기 안에서 판단해 제 글자로 바꿉니다. 한글이든 영문이든 양방향으로. 다시 지우고 칠 필요가 없습니다.</p>
+
+      <div class="showcase anim" style="--d:.18s">
+        <div class="io morph" id="morph" aria-label="dkssud 라고 잘못 쳐도 안녕 으로 자동 교정됩니다">
+          <span class="src" id="ioSrc">dkssud</span>
+          <svg class="swap" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4 3 8l4 4M3 8h13M17 20l4-4-4-4M21 16H8"/></svg>
+          <span class="dst" id="ioDst"><span class="t">안녕</span><span class="u" aria-hidden="true"></span></span>
+        </div>
+        <span class="dirtag" id="ioDir"><b>영</b> → 한</span>
+      </div>
+
+      <div class="cta anim" style="--d:.24s">
+        <div class="cta-row">
+          <a class="btn btn-primary" id="dl" href="https://github.com/Keilkim/MacKoreanImefixer/releases/latest/download/Mackor.dmg">
+            <svg class="apple" viewBox="0 0 384 512" aria-hidden="true"><path d="M318.7 268c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-92.6zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></svg>
+            Mac용 다운로드
+          </a>
+          <a class="btn btn-ghost" href="https://github.com/Keilkim/MacKoreanImefixer" target="_blank" rel="noopener">
+            <svg class="gh" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .5a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.5-1.4-1.3-1.8-1.3-1.8-1.1-.7 0-.7 0-.7 1.2 0 1.9 1.2 1.9 1.2 1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.7-1.6-2.7-.3-5.5-1.3-5.5-5.9 0-1.3.5-2.4 1.2-3.2 0-.3-.5-1.5.2-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0C17.3 4.7 18.3 5 18.3 5c.7 1.7.2 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .5z"/></svg>
+            소스 보기
+          </a>
+        </div>
+        <p class="cta-note">무료 · 설치 후 <b>손쉬운 사용 권한</b> 한 번이면 끝납니다.</p>
+      </div>
+    </header>
+
+    <div class="rule"></div>
+
+    <section class="cell reveal">
+      <p class="label">무엇을 고치나</p>
+      <h2 class="sec">한 ⇄ 영, 자판만 잘못 선택한 글자를 되돌립니다.</h2>
+      <p class="sec-lead">키보드 배열은 그대로 두고, 입력 소스만 잘못 둔 채 친 글자를 자동으로 판단해 바꿉니다. 영문 자판으로 친 한글도, 한글 자판으로 친 영문도 모두 대상입니다.</p>
+
+      <div class="examples" aria-label="교정 예시">
+        <div class="ex"><span class="from">dkssud</span><svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg><span class="to">안녕</span><span class="dir">영 → 한</span></div>
+        <div class="ex"><span class="from">ㅗ디ㅣㅐ</span><svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg><span class="to">hello</span><span class="dir">한 → 영</span></div>
+        <div class="ex"><span class="from">gksrmf</span><svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg><span class="to">한글</span><span class="dir">영 → 한</span></div>
+        <div class="ex"><span class="from">쟈랴</span><svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg><span class="to">wifi</span><span class="dir">한 → 영</span></div>
+        <div class="ex"><span class="from">rkatk</span><svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg><span class="to">감사</span><span class="dir">영 → 한</span></div>
+      </div>
+    </section>
+
+    <div class="rule"></div>
+
+    <section class="cell reveal">
+      <p class="label">사생활</p>
+      <div class="privacy">
+        <p class="big">친 글자는 이 기기를 떠나지 않습니다.</p>
+        <p>교정은 전부 당신의 Mac 안에서 이뤄집니다. 입력한 내용도, 교정한 결과도, 어떤 앱을 쓰는지도 서버로 보내지 않습니다. 네트워크를 쓰는 건 오직 새 버전이 있는지 확인할 때뿐입니다.</p>
+      </div>
+    </section>
+
+    <div class="rule"></div>
+
+    <section class="cell reveal">
+      <p class="label">설치</p>
+      <h2 class="sec">세 걸음이면 됩니다.</h2>
+      <div class="steps">
+        <div class="step">
+          <span class="n">01</span>
+          <div>
+            <h3>받아서 엽니다</h3>
+            <p>위 <code>Mac용 다운로드</code>를 누르면 바로 내려받습니다. 받은 파일을 열고 <code>Mackor</code>를 응용 프로그램으로 옮깁니다.</p>
+          </div>
+        </div>
+        <div class="step">
+          <span class="n">02</span>
+          <div>
+            <h3>손쉬운 사용 권한을 켭니다</h3>
+            <p>처음 실행하면 <code>시스템 설정 › 개인정보 보호 및 보안 › 손쉬운 사용</code>에서 Mackor를 켜라고 안내합니다. 교정을 하려면 이 권한 한 번이 필요합니다.</p>
+          </div>
+        </div>
+        <div class="step">
+          <span class="n">03</span>
+          <div>
+            <h3>메뉴바에서 조용히 동작합니다</h3>
+            <p>이제 평소처럼 치기만 하면 됩니다. 적용 범위는 메뉴바 아이콘에서 <code>모든 앱</code> 또는 <code>선택한 앱만</code>으로 고를 수 있습니다.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="rule"></div>
+
+    <section class="cell reveal">
+      <p class="label">미리 알아 두면 좋은 것</p>
+      <h2 class="sec">할 수 있는 것만 정직하게 적습니다.</h2>
+      <div class="limits">
+        <div class="limit"><span class="dot"></span><p><b>캔버스에 직접 글자를 그리는 앱</b>(예: Illustrator)은 자동 교정이 원리적으로 어렵습니다. 입력란이라는 것 자체가 없기 때문입니다.</p></div>
+        <div class="limit"><span class="dot"></span><p><b>앱을 방금 전환한 직후 첫 단어</b>는 놓칠 수 있습니다. 다음 단어부터는 정상입니다.</p></div>
+        <div class="limit"><span class="dot"></span><p>어떤 앱에서 되는지는 <b>실제로 쳐 봐야</b> 확인됩니다. 안 되는 앱은 앱 안에서 제보할 수 있습니다.</p></div>
+      </div>
+    </section>
+
+    <div class="rule"></div>
+
+    <section class="cell closer reveal">
+      <p class="mark">Mackor<span class="dot">.</span></p>
+      <p class="tagline">깜빡해도 괜찮습니다.</p>
+      <a class="btn btn-primary" href="https://github.com/Keilkim/MacKoreanImefixer/releases/latest/download/Mackor.dmg">
         <svg class="apple" viewBox="0 0 384 512" aria-hidden="true"><path d="M318.7 268c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-92.6zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></svg>
         Mac용 다운로드
       </a>
-      <p class="cta-note">무료 · 설치 후 <b>손쉬운 사용 권한</b> 한 번이면 끝납니다.</p>
+    </section>
+
+    <div class="rule"></div>
+
+    <div class="cell foot">
+      <div>Mackor · macOS 10.15+ · 오픈소스 <span class="dim">(MIT)</span></div>
+      <div class="dim">© 2026 Draftup</div>
+      <div><a href="https://github.com/Keilkim/MacKoreanImefixer" target="_blank" rel="noopener">GitHub</a></div>
     </div>
-  </header>
-</div>
 
-<div class="wrap"><hr class="rule"></div>
-
-<div class="wrap">
-  <section class="reveal">
-    <p class="label">무엇을 고치나</p>
-    <h2 class="sec">한글로 치려다 영문 자판으로 친 단어를 되돌립니다.</h2>
-    <p class="sec-lead">키보드 배열은 그대로 두고, 자판만 잘못 선택한 채 친 글자를 자동으로 판단해 바꿉니다. 등록한 앱에서는 깨진 한글 조합도 함께 잡아 줍니다.</p>
-
-    <div class="examples" aria-label="교정 예시">
-      <div class="ex"><span class="from">dkssud</span><span class="arrow">→</span><span class="to">안녕</span></div>
-      <div class="ex"><span class="from">gksrmf</span><span class="arrow">→</span><span class="to">한글</span></div>
-      <div class="ex"><span class="from">tkfkd</span><span class="arrow">→</span><span class="to">사랑</span></div>
-      <div class="ex"><span class="from">rkatk</span><span class="arrow">→</span><span class="to">감사</span></div>
-    </div>
-  </section>
-</div>
-
-<div class="wrap"><hr class="rule"></div>
-
-<div class="wrap">
-  <section class="reveal">
-    <p class="label">사생활</p>
-    <div class="privacy">
-      <p class="big">친 글자는 이 기기를 떠나지 않습니다.</p>
-      <p>교정은 전부 당신의 Mac 안에서 이뤄집니다. 입력한 내용도, 교정한 결과도, 어떤 앱을 쓰는지도 서버로 보내지 않습니다. 네트워크를 쓰는 건 오직 새 버전이 있는지 확인할 때뿐입니다.</p>
-    </div>
-  </section>
-</div>
-
-<div class="wrap"><hr class="rule"></div>
-
-<div class="wrap">
-  <section class="reveal">
-    <p class="label">설치</p>
-    <h2 class="sec">세 걸음이면 됩니다.</h2>
-    <div class="steps">
-      <div class="step">
-        <span class="n">一</span>
-        <div>
-          <h3>받아서 엽니다</h3>
-          <p>위 <code>Mac용 다운로드</code>를 누르면 바로 내려받습니다. 받은 파일을 열고 <code>Mackor</code>를 응용 프로그램으로 옮깁니다.</p>
-        </div>
-      </div>
-      <div class="step">
-        <span class="n">二</span>
-        <div>
-          <h3>손쉬운 사용 권한을 켭니다</h3>
-          <p>처음 실행하면 <code>시스템 설정 › 개인정보 보호 및 보안 › 손쉬운 사용</code>에서 Mackor를 켜라고 안내합니다. 교정을 하려면 이 권한 한 번이 필요합니다.</p>
-        </div>
-      </div>
-      <div class="step">
-        <span class="n">三</span>
-        <div>
-          <h3>메뉴바에서 조용히 동작합니다</h3>
-          <p>이제 평소처럼 치기만 하면 됩니다. 적용 범위는 메뉴바 아이콘에서 <code>모든 앱</code> 또는 <code>선택한 앱만</code>으로 고를 수 있습니다.</p>
-        </div>
-      </div>
-    </div>
-  </section>
-</div>
-
-<div class="wrap"><hr class="rule"></div>
-
-<div class="wrap">
-  <section class="reveal">
-    <p class="label">미리 알아 두면 좋은 것</p>
-    <h2 class="sec">할 수 있는 것만 정직하게 적습니다.</h2>
-    <div class="limits">
-      <div class="limit"><span class="dot"></span><p><b>캔버스에 직접 글자를 그리는 앱</b>(예: Illustrator)은 자동 교정이 원리적으로 어렵습니다. 입력란이라는 것 자체가 없기 때문입니다.</p></div>
-      <div class="limit"><span class="dot"></span><p><b>앱을 방금 전환한 직후 첫 단어</b>는 놓칠 수 있습니다. 다음 단어부터는 정상입니다.</p></div>
-      <div class="limit"><span class="dot"></span><p>어떤 앱에서 되는지는 <b>실제로 쳐 봐야</b> 확인됩니다. 안 되는 앱은 앱 안에서 제보할 수 있습니다.</p></div>
-    </div>
-  </section>
-</div>
-
-<div class="wrap">
-  <section class="closer reveal">
-    <p class="mark">Mackor<span class="seal" aria-hidden="true">맥</span></p>
-    <p>깜빡해도 괜찮습니다.</p>
-    <a class="btn" href="https://github.com/Keilkim/MacKoreanImefixer/releases/latest/download/Mackor.dmg">
-      <svg class="apple" viewBox="0 0 384 512" aria-hidden="true"><path d="M318.7 268c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-92.6zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></svg>
-      Mac용 다운로드
-    </a>
-  </section>
-</div>
-
-<footer>
-  <div class="wrap">
-    <div>Mackor · macOS 10.15+ · 오픈소스 <span class="dim">(MIT)</span></div>
-    <div class="dim">© 2026 Draftup · 이름 "Mackor"와 로고는 코드 라이선스와 별개입니다.</div>
-    <div><a href="https://github.com/Keilkim/MacKoreanImefixer" target="_blank" rel="noopener">GitHub</a></div>
+    <div class="rule"></div>
   </div>
-</footer>
+</div>
 
 <script>
   (function () {
+    var root = document.documentElement;
     var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-    // ── 히어로 교정 순환 ──
-    var pairs = [
-      ["dkssud", "안녕"],
-      ["gksrmf", "한글"],
-      ["dhsmf",  "오늘"],
-      ["rkatk",  "감사"]
+    // 테마 토글
+    var btn = document.getElementById("themeBtn");
+    function current() { var a = root.getAttribute("data-theme"); if (a) return a; return (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) ? "dark" : "light"; }
+    btn.addEventListener("click", function () { var n = current() === "dark" ? "light" : "dark"; root.setAttribute("data-theme", n); try { localStorage.setItem("mackor-theme", n); } catch (e) {} });
+
+    // 히어로 진입
+    requestAnimationFrame(function () { document.body.classList.add("ready"); });
+
+    // 한 ⇄ 영 순환
+    var seq = [
+      { s: "dkssud",  d: "안녕",  dir: "<b>영</b> → 한" },
+      { s: "ㅗ디ㅣㅐ", d: "hello", dir: "<b>한</b> → 영" },
+      { s: "gksrmf",  d: "한글",  dir: "<b>영</b> → 한" },
+      { s: "쟈랴",    d: "wifi",  dir: "<b>한</b> → 영" }
     ];
     var morph = document.getElementById("morph");
-    var keys = document.getElementById("mKeys");
-    var out = document.getElementById("mOut");
+    var elS = document.getElementById("ioSrc");
+    var elT = document.querySelector("#ioDst .t");
+    var elDir = document.getElementById("ioDir");
     var i = 0;
-
     function render(idx, animate) {
-      keys.textContent = pairs[idx][0];
-      // 한글 텍스트만 교체하고 낙관은 유지
-      out.childNodes[0].nodeValue = pairs[idx][1];
-      if (animate) {
-        morph.classList.remove("settled");
-        requestAnimationFrame(function () {
-          requestAnimationFrame(function () { morph.classList.add("settled"); });
-        });
-      } else {
-        morph.classList.add("settled");
-      }
+      elS.textContent = seq[idx].s;
+      elT.textContent = seq[idx].d;
+      elDir.innerHTML = seq[idx].dir;
+      if (animate) { morph.classList.remove("settled"); requestAnimationFrame(function () { requestAnimationFrame(function () { morph.classList.add("settled"); }); }); }
+      else { morph.classList.add("settled"); }
     }
-
-    render(0, !reduce);
-
+    render(0, false); // 첫 화면은 즉시 정착(결과 항상 보임) — 순환만 애니메이션
     if (!reduce) {
       setInterval(function () {
-        morph.classList.remove("settled");
-        setTimeout(function () {
-          i = (i + 1) % pairs.length;
-          render(i, true);
-        }, 520);
-      }, 2900);
+        morph.classList.remove("settled"); elS.style.opacity = "0"; elDir.style.opacity = "0";
+        setTimeout(function () { i = (i + 1) % seq.length; render(i, true); elS.style.opacity = ""; elDir.style.opacity = ""; }, 480);
+      }, 3000);
     }
 
-    // ── 스크롤 진입 리빌 ──
+    // 스크롤 리빌
     var els = document.querySelectorAll(".reveal");
-    if (!("IntersectionObserver" in window) || reduce) {
-      els.forEach(function (el) { el.classList.add("in"); });
-    } else {
-      var io = new IntersectionObserver(function (entries) {
-        entries.forEach(function (e) {
-          if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
-        });
-      }, { threshold: 0.16 });
+    if (!("IntersectionObserver" in window) || reduce) { els.forEach(function (el) { el.classList.add("in"); }); }
+    else {
+      var io = new IntersectionObserver(function (entries) { entries.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } }); }, { threshold: 0.12 });
       els.forEach(function (el) { io.observe(el); });
     }
-
-    // ── 버튼: pointer-down 즉각 반응 (apple-design) ──
-    document.querySelectorAll(".btn").forEach(function (b) {
-      b.addEventListener("pointerdown", function () { b.style.transform = "scale(0.97)"; });
-      b.addEventListener("pointerup", function () { b.style.transform = ""; });
-      b.addEventListener("pointerleave", function () { b.style.transform = ""; });
-    });
   })();
 </script>
 </body>
