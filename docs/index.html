@@ -37,6 +37,8 @@
     --kbd-sh:      0 1px 0 rgba(20,18,12,0.10), 0 1.5px 3px rgba(20,18,12,0.07), inset 0 1px 0 rgba(255,255,255,0.8);
     --chip-bg:     rgba(20,18,12,0.05);
     --logo-bg:     #14120C;
+    --frame-sh:    0 1px 3px rgba(20,18,12,0.04), 0 22px 56px -20px rgba(20,18,12,0.17);
+    --sq:          url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNyIgaGVpZ2h0PSIyNyI+PHJlY3Qgd2lkdGg9IjMuNiIgaGVpZ2h0PSIzLjYiIGZpbGw9InJnYmEoMjAsMTgsMTIsMC4xMykiLz48L3N2Zz4=");   /* 배경 사각(ㅁ) 격자 타일 */
 
     --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Apple SD Gothic Neo", "Pretendard", "Segoe UI", system-ui, "Malgun Gothic", sans-serif;
     --mono: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, "Cascadia Code", monospace;
@@ -47,8 +49,8 @@
   }
 
   /* 다크는 OS를 따르지 않고 토글로만 적용 — 기본은 항상 화이트 테마 */
-  :root[data-theme="light"]{--bg:#F5F4F2;--panel:#FFFFFF;--soft:#F8F7F5;--text:#191815;--text-strong:#0A0906;--muted:#66645D;--faint:#98968E;--grid:rgba(20,18,12,0.12);--gridx:rgba(20,18,12,0.30);--grid-bg:rgba(20,18,12,0.035);--accent:#0A0906;--accent-ink:#fff;--accent-weak:rgba(20,18,12,0.07);--btn-bg:#14120C;--btn-fg:#fff;--kbd-bg:#fff;--kbd-sh:0 1px 0 rgba(20,18,12,0.10),0 1.5px 3px rgba(20,18,12,0.07),inset 0 1px 0 rgba(255,255,255,0.8);--chip-bg:rgba(20,18,12,0.05);--logo-bg:#14120C;}
-  :root[data-theme="dark"]{--bg:#0B0B0A;--panel:#121210;--soft:#161512;--text:#ECEAE4;--text-strong:#fff;--muted:#96948C;--faint:#66645D;--grid:rgba(255,254,248,0.12);--gridx:rgba(255,254,248,0.30);--grid-bg:rgba(255,254,248,0.035);--accent:#FFFFFF;--accent-ink:#0B0B0A;--accent-weak:rgba(255,255,255,0.10);--btn-bg:#FAF9F6;--btn-fg:#0B0B0A;--kbd-bg:#17160F;--kbd-sh:0 1px 0 rgba(0,0,0,0.6),0 2px 5px rgba(0,0,0,0.5),inset 0 1px 0 rgba(255,255,255,0.08);--chip-bg:rgba(255,255,255,0.06);--logo-bg:#201E17;}
+  :root[data-theme="light"]{--bg:#F5F4F2;--panel:#FFFFFF;--soft:#F8F7F5;--text:#191815;--text-strong:#0A0906;--muted:#66645D;--faint:#98968E;--grid:rgba(20,18,12,0.12);--gridx:rgba(20,18,12,0.30);--grid-bg:rgba(20,18,12,0.035);--accent:#0A0906;--accent-ink:#fff;--accent-weak:rgba(20,18,12,0.07);--btn-bg:#14120C;--btn-fg:#fff;--kbd-bg:#fff;--kbd-sh:0 1px 0 rgba(20,18,12,0.10),0 1.5px 3px rgba(20,18,12,0.07),inset 0 1px 0 rgba(255,255,255,0.8);--chip-bg:rgba(20,18,12,0.05);--logo-bg:#14120C;--frame-sh:0 1px 3px rgba(20,18,12,0.04),0 22px 56px -20px rgba(20,18,12,0.17);--sq:url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNyIgaGVpZ2h0PSIyNyI+PHJlY3Qgd2lkdGg9IjMuNiIgaGVpZ2h0PSIzLjYiIGZpbGw9InJnYmEoMjAsMTgsMTIsMC4xMykiLz48L3N2Zz4=");}
+  :root[data-theme="dark"]{--bg:#0B0B0A;--panel:#121210;--soft:#161512;--text:#ECEAE4;--text-strong:#fff;--muted:#96948C;--faint:#66645D;--grid:rgba(255,254,248,0.12);--gridx:rgba(255,254,248,0.30);--grid-bg:rgba(255,254,248,0.035);--accent:#FFFFFF;--accent-ink:#0B0B0A;--accent-weak:rgba(255,255,255,0.10);--btn-bg:#FAF9F6;--btn-fg:#0B0B0A;--kbd-bg:#17160F;--kbd-sh:0 1px 0 rgba(0,0,0,0.6),0 2px 5px rgba(0,0,0,0.5),inset 0 1px 0 rgba(255,255,255,0.08);--chip-bg:rgba(255,255,255,0.06);--logo-bg:#201E17;--frame-sh:0 1px 3px rgba(0,0,0,0.5),0 22px 56px -20px rgba(0,0,0,0.8);--sq:url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNyIgaGVpZ2h0PSIyNyI+PHJlY3Qgd2lkdGg9IjMuNiIgaGVpZ2h0PSIzLjYiIGZpbGw9InJnYmEoMjU1LDI1NCwyNDgsMC4xMykiLz48L3N2Zz4=");}
 
   * { box-sizing: border-box; }
   html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
@@ -57,7 +59,8 @@
   img, svg { max-width: 100%; display: block; }
 
   body {
-    background: var(--bg); color: var(--text); font-family: var(--sans);
+    background-color: var(--bg); background-image: var(--sq); background-size: 27px 27px;
+    color: var(--text); font-family: var(--sans);
     font-size: 16.5px; line-height: 1.66; letter-spacing: -0.011em;
     -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility; overflow-x: hidden;
@@ -66,11 +69,12 @@
   ::selection { background: var(--accent); color: var(--accent-ink); }
 
   /* ─── 그리드 프레임 ─── */
-  .stage { padding: 0 16px; }
+  .stage { padding: clamp(20px, 5.5vh, 56px) 16px; }
   .frame {
     position: relative; max-width: var(--maxw); margin: 0 auto;
     background: var(--panel);
     border-left: 1px solid var(--grid); border-right: 1px solid var(--grid);
+    box-shadow: var(--frame-sh);
   }
   .rule { position: relative; height: 0; border-top: 1px solid var(--grid); z-index: 3; }
   .rule::before, .rule::after {
@@ -111,11 +115,10 @@
   .hero { position: relative; text-align: center; padding: 5.2rem var(--pad) 4.6rem; overflow: hidden; }
   .hero::before {
     content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none;
-    background-image:
-      repeating-linear-gradient(to right, var(--grid-bg) 0 1px, transparent 1px 46px),
-      repeating-linear-gradient(to bottom, var(--grid-bg) 0 1px, transparent 1px 46px);
-    -webkit-mask-image: radial-gradient(120% 90% at 50% 12%, #000 30%, transparent 78%);
-    mask-image: radial-gradient(120% 90% at 50% 12%, #000 30%, transparent 78%);
+    background-image: var(--sq);
+    background-size: 27px 27px;
+    -webkit-mask-image: radial-gradient(125% 92% at 50% 10%, #000 34%, transparent 80%);
+    mask-image: radial-gradient(125% 92% at 50% 10%, #000 34%, transparent 80%);
   }
   .hero > * { position: relative; z-index: 1; }
 
