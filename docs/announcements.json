@@ -1,6 +1,14 @@
 {
   "announcements": [
     {
+      "id": "2026-07-25-mackor-1-5",
+      "date": "2026-07-25",
+      "kind": "fix",
+      "title": "Mackor 1.5 — 강제 교정 확인 창 추가",
+      "body": "한컴오피스 한글처럼 접근성으로 글자를 읽을 수 없는 앱의 '자판자동'(강제 교정)을 켤 때, 이제 위험(드문 오삭제·⌘Z 복구)을 명시한 확인 창이 뜹니다. 실수로 켜는 일을 막는 안전장치입니다.",
+      "url": "https://github.com/Keilkim/MacKoreanImefixer/releases/tag/v1.5"
+    },
+    {
       "id": "2026-07-25-mackor-1-4",
       "date": "2026-07-25",
       "kind": "notice",
