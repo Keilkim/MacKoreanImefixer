@@ -198,6 +198,18 @@
   .limit b { color: var(--text-strong); font-weight: 600; }
   .limit p { margin: 0; }
 
+  /* 새 소식 */
+  .news-list { margin-top: 2rem; display: grid; gap: 1.4rem; }
+  .news-item { display: grid; gap: 0.4rem; padding-bottom: 1.4rem; border-bottom: 1px solid var(--grid); }
+  .news-item:last-child { border-bottom: none; padding-bottom: 0; }
+  .news-meta { display: flex; align-items: center; gap: 0.6rem; }
+  .news-kind { font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); background: var(--chip-bg); border: 1px solid var(--grid); border-radius: 6px; padding: 0.16rem 0.5rem; }
+  .news-date { font-family: var(--mono); font-size: 0.72rem; color: var(--faint); }
+  .news-item h3 { margin: 0; font-size: 1.06rem; font-weight: 620; letter-spacing: -0.015em; color: var(--text-strong); }
+  .news-item p { margin: 0; color: var(--muted); font-size: 0.98rem; line-height: 1.58; }
+  .news-item .news-link { align-self: start; margin-top: 0.2rem; color: var(--text-strong); font-size: 0.9rem; text-decoration: none; border-bottom: 1px solid var(--gridx); transition: border-color 0.25s var(--spring); }
+  .news-item .news-link:hover { border-color: var(--accent); }
+
   /* 마무리 */
   .closer { text-align: center; padding: 4.6rem var(--pad); }
   .closer .mark { font-size: clamp(2rem, 6.5vw, 3.1rem); font-weight: 680; letter-spacing: -0.035em; color: var(--text-strong); margin: 0 0 0.45rem; }
@@ -292,6 +304,14 @@
     </header>
 
     <div class="rule"></div>
+
+    <section class="cell reveal" id="news" hidden>
+      <p class="label">새 소식</p>
+      <h2 class="sec">업데이트와 공지</h2>
+      <div class="news-list" id="newsList"></div>
+    </section>
+
+    <div class="rule" id="newsRule" hidden></div>
 
     <section class="cell reveal">
       <p class="label">무엇을 고치나</p>
@@ -440,6 +460,62 @@
       var io = new IntersectionObserver(function (entries) { entries.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } }); }, { threshold: 0.12 });
       els.forEach(function (el) { io.observe(el); });
     }
+
+    // 새 소식 — 앱과 같은 announcements.json을 읽어 릴리스처럼 표시합니다.
+    // 같은 GitHub Pages 오리진의 상대 경로라 외부 요청·추적이 아니며,
+    // JS가 없거나 파일이 없으면 섹션은 조용히 숨긴 채로 둡니다(점진적 향상).
+    var KIND_LABELS = { apps: "새 지원 앱", fix: "버그 수정", notice: "공지" };
+    fetch("announcements.json", { cache: "no-cache" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        if (!data || !Array.isArray(data.announcements) || !data.announcements.length) return;
+        var list = document.getElementById("newsList");
+        var section = document.getElementById("news");
+        var rule = document.getElementById("newsRule");
+        if (!list || !section) return;
+        data.announcements.slice(0, 6).forEach(function (a) {
+          if (!a || typeof a.title !== "string" || !a.title) return;
+          var item = document.createElement("div");
+          item.className = "news-item";
+          var meta = document.createElement("div");
+          meta.className = "news-meta";
+          var kind = document.createElement("span");
+          kind.className = "news-kind";
+          kind.textContent = KIND_LABELS[a.kind] || "공지";
+          meta.appendChild(kind);
+          if (typeof a.date === "string" && a.date) {
+            var date = document.createElement("span");
+            date.className = "news-date";
+            date.textContent = a.date;
+            meta.appendChild(date);
+          }
+          item.appendChild(meta);
+          var h = document.createElement("h3");
+          h.textContent = a.title;
+          item.appendChild(h);
+          if (typeof a.body === "string" && a.body) {
+            var p = document.createElement("p");
+            p.textContent = a.body;
+            item.appendChild(p);
+          }
+          if (typeof a.url === "string" && a.url.indexOf("https://") === 0) {
+            var link = document.createElement("a");
+            link.className = "news-link";
+            link.href = a.url;
+            link.target = "_blank";
+            link.rel = "noopener";
+            link.textContent = "자세히 보기 →";
+            item.appendChild(link);
+          }
+          list.appendChild(item);
+        });
+        if (list.children.length) {
+          section.hidden = false;
+          section.classList.add("in");
+          if (rule) rule.hidden = false;
+        }
+      })
+      .catch(function () {});
   })();
 </script>
 </body>

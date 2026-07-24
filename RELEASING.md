@@ -128,7 +128,8 @@ dist/releases/<version>-<build>/
 
 - 호스팅: **GitHub Pages** — 저장소 **Settings → Pages → Source: `Deploy from a branch` → `main` / `/docs`**. 게시 주소는 `https://keilkim.github.io/MacKoreanImefixer/`입니다.
 - 다운로드 버튼은 `https://github.com/Keilkim/MacKoreanImefixer/releases/latest/download/Mackor.dmg`를 가리킵니다. 이 링크는 §3 1단계에서 올린 **고정 이름 별칭**이 있어야 동작하며, `verify-published.sh`가 그 존재·동일성을 검사합니다. 별칭이 없는 릴리스에서는 404가 납니다.
-- 페이지는 순수 정적 HTML/CSS/JS 한 파일이며 외부 요청·추적이 없습니다. 문구·예시는 README와 앱의 실제 동작 범위에 맞춰 유지합니다.
+- 페이지는 순수 정적 HTML/CSS/JS 한 파일이며 외부(서드파티) 요청·추적이 없습니다. 유일한 요청은 같은 오리진의 `announcements.json`(앱과 공유하는 공지 소스)을 읽어 "새 소식"을 릴리스처럼 표시하는 것뿐이며, 파일이 없거나 JS가 없으면 그 섹션은 조용히 숨깁니다. 문구·예시는 README와 앱의 실제 동작 범위에 맞춰 유지합니다.
+- 공지 게시는 릴리스와 별개입니다. `docs/announcements.json`의 `announcements` 배열 맨 앞에 `{ "id", "date", "kind": "apps"|"fix"|"notice", "title", "body", "url"(선택) }` 항목을 추가해 커밋·push하면, 설치된 앱의 알림과 이 랜딩이 같은 소스로 함께 갱신됩니다. `id`는 한 번 정하면 바꾸지 않습니다(수정은 새 항목으로).
 
 ### Sparkle 피드와의 순서 주의
 

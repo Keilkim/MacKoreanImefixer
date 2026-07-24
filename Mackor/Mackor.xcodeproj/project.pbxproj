@@ -20,6 +20,7 @@
 		A100000B /* CorrectionNoticeController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000D; };
 		A100000C /* InputSourceController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A200000E; };
 		D1000001 /* UpdaterController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000001; };
+		F1000001 /* AnnouncementCenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2000001; };
 		D1000002 /* SparkleUpdateConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000002; };
 		D1000003 /* SparkleUpdateConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000002; };
 		D1000004 /* SparkleUpdateConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000003; };
@@ -58,6 +59,8 @@
 		E1000096 /* AppSupportRequestTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2000096; };
 		E1000024 /* GoldenCorpusParityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2000024; };
 		E1000025 /* AppMonitorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2000025; };
+		E1000200 /* AnnouncementCenterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2000200; };
+		E1000201 /* AnnouncementCenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2000001; };
 		E1000030 /* LexicalTiebreaker.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2000030; };
 		E1000031 /* LexicalTiebreaker.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2000030; };
 		E1000090 /* LexicalGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2000090; };
@@ -89,6 +92,7 @@
 		A200000D /* CorrectionNoticeController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CorrectionNoticeController.swift; sourceTree = "<group>"; };
 		A200000E /* InputSourceController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputSourceController.swift; sourceTree = "<group>"; };
 		D2000001 /* UpdaterController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdaterController.swift; sourceTree = "<group>"; };
+		F2000001 /* AnnouncementCenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnouncementCenter.swift; sourceTree = "<group>"; };
 		D2000002 /* SparkleUpdateConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SparkleUpdateConfiguration.swift; sourceTree = "<group>"; };
 		D2000003 /* SparkleUpdateConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SparkleUpdateConfigurationTests.swift; sourceTree = "<group>"; };
 		A2000010 /* Mackor.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Mackor.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -113,6 +117,7 @@
 		E2000096 /* AppSupportRequestTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSupportRequestTests.swift; sourceTree = "<group>"; };
 		E2000024 /* GoldenCorpusParityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoldenCorpusParityTests.swift; sourceTree = "<group>"; };
 		E2000025 /* AppMonitorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppMonitorTests.swift; sourceTree = "<group>"; };
+		E2000200 /* AnnouncementCenterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnouncementCenterTests.swift; sourceTree = "<group>"; };
 		E2000030 /* LexicalTiebreaker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LexicalTiebreaker.swift; sourceTree = "<group>"; };
 		E2000090 /* LexicalGuard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LexicalGuard.swift; sourceTree = "<group>"; };
 		E2000036 /* MonosyllableLexicon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonosyllableLexicon.swift; sourceTree = "<group>"; };
@@ -195,6 +200,7 @@
 				E2000035 /* ko-mono.v1.txt */,
 				D2000002 /* SparkleUpdateConfiguration.swift */,
 				D2000001 /* UpdaterController.swift */,
+				F2000001 /* AnnouncementCenter.swift */,
 				A200000A /* Assets.xcassets */,
 				A2000006 /* Info.plist */,
 				A2000007 /* Mackor.entitlements */,
@@ -221,6 +227,7 @@
 				E2000096 /* AppSupportRequestTests.swift */,
 				E2000024 /* GoldenCorpusParityTests.swift */,
 				E2000025 /* AppMonitorTests.swift */,
+				E2000200 /* AnnouncementCenterTests.swift */,
 				E2000032 /* LexicalTiebreakerParityTests.swift */,
 				D2000003 /* SparkleUpdateConfigurationTests.swift */,
 			);
@@ -342,6 +349,7 @@
 				E1000038 /* AppSupportRequest.swift in Sources */,
 				D1000002 /* SparkleUpdateConfiguration.swift in Sources */,
 				D1000001 /* UpdaterController.swift in Sources */,
+				F1000001 /* AnnouncementCenter.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -383,6 +391,8 @@
 				E1000096 /* AppSupportRequestTests.swift in Sources */,
 				E1000024 /* GoldenCorpusParityTests.swift in Sources */,
 				E1000025 /* AppMonitorTests.swift in Sources */,
+				E1000200 /* AnnouncementCenterTests.swift in Sources */,
+				E1000201 /* AnnouncementCenter.swift in Sources */,
 				E1000032 /* LexicalTiebreakerParityTests.swift in Sources */,
 				D1000003 /* SparkleUpdateConfiguration.swift in Sources */,
 				D1000004 /* SparkleUpdateConfigurationTests.swift in Sources */,
