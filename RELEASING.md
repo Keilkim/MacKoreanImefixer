@@ -18,20 +18,20 @@ Developer ID, notarytool 프로필과 Sparkle 개인키는 공식 배포 관리�
 
 GitHub 소스 공개와 Apple 공증은 별개입니다. 공개 저장소에서 기여를 받고, 검토·테스트를 통과한 커밋만 관리자의 Developer ID와 Sparkle 키로 공식 배포합니다.
 
-## 현재 공식 배포 차단 조건
+## 공식 배포 게이트 (첫 릴리스에서 전부 통과)
 
-2026-07-22 현재 `Developer ID Application: SEONGHUN KIM (TZQ9JL6R7R)`와 `Developer ID Installer: SEONGHUN KIM (TZQ9JL6R7R)`가 모두 유효하며, `build-installer.sh`의 공식 경로(`REQUIRE_SIGNING=1`)를 실제로 완주해 다음을 확인했습니다. 따라서 서명은 더 이상 차단 조건이 아닙니다.
+첫 공식 릴리스 **v1.3(build 9)**이 2026-07-25에 아래 게이트를 모두 통과해 게시되었습니다. `Developer ID Application: SEONGHUN KIM (TZQ9JL6R7R)`와 `Developer ID Installer: SEONGHUN KIM (TZQ9JL6R7R)`가 유효하며, `build-installer.sh`의 공식 경로(`REQUIRE_SIGNING=1`, `REQUIRE_NOTARIZATION=1`)를 완주해 다음을 확인했습니다.
 
-- 전체 XCTest 213개 통과
+- 전체 XCTest 통과
 - 앱이 `x86_64 arm64` 유니버설
 - 최상위 앱 `valid on disk` + `satisfies its Designated Requirement`, 중첩 Sparkle XPC(Downloader·Installer)와 Updater.app까지 validated
 - PKG가 `Developer ID Installer` 서명 + 신뢰된 타임스탬프, 체인이 `Developer ID Certification Authority` → `Apple Root CA`까지 완결
 - DMG 서명·검증 통과
-- `spctl -a -t install` 결과가 `rejected / source=Unnotarized Developer ID` — 서명은 정상이고 공증만 남았다는 뜻
+- 앱·PKG·DMG 각각 Apple 공증 `Accepted` + staple, `spctl` 결과가 `accepted / source=Notarized Developer ID`
 
-남은 차단 조건은 공증과 Sparkle 배포 입력값입니다. `notarytool` 자격 증명을 Keychain에 저장한 것은 제출 준비일 뿐이며, 현재 Mackor 최종 산출물은 아직 제출·`Accepted`·staple되지 않았습니다. 또한 `REQUIRE_NOTARIZATION=1` 경로는 `MACKOR_UPDATE_FEED_URL`과 `MACKOR_SPARKLE_PUBLIC_ED_KEY`를 요구하는데, feed URL은 빌드 시점에 앱에 박히므로(`Info.plist`의 `SUFeedURL`) 호스팅 위치를 확정하기 전에 공증본을 만들면 그 빌드는 영구히 자동 업데이트를 받을 수 없습니다. Sparkle 배포 도구(`generate_appcast`)도 SPM checkout에는 포함되지 않아 별도로 받아야 합니다.
+feed URL은 빌드 시점에 앱에 박히므로(`Info.plist`의 `SUFeedURL`) 호스팅 위치를 먼저 확정한 뒤 공증본을 만들어야 그 빌드가 자동 업데이트를 받을 수 있습니다. v1.3은 `https://keilkim.github.io/MacKoreanImefixer/appcast.xml`로 확정한 뒤 구웠습니다. Sparkle 배포 도구(`generate_appcast`)는 SPM checkout에 포함되지 않아 별도로 받아야 합니다.
 
-스크립트는 이 문제를 숨기지 않습니다. 다음 중 하나라도 충족되지 않으면 실패합니다.
+이후 모든 릴리스도 같은 게이트를 통과해야 합니다. 스크립트는 이 문제를 숨기지 않으며, 다음 중 하나라도 충족되지 않으면 실패합니다.
 
 - 전체 테스트 통과
 - arm64와 x86_64가 모두 포함된 앱

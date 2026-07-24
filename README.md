@@ -6,7 +6,7 @@
 
 Mackor은 사용자가 등록한 앱이 앞에 있고 macOS 한글 입력기가 활성화된 동안, 키 입력을 두벌식 한글로 직접 조합해 전달합니다. 이 기존 조합 보정은 등록한 앱에서만 작동합니다.
 
-현재 개발 중인 1.3에는 입력 소스를 잘못 선택해 입력한 단어를 로컬에서 판단해 바꾸는 실험적 자동 교정도 포함됩니다. 자동 교정 적용 범위는 메뉴에서 `앱을 가리지 않고 적용` 또는 `선택한 앱만`으로 고를 수 있으며, 기존 사용자는 안전을 위해 선택 앱 모드로 시작합니다.
+1.3부터는 입력 소스를 잘못 선택해 입력한 단어를 로컬에서 판단해 바꾸는 실험적 자동 교정도 포함됩니다. 자동 교정 적용 범위는 메뉴에서 `앱을 가리지 않고 적용` 또는 `선택한 앱만`으로 고를 수 있으며, 기존 사용자는 안전을 위해 선택 앱 모드로 시작합니다.
 
 ## 알려진 한계 (먼저 읽어 주세요)
 
@@ -110,9 +110,9 @@ Mackor은 설치 경로를 두 트랙으로 유지합니다.
 
 ### 일반 사용자: PKG 더블클릭 설치
 
-> 현재 공증된 Mackor 공식 설치 파일은 아직 게시되지 않았습니다. 기존 최신 `1.1` 자산은 legacy CorelHangulFix 계열이며 Mackor 1.3 설치 파일이 아닙니다. 아래 절차는 첫 공식 Mackor 릴리스부터 적용됩니다.
+> 첫 공식 Mackor 릴리스 **v1.3**이 Developer ID 서명·Apple 공증을 통과해 게시되어 있습니다. 웹사이트([keilkim.github.io/MacKoreanImefixer](https://keilkim.github.io/MacKoreanImefixer/))의 다운로드 버튼은 항상 최신 DMG를 가리키며, 아래 PKG 경로가 처음 설치에 권장됩니다. 예전 `1.1` 자산은 legacy CorelHangulFix 계열이며 Mackor 설치 파일이 아닙니다.
 
-1. [최신 릴리스](../../releases/latest)에서 `Mackor-<버전>-<빌드>.pkg`를 받습니다.
+1. [최신 릴리스](../../releases/latest)에서 `Mackor-<버전>-<빌드>.pkg`(예: `Mackor-1.3-9.pkg`)를 받습니다.
 2. 내려받은 PKG를 더블클릭하고 Installer 안내에 따라 설치합니다. `/Applications` 설치를 위해 macOS 로컬 관리자 인증을 한 번 요구할 수 있지만 Apple 계정이나 앱 암호는 필요하지 않습니다.
 3. 설치가 끝나면 `/Applications/Mackor.app`을 직접 실행합니다.
 
@@ -132,7 +132,7 @@ GitHub의 자동 생성 `Source code.zip`에는 미리 빌드된 앱이나 PKG�
 
 ### 업데이트와 변경사항
 
-첫 공식 Mackor 1.3 updater 기준선 이후의 공식 배포판부터 Mackor 메뉴에서 다음 항목을 사용할 수 있습니다. legacy CorelHangulFix나 MacKR 설치본은 이 자동 업데이트 경로에 연결되지 않습니다.
+Mackor 1.3이 첫 공식 updater 기준선이며, 1.3부터 Mackor 메뉴에서 다음 항목을 사용할 수 있습니다. legacy CorelHangulFix나 MacKR 설치본은 번들 ID가 달라 이 자동 업데이트 경로에 연결되지 않으므로, 그 사용자는 아래 [삭제](#삭제) 안내대로 옛 앱을 정리한 뒤 v1.3을 새로 설치해야 합니다.
 
 - `업데이트 확인…`: 새 버전을 확인하고 변경사항을 읽은 뒤 설치하고 다시 실행합니다.
 - `이번 버전 변경사항…`: 현재 버전의 GitHub Release 설명을 엽니다.
@@ -312,12 +312,27 @@ xcrun stapler validate dist/local-build/Mackor.dmg
 
 | 항목 | 내용 |
 |------|------|
-| 소스 버전 | 1.3 (개발 중) |
-| 최신 공개 배포 | legacy CorelHangulFix 1.1; 첫 공식 Mackor 기준선은 아직 미배포 |
+| 소스 버전 | 1.3 (build 9) |
+| 최신 공개 배포 | **v1.3** — 첫 공식 Mackor 릴리스(2026-07-25, 서명·공증 완료) |
 | 개발사 | Draftup |
 | 개발자 | SEONGHUN KIM / draftup@naver.com |
 
-문제가 있으면 [Issues](../../issues)에 재현할 앱과 macOS 버전을 남겨주세요.
+문제가 있으면 [Issues](../../issues)에 재현할 앱과 macOS 버전을 남겨주세요. 취약점은 [SECURITY.md](SECURITY.md)의 비공개 경로로 알려 주세요.
+
+## 문서 지도
+
+저장소에는 설계 문서가 여러 개 있습니다. 새로 오셨다면 아래 **살아있는 문서**부터 읽으세요. 나머지는 판단 근거를 보존한 기록이라 최신 구현과 다를 수 있습니다.
+
+| 문서 | 성격 | 상태 |
+|------|------|------|
+| [ARCHITECTURE.md](ARCHITECTURE.md) | 구조·원리·개인정보 경계·외부 검토 체크리스트 | 살아있는 문서 (1.3 기준) |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | 기여·요청 방식, 로컬 빌드, 동결 자산 갱신 절차 | 살아있는 문서 |
+| [RELEASING.md](RELEASING.md) | 서명·공증·appcast 게시 절차 | 살아있는 문서 |
+| [STRUCTURE_CORRECTION_DESIGN4.md](STRUCTURE_CORRECTION_DESIGN4.md) | 교정 엔진 v4 설계 | 구현 완료 (v4.2) |
+| [MONOSYLLABLE_CORRECTION.md](MONOSYLLABLE_CORRECTION.md) | 한 글자 교정 계층의 근거·계약 | 살아있는 기록 |
+| [CORRECTION_METHOD.md](CORRECTION_METHOD.md) · [REQUIREMENTS.md](REQUIREMENTS.md) | 방식 총정리·요구사항 고정 | 참고 기록 |
+| [docs/HYBRID_DESIGN.md](docs/HYBRID_DESIGN.md) · [MIGRATION_PLAN.md](MIGRATION_PLAN.md) | IMK 하이브리드 검토·실행 계획 | ⏸ 보류 (2026-07-21, 미착수 단계 있음) |
+| [STRUCTURE_CORRECTION_DESIGN3.md](STRUCTURE_CORRECTION_DESIGN3.md) | v4 이전 설계 초안 | 역사 기록 (v4로 대체됨) |
 
 ## 라이선스
 

@@ -1,10 +1,10 @@
 # Mackor 양방향 자판 오입력 구조 판정 설계안 v3
 
-> 상태: **구현 동기화 Review Draft**
+> 상태: **역사 기록** — 현행 설계는 [STRUCTURE_CORRECTION_DESIGN4.md](STRUCTURE_CORRECTION_DESIGN4.md)(구현 완료 v4.2)로 대체되었습니다. 이 문서는 v4에 이르기까지의 판단 근거를 보존한 기록입니다.
 > 작성 기준일: 2026-07-20 KST
 > 기준 작업 트리: base commit `9cc455c46e2a` + 로컬 미커밋 변경
 > 검토 환경: macOS 26.3.1, Xcode 26.5
-> 선행 문서: [`STRUCTURAL_CORRECTION_DESIGN.md`](STRUCTURAL_CORRECTION_DESIGN.md), [`STRUCTURAL_CORRECTION_DESIGN2.md`](STRUCTURAL_CORRECTION_DESIGN2.md)
+> 선행 문서: v1·v2 설계안(`STRUCTURAL_CORRECTION_DESIGN.md`, `STRUCTURAL_CORRECTION_DESIGN2.md`) — 저장소에 보존되지 않은 역사 기록
 
 ---
 
