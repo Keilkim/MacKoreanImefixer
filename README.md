@@ -110,9 +110,9 @@ Mackor은 설치 경로를 두 트랙으로 유지합니다.
 
 ### 일반 사용자: PKG 더블클릭 설치
 
-> 첫 공식 Mackor 릴리스 **v1.3**이 Developer ID 서명·Apple 공증을 통과해 게시되어 있습니다. 웹사이트([keilkim.github.io/MacKoreanImefixer](https://keilkim.github.io/MacKoreanImefixer/))의 다운로드 버튼은 항상 최신 DMG를 가리키며, 아래 PKG 경로가 처음 설치에 권장됩니다. 예전 `1.1` 자산은 legacy CorelHangulFix 계열이며 Mackor 설치 파일이 아닙니다.
+> Mackor 공식 설치 파일은 Developer ID 서명·Apple 공증을 통과해 게시됩니다. 웹사이트([keilkim.github.io/MacKoreanImefixer](https://keilkim.github.io/MacKoreanImefixer/))의 다운로드 버튼은 항상 최신 DMG를 가리키며, 아래 PKG 경로가 처음 설치에 권장됩니다. 예전 `1.1` 자산은 legacy CorelHangulFix 계열이며 Mackor 설치 파일이 아닙니다.
 
-1. [최신 릴리스](../../releases/latest)에서 `Mackor-<버전>-<빌드>.pkg`(예: `Mackor-1.3-9.pkg`)를 받습니다.
+1. [최신 릴리스](../../releases/latest)에서 `Mackor-<버전>-<빌드>.pkg`(예: `Mackor-1.4-10.pkg`)를 받습니다.
 2. 내려받은 PKG를 더블클릭하고 Installer 안내에 따라 설치합니다. `/Applications` 설치를 위해 macOS 로컬 관리자 인증을 한 번 요구할 수 있지만 Apple 계정이나 앱 암호는 필요하지 않습니다.
 3. 설치가 끝나면 `/Applications/Mackor.app`을 직접 실행합니다.
 
@@ -132,7 +132,7 @@ GitHub의 자동 생성 `Source code.zip`에는 미리 빌드된 앱이나 PKG�
 
 ### 업데이트와 변경사항
 
-Mackor 1.3이 첫 공식 updater 기준선이며, 1.3부터 Mackor 메뉴에서 다음 항목을 사용할 수 있습니다. legacy CorelHangulFix나 MacKR 설치본은 번들 ID가 달라 이 자동 업데이트 경로에 연결되지 않으므로, 그 사용자는 아래 [삭제](#삭제) 안내대로 옛 앱을 정리한 뒤 v1.3을 새로 설치해야 합니다.
+Mackor 1.3이 첫 공식 updater 기준선이며, 1.3부터 Mackor 메뉴에서 다음 항목을 사용할 수 있습니다. legacy CorelHangulFix나 MacKR 설치본은 번들 ID가 달라 이 자동 업데이트 경로에 연결되지 않으므로, 그 사용자는 아래 [삭제](#삭제) 안내대로 옛 앱을 정리한 뒤 최신 버전을 새로 설치해야 합니다.
 
 - `업데이트 확인…`: 새 버전을 확인하고 변경사항을 읽은 뒤 설치하고 다시 실행합니다.
 - `이번 버전 변경사항…`: 현재 버전의 GitHub Release 설명을 엽니다.
@@ -294,8 +294,8 @@ MACKOR_SPARKLE_PUBLIC_ED_KEY="PUBLIC_KEY" \
 | `REQUIRE_NOTARIZATION` | `1`이면 공증 설정·승인·스테이플 검증이 없을 때 공개 빌드를 중단 |
 | `MACKOR_UPDATE_FEED_URL` | 공개 HTTPS Sparkle appcast 주소 |
 | `MACKOR_SPARKLE_PUBLIC_ED_KEY` | 업데이트 검증용 공개키; 개인키는 저장소 밖 Keychain 또는 release secret에만 보관 |
-| `VERSION` | 표시 버전; 기본값 `1.3` |
-| `BUILD_NUMBER` | `CFBundleVersion`; 기본값 `9` |
+| `VERSION` | 표시 버전; 기본값 `1.4` |
+| `BUILD_NUMBER` | `CFBundleVersion`; 기본값 `10` |
 
 `REQUIRE_NOTARIZATION=1`과 `NOTARY_PROFILE`을 함께 지정하면 앱 공증용 archive, PKG, DMG를 각각 Apple에 제출합니다. 모두 승인된 뒤 앱·PKG·DMG에 티켓을 스테이플하고, 스테이플된 앱으로 Sparkle 업데이트 ZIP을 새로 만듭니다. appcast는 업데이트 자산을 먼저 게시한 뒤 가장 마지막에 공개해야 합니다.
 
@@ -312,8 +312,8 @@ xcrun stapler validate dist/local-build/Mackor.dmg
 
 | 항목 | 내용 |
 |------|------|
-| 소스 버전 | 1.3 (build 9) |
-| 최신 공개 배포 | **v1.3** — 첫 공식 Mackor 릴리스(2026-07-25, 서명·공증 완료) |
+| 소스 버전 | 1.4 (build 10) |
+| 최신 공개 배포 | **v1.4** (2026-07-25, 서명·공증 완료). v1.3이 첫 공식 릴리스 |
 | 개발사 | Draftup |
 | 개발자 | SEONGHUN KIM / draftup@naver.com |
 
