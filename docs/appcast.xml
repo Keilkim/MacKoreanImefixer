@@ -1,8 +1,20 @@
-<?xml version="1.0" standalone="yes"?><!-- sparkle-sign-warning:
+<?xml version="1.0" standalone="yes"?>
+<!-- sparkle-sign-warning:
 IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
---><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+-->
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
     <channel>
         <title>Mackor</title>
+        <item>
+            <title>1.4</title>
+            <pubDate>Sat, 25 Jul 2026 02:14:42 +0900</pubDate>
+            <link>https://github.com/Keilkim/MacKoreanImefixer/releases/download/v1.4</link>
+            <sparkle:version>10</sparkle:version>
+            <sparkle:shortVersionString>1.4</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <sparkle:releaseNotesLink sparkle:edSignature="lawYA8m4MlwNqH1EUTHI2N4aJ55Dj4eVE3PhHL2eM3eBNdYDHtdnnbXAB4Rj7+pTEj3rsD5QDvEWeV6DTgPaBA==" sparkle:length="1822">https://github.com/Keilkim/MacKoreanImefixer/releases/download/v1.4/Mackor-1.4-10.md</sparkle:releaseNotesLink>
+            <enclosure url="https://github.com/Keilkim/MacKoreanImefixer/releases/download/v1.4/Mackor-1.4-10.zip" length="2515008" type="application/octet-stream" sparkle:edSignature="QHXD/xTLCYAMPqtSrd1O6mvgNzktVuo5I3XnzfH76my6INaS7dxv0IVw268/sCKfmuCggZtMYwpK1nGP3XA0BA=="/>
+        </item>
         <item>
             <title>1.3</title>
             <pubDate>Fri, 24 Jul 2026 19:29:33 +0900</pubDate>
@@ -11,10 +23,11 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
             <sparkle:shortVersionString>1.3</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
             <sparkle:releaseNotesLink sparkle:edSignature="yfnwiMl0twOxbI22LLwuvCI//iUxoLDwl06omrFCraZeWMjNfrC/PnQ+stzqafePJn3LxcF6FQSuNbXuy18ZCg==" sparkle:length="2489">https://github.com/Keilkim/MacKoreanImefixer/releases/download/v1.3/Mackor-1.3-9.md</sparkle:releaseNotesLink>
-            <enclosure url="https://github.com/Keilkim/MacKoreanImefixer/releases/download/v1.3/Mackor-1.3-9.zip" length="2454611" type="application/octet-stream" sparkle:edSignature="skCo09VWbkD+CbNN1FKmxSt2IUJbxMtPCeVRyxJpVOiOILdzxlfKW8q8MryD2EqVjUD5VRW9rWBHwF2cP4YMBA=="></enclosure>
+            <enclosure url="https://github.com/Keilkim/MacKoreanImefixer/releases/download/v1.3/Mackor-1.3-9.zip" length="2454611" type="application/octet-stream" sparkle:edSignature="skCo09VWbkD+CbNN1FKmxSt2IUJbxMtPCeVRyxJpVOiOILdzxlfKW8q8MryD2EqVjUD5VRW9rWBHwF2cP4YMBA=="/>
         </item>
     </channel>
-</rss><!-- sparkle-signatures:
-edSignature: I8GgJj6WkV7QaS+Ze76Z4TAZxPDHQgS6jVd31Ne/ZLgyFokhIVDA75SrupCipmpEtVLwYOcrT9Kl6RsQGBodCw==
-length: 1414
+</rss>
+<!-- sparkle-signatures:
+edSignature: 5HWDTAt6M+7j4istb1eaXgOfwGuRbOOpLbje4xq8rXq9Mx8iDqVgdiWgBWDZD8RfUyslz43daEO2pVaERrqeBQ==
+length: 2385
 -->
