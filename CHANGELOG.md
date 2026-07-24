@@ -6,6 +6,16 @@ Mackor의 사용자에게 보이는 변경 사항을 이 파일에 기록합니�
 
 ## [Unreleased]
 
+## [1.4] — 2026-07-25
+
+### 추가
+
+- **운영자 공지·새 소식 알림.** 새로 지원되는 앱, 버그 수정, 공지 같은 소식이 있으면 메뉴바의 `Mackor`에 점(●)이 뜨고, 패널의 알림(종) 버튼이 부드럽게 깜빡입니다. 종을 누르면 새 소식 목록을 볼 수 있고, 열면 확인 처리되어 표시가 사라집니다. 공지는 업데이트와 같은 GitHub Pages에서 받아오며 **추적이나 식별자가 없고**, 설정의 `새 소식 확인`으로 끌 수 있습니다(끄면 네트워크 요청을 하지 않습니다). 같은 소식이 웹사이트(`https://keilkim.github.io/MacKoreanImefixer/`)에도 함께 표시됩니다.
+
+### 변경
+
+- 릴리스·자동 업데이트 배포의 안전장치를 강화했습니다(설치·사용 동작에는 변화가 없습니다). 자동 업데이트 피드가 과거 버전 항목을 잃지 않도록 보존하고, 게시 후 자산·서명·다운로드 링크를 원격에서 자동 재검증합니다. 버그 신고·기능 제안·보안 취약점 신고 경로를 저장소에 정비했습니다.
+
 ## [1.3] — 2026-07-25
 
 첫 공식 Mackor 릴리스입니다. Developer ID 서명·Apple 공증·Sparkle EdDSA 서명을 모두 통과해 게시되었습니다.
@@ -112,5 +122,6 @@ v1.3부터 Return·숫자패드 Enter·Tab에서 흐름을 뒤집어 처리합�
 함께 표시하고, 수명을 ⌘Z 트랜잭션과 같은 6초로 맞췄습니다. 칩은 사라졌는데
 되돌리기는 아직 되는 간극이 없어집니다.
 
-[Unreleased]: https://github.com/Keilkim/MacKoreanImefixer/compare/v1.3...HEAD
+[Unreleased]: https://github.com/Keilkim/MacKoreanImefixer/compare/v1.4...HEAD
+[1.4]: https://github.com/Keilkim/MacKoreanImefixer/compare/v1.3...v1.4
 [1.3]: https://github.com/Keilkim/MacKoreanImefixer/compare/v1.1...v1.3
