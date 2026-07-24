@@ -59,8 +59,7 @@
   img, svg { max-width: 100%; display: block; }
 
   body {
-    background-color: var(--bg); background-image: var(--sq); background-size: 27px 27px;
-    color: var(--text); font-family: var(--sans);
+    background: var(--bg); color: var(--text); font-family: var(--sans);
     font-size: 16.5px; line-height: 1.66; letter-spacing: -0.011em;
     -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility; overflow-x: hidden;
@@ -69,12 +68,11 @@
   ::selection { background: var(--accent); color: var(--accent-ink); }
 
   /* ─── 그리드 프레임 ─── */
-  .stage { padding: clamp(20px, 5.5vh, 56px) 16px; }
+  .stage { padding: 0 16px; }
   .frame {
     position: relative; max-width: var(--maxw); margin: 0 auto;
     background: var(--panel);
     border-left: 1px solid var(--grid); border-right: 1px solid var(--grid);
-    box-shadow: var(--frame-sh);
   }
   .rule { position: relative; height: 0; border-top: 1px solid var(--grid); z-index: 3; }
   .rule::before, .rule::after {
