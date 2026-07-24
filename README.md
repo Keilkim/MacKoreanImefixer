@@ -325,7 +325,7 @@ xcrun stapler validate dist/local-build/Mackor.dmg
 
 | 문서 | 성격 | 상태 |
 |------|------|------|
-| [ARCHITECTURE.md](ARCHITECTURE.md) | 구조·원리·개인정보 경계·외부 검토 체크리스트 | 살아있는 문서 (1.3 기준) |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | 구조·원리·개인정보 경계·외부 검토 체크리스트 | 살아있는 문서 (1.4 기준) |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 기여·요청 방식, 로컬 빌드, 동결 자산 갱신 절차 | 살아있는 문서 |
 | [RELEASING.md](RELEASING.md) | 서명·공증·appcast 게시 절차 | 살아있는 문서 |
 | [STRUCTURE_CORRECTION_DESIGN4.md](STRUCTURE_CORRECTION_DESIGN4.md) | 교정 엔진 v4 설계 | 구현 완료 (v4.2) |

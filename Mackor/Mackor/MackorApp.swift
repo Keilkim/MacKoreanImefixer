@@ -646,6 +646,7 @@ struct MackorPanel: View {
     @State private var showingSettings = false
     @State private var showingAnnouncements = false
     @State private var pendingAutoApp: PanelAppItem?
+    @State private var pendingBlindApp: PanelAppItem?
     @State private var pendingAllAppsScope = false
 
     init(coordinator: AppCoordinator) {
@@ -714,6 +715,22 @@ struct MackorPanel: View {
             Button("취소", role: .cancel) { pendingAllAppsScope = false }
         } message: {
             Text("모든 앱·웹사이트의 지원되는 입력란에 적용됩니다. 비밀번호·주소·보안 필드는 제외됩니다.")
+        }
+        .alert(
+            "강제 교정을 켤까요?",
+            isPresented: Binding(
+                get: { pendingBlindApp != nil },
+                set: { if !$0 { pendingBlindApp = nil } }
+            ),
+            presenting: pendingBlindApp
+        ) { item in
+            Button("강제로 켜기") {
+                targetAppManager.setBlindAutoCorrection(true, bundleID: item.bundleID, name: item.name)
+                pendingBlindApp = nil
+            }
+            Button("취소", role: .cancel) { pendingBlindApp = nil }
+        } message: { item in
+            Text("\(item.name)은 접근성으로 글자를 읽을 수 없어, 화면을 확인하지 않고 지웠다 다시 쓰는 방식으로 강제 교정합니다. 드물게 글자를 잘못 지울 수 있으며 ⌘Z로 되돌릴 수 있습니다. 위험을 아는 경우에만 켜세요.")
         }
     }
 
@@ -1147,9 +1164,15 @@ struct MackorPanel: View {
                 )
             },
             set: { enable in
-                targetAppManager.setBlindAutoCorrection(
-                    enable, bundleID: item.bundleID, name: item.name
-                )
+                if enable {
+                    // 가장 파괴적인 기능(검증 없이 지우고 다시 씀)이므로, 켜기 전에
+                    // 위험을 명시한 확인창을 띄우고 실제 활성화는 거기서 확정합니다.
+                    pendingBlindApp = item
+                } else {
+                    targetAppManager.setBlindAutoCorrection(
+                        false, bundleID: item.bundleID, name: item.name
+                    )
+                }
             }
         )
     }
