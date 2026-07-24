@@ -94,11 +94,17 @@ func findText(_ root: AXUIElement, maxNodes: Int = 6000) -> [(depth: Int, el: AX
         seen += 1
         let r = role(el)
         let attrs = Set(attrNames(el))
+        let params = paramAttrNames(el)
         let capable = textRoles.contains(r)
             || attrs.contains("AXSelectedTextRange")
             || attrs.contains("AXNumberOfCharacters")
             || (attrs.contains("AXValue") && copyAttr(el, "AXValue") is String)
-            || paramAttrNames(el).contains("AXStringForRange")
+            || params.contains("AXStringForRange")
+            // WebKit·커스텀 텍스트뷰 계열: 텍스트를 TextMarker로만 노출한다.
+            || attrs.contains("AXStartTextMarker")
+            || attrs.contains("AXSelectedTextMarkerRange")
+            || params.contains("AXStringForTextMarkerRange")
+            || params.contains("AXAttributedStringForTextMarkerRange")
         if capable { found.append((d, el)) }
         if d < 14 {
             var kids = children(el)
@@ -136,6 +142,33 @@ func dumpText(_ el: AXUIElement, label: String) {
         }
     }
 }
+
+// 포커스 서브트리 전체를 role+텍스트마커 유무까지 **날것으로** 덤프한다.
+// 능력 predicate가 놓치는 커스텀 텍스트뷰가 있는지 눈으로 확인하기 위함.
+func rawDump(_ root: AXUIElement, maxNodes: Int = 200) {
+    var queue: [(Int, AXUIElement)] = [(0, root)]
+    var seen = 0
+    while !queue.isEmpty, seen < maxNodes {
+        let (d, el) = queue.removeFirst(); seen += 1
+        let attrs = Set(attrNames(el))
+        let markers = ["AXStartTextMarker", "AXEndTextMarker", "AXSelectedTextMarkerRange",
+                       "AXTextMarkerForPosition"].filter { attrs.contains($0) }
+        let params = paramAttrNames(el).filter { $0.lowercased().contains("marker") || $0.lowercased().contains("string") || $0.lowercased().contains("range") }
+        let textish = attrs.contains("AXValue") || attrs.contains("AXSelectedTextRange") || !markers.isEmpty
+        let flag = textish ? "  ★텍스트신호" : ""
+        log("    d\(d) role=\(role(el)) subrole=\(subrole(el))\(flag) 마커=\(markers.isEmpty ? "-" : markers.joined(separator:","))  텍스트파라미터=\(params.isEmpty ? "-" : params.joined(separator:","))")
+        if d < 6 {
+            var kids = children(el)
+            for b in ["AXContents", "AXChildrenInNavigationOrder"] {
+                if let ex = copyAttr(el, b) as? [AXUIElement] { kids += ex }
+            }
+            for c in kids { queue.append((d + 1, c)) }
+        }
+    }
+    log("  (날것 덤프 \(seen)노드)")
+}
+log("\n=== 0) 포커스 서브트리 날것 덤프 (텍스트 신호 탐지) ===")
+rawDump(focused)
 
 log("\n=== 1) 활성화 전 하강 탐색 ===")
 for (d, el) in findText(focused) { dumpText(el, label: "focused하위 d\(d)") }

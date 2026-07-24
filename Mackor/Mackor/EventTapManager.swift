@@ -199,6 +199,15 @@ class EventTapManager {
     private var _isActive: Bool = false
     private var _isAutoCorrectionEnabled: Bool = false
     private var automaticCorrectionFieldAllowed: Bool?
+    /// 현재 필드가 "AX엔 텍스트 없음 + 사용자 blind opt-in"이라 검증 없이 교정할
+    /// 대상인가. `.ineligibleUnsupportedRole` 프로브에서만 켜지고(보안 필드는
+    /// 절대 아님이 구조적으로 보장 — 그 케이스는 `!IsSecureEventInputEnabled()`
+    /// 뒤에만 반환됨), clearAutomaticCorrectionFocus에서 비워집니다. 이 값이
+    /// 켜져 있으면 AX 미지원이어도 기록을 이어가고 경계에서 blind 교정합니다.
+    private var blindFieldActive = false
+    /// applyCorrection 체인이 blind 교정을 실행 중인 동안만 true. finalizeCorrection이
+    /// 이 값으로 UndoTransaction.blind를 세웁니다(동기 체인이라 안전).
+    private var applyingBlindCorrection = false
     private var automaticCorrectionFocusToken: FocusedInputSafety.FocusToken?
     /// 이 토큰에서 일시적 거부(선택 영역·AX 소진)로 확정을 미룬 키 수.
     /// 상한에 닿으면 확정 거부로 굳힙니다. 기록은 절대 막지 않고 조회/래치만
@@ -337,6 +346,11 @@ class EventTapManager {
         let generation: UInt64
         let createdAt: Date
         let inputSourceSwitchReceipt: InputSourceSwitchReceipt?
+        /// blind 교정(AX 없는 앱)에서 만들어졌는가. blind는 focusToken이 합성이라
+        /// AX 앵커 검증을 할 수 없으므로, ⌘Z 되돌리기에서 그 검증을 건너뜁니다
+        /// (교정과 같은 커서-고정 안전 논리 — 다른 실제 키가 오면 트랜잭션이
+        /// 먼저 폐기되므로 ⌘Z는 교정 직후에만 발동합니다).
+        let blind: Bool
     }
 
     /// 한글 IME의 marked text는 공백/문장부호 keyDown을 대상 앱이 처리한
@@ -346,6 +360,10 @@ class EventTapManager {
         let decision: CorrectionDecision
         let boundarySequence: BoundarySequence
         let focusToken: FocusedInputSafety.FocusToken
+        /// blind(AX 없는 앱) 한→영 교정인가. blind면 keyUp 적용 시 AX 앵커 검증을
+        /// 건너뜁니다 — 한글 IME 조합이 경계키로 확정된 뒤라 커서가 결과 뒤에
+        /// 고정돼 있고, AX로 읽을 텍스트가 없기 때문입니다.
+        var blind: Bool = false
     }
 
     private enum PendingCorrectionState {
@@ -399,6 +417,22 @@ class EventTapManager {
             if !newValue {
                 tracker.reset()
                 resetAutomaticCorrectionState()
+            }
+        }
+    }
+
+    /// 현재 앱에서 AX 없는 blind 교정을 사용자가 켰는지. AX가 텍스트를 안
+    /// 내놓는 필드(`.ineligibleUnsupportedRole`)에서만, 그리고 자판자동이 켜진
+    /// 상태에서만 발동을 허용합니다. 꺼지면 blind 필드 상태를 즉시 폐기합니다.
+    var blindAutoCorrectionEnabled: Bool = false {
+        didSet {
+            if blindAutoCorrectionEnabled != oldValue {
+                EventTapManager.diagnostic(
+                    "blindAutoCorrectionEnabled=\(blindAutoCorrectionEnabled)"
+                )
+            }
+            if !blindAutoCorrectionEnabled, oldValue {
+                blindFieldActive = false
             }
         }
     }
@@ -764,7 +798,8 @@ class EventTapManager {
             // 엔진 버퍼가 화면을 정확히 미러합니다. == true로 두면 nil 창의
             // 백스페이스가 화면만 지우고 엔진은 안 줄어 decision.original이
             // 부풀고, reanchored가 인접 확정 텍스트까지 되짚어 파괴할 수 있습니다.
-            if isAutoCorrectionEnabled, automaticCorrectionFieldAllowed != false {
+            if isAutoCorrectionEnabled,
+               automaticCorrectionFieldAllowed != false || blindFieldActive {
                 switch tokenCaptureState {
                 case .collecting(let letterStrokeCount):
                     autoCorrectionEngine.processBackspace()
@@ -919,6 +954,13 @@ class EventTapManager {
                     automaticCorrectionFocusToken = nil
                     automaticCorrectionFieldAllowed = false
                     noteUnsupportedRoleObservation()
+                    // 사용자가 이 앱에 blind 교정을 켰다면, AX 미지원이 곧
+                    // "검증 없이 교정할 대상"이라는 신호입니다. 기록을 이어가고
+                    // (아래 게이트의 `|| blindFieldActive`) 경계에서 blind
+                    // 교정합니다. 이 케이스는 보안 필드가 아님이 보장됩니다.
+                    if blindAutoCorrectionEnabled {
+                        blindFieldActive = true
+                    }
                 case .ineligibleTransientSelection:
                     // 선택 영역은 이 키가 곧 지울 직전 상태의 증거일 뿐입니다.
                     // 즉시 굳히지 않고 플래그를 nil로 두어 키열은 계속 기록하고
@@ -934,6 +976,16 @@ class EventTapManager {
                     }
                 case .unavailable:
                     automaticCorrectionFocusToken = nil
+                    // blind opt-in 앱은 AX 실패 **이유**를 가리지 않습니다. 한컴처럼
+                    // AX가 무거운 앱은 50ms 예산 안에서 프로브가 토큰마다
+                    // .unavailable(느림)과 .ineligibleUnsupportedRole(역할없음)을
+                    // 오갑니다. .unsupportedRole에서만 blind를 켜면 교정이 간헐적으로
+                    // 빠집니다. .unavailable도 즉시 blind로 처리합니다 — 이 케이스는
+                    // 보안 필드가 아님이 보장됩니다(secure는 프로브 첫 줄에서
+                    // .ineligible로 빠지고, 여기는 그 뒤에만 옵니다).
+                    if blindAutoCorrectionEnabled {
+                        blindFieldActive = true
+                    }
                     // 이 키 안에서 상한까지 다 물어봤는데도 안 되면 키열은 계속
                     // 보존하고 다음 키에서 다시 확인합니다. 실패한 조회가 AX를
                     // 데우므로 다음 키는 성공할 수 있습니다. 소진이 상한 키 수만큼
@@ -950,12 +1002,22 @@ class EventTapManager {
                         }
                     }
                 }
+                if blindAutoCorrectionEnabled {
+                    EventTapManager.diagnostic(
+                        "blind probe fieldAllowed="
+                            + "\(automaticCorrectionFieldAllowed.map(String.init) ?? "nil") "
+                            + "blindFieldActive=\(blindFieldActive)"
+                    )
+                }
             }
 
-            if !isAlreadyDiscarding, automaticCorrectionFieldAllowed != false {
+            if !isAlreadyDiscarding,
+               automaticCorrectionFieldAllowed != false || blindFieldActive {
                 // false는 overflow/지원하지 않는 토큰으로 이번 후보가 폐기됐다는
                 // 뜻입니다. AX 필드 안전성은 그대로이므로 직접 조합은 경계까지
                 // 유지해 입력 방식이 단어 중간에 바뀌지 않게 합니다.
+                // blindFieldActive면 AX가 false여도(미지원 role) 기록을 이어가
+                // 경계에서 blind 교정 후보를 만듭니다.
                 // 한 bool로는 Latin 대소문자(Caps XOR Shift)와 두벌식의 물리
                 // Shift(ㅂ/ㅃ)를 동시에 표현할 수 없습니다. Caps가 섞인 토큰은
                 // 잘못된 후보를 만들지 않도록 보수적으로 건너뜁니다.
@@ -1303,6 +1365,73 @@ class EventTapManager {
             hasEligibleToken = false
         }
 
+        // blind 교정 — AX가 텍스트를 안 내놓는 앱에서 사용자가 opt-in한 경우.
+        // 화면을 읽지 않고, 경계키 keyDown 순간(커서가 방금 친 단어 뒤에 고정)에
+        // 검증 없이 지우고 다시 씁니다. 정상 AX가 잡히면(`== true`) 그 경로를
+        // 우선하므로 여기 오지 않습니다.
+        if isAutoCorrectionEnabled,
+           hasEligibleToken,
+           blindFieldActive,
+           automaticCorrectionFieldAllowed != true {
+            let precedingBoundaryUTF16Count = sequence.producedUTF16Count
+                - stroke.producedUTF16Count
+            let readUptime = monotonicNow
+            let blindDecision = resolveBoundary(
+                boundary,
+                boundaryUTF16Count: precedingBoundaryUTF16Count,
+                shouldContinue: { readUptime() <= fastPathDeadline }
+            )
+            tokenCaptureState = .idle
+            clearAutomaticCorrectionFocus()
+            guard let blindDecision else {
+                EventTapManager.diagnostic("blind skip: 판정 없음")
+                return .passThrough
+            }
+            let synthetic = FocusedInputSafety.FocusToken(syntheticSelectionLocation: 0)
+            // 즉시 경로는 **영→한 + 단일 경계 + 8자 이하**만입니다. 화면이 라틴
+            // 직접 글자라 조합이 없고, 경계키(스페이스 하나)는 아직 앱에 안 갔으니
+            // 삼키고 즉시 지우고 다시 쓰면 됩니다. 8자 제한은 탭 콜백 안의 동기
+            // 삭제가 시스템 타임아웃을 넘지 않게 하기 위함입니다. 그 외는 전부
+            // 지연 경로로 보냅니다:
+            //   · 한→영은 화면이 한글 IME 조합이라 경계키로 확정한 뒤 지워야 하고,
+            //   · 다중 경계(후행 마침표)는 이미 화면에 있는 마침표까지 지워야 하며,
+            //   · 긴 영→한(되는건가=11자)은 지연 경로가 탭 밖(비동기)에서 지워 길이
+            //     제한 없이 처리합니다.
+            if blindDecision.direction == .latinToKorean,
+               sequence.strokes.count == 1,
+               blindDecision.originalCharacterCount
+                <= EventTapManager.maximumSynchronousCorrectionCharacters {
+                EventTapManager.diagnostic(
+                    "blind correction dir=latinToKorean "
+                        + "len=\(blindDecision.originalCharacterCount) "
+                        + FocusedInputSafety.diagnosticContext()
+                )
+                applyingBlindCorrection = true
+                applyCorrection(
+                    blindDecision,
+                    boundarySequence: sequence,
+                    focusToken: synthetic
+                )
+                applyingBlindCorrection = false
+                return .suppressPhysicalEvent
+            } else {
+                EventTapManager.diagnostic(
+                    "blind deferred dir=\(blindDecision.direction) "
+                        + "strokes=\(sequence.strokes.count) "
+                        + "len=\(blindDecision.originalCharacterCount)"
+                )
+                pendingCorrectionState = .awaitingTriggerKeyUp(
+                    PendingBoundaryCorrection(
+                        decision: blindDecision,
+                        boundarySequence: sequence,
+                        focusToken: synthetic,
+                        blind: true
+                    )
+                )
+                return .passThrough
+            }
+        }
+
         let focusToken = automaticCorrectionFocusToken
         let decision: CorrectionDecision?
         if isAutoCorrectionEnabled,
@@ -1516,6 +1645,23 @@ class EventTapManager {
         // 그 사이 새 키·마우스·입력 소스 변경이 오면 generation이 달라져 이
         // 작업은 취소됩니다. 느린 앱은 최대 세 번까지 경계 위치만 다시 확인하고,
         // 일치하기 전에는 어떤 삭제나 입력 소스 변경도 수행하지 않습니다.
+        // blind 한→영: AX가 없으니 앵커 검증을 건너뛰고 합성 토큰으로 바로
+        // 진행합니다. 경계키가 이미 통과해 조합이 확정됐고 커서는 결과 뒤에
+        // 고정돼 있습니다(교정과 같은 안전 논리). blind로 표시해 ⌘Z도 검증을
+        // 건너뛰게 합니다.
+        if pending.blind {
+            pendingCorrectionState = .applying
+            applyingBlindCorrection = true
+            deleteBoundarySequence(pending.boundarySequence)
+            applyCorrection(
+                pending.decision,
+                boundarySequence: pending.boundarySequence,
+                focusToken: pending.focusToken
+            )
+            applyingBlindCorrection = false
+            return true
+        }
+
         let expectedOffset = pending.decision.original.utf16.count
             + pending.boundarySequence.producedUTF16Count
         let anchoredToken = focusInspector.anchoredOriginalFocusToken(
@@ -1618,6 +1764,11 @@ class EventTapManager {
         boundarySequence: BoundarySequence,
         focusToken: FocusedInputSafety.FocusToken
     ) {
+        // 교정 뒤 입력 소스를 결과 언어로 전환합니다. blind(AX 없는 앱)도
+        // 전환하는 이유: 한컴은 시스템 입력 소스를 따르므로(영→한·한→영 양방향
+        // 실동작으로 확인) 전환하면 이후 입력이 결과 언어로 이어집니다 —
+        // dkwn→아주 뒤 한글, ㅎㄱㄷㅁㅅ→great 뒤 영문. 전환을 안 하면 인디케이터가
+        // 안 따라와 사용자가 한/영을 수동 관리해야 합니다.
         preserveUndoAcrossNextInputSourceChange = true
         let inputSourceSwitchReceipt = onInputSourceSwitch?(decision.direction)
         preserveUndoAcrossNextInputSourceChange = false
@@ -1630,7 +1781,8 @@ class EventTapManager {
             focusToken: focusToken,
             generation: generation,
             createdAt: now(),
-            inputSourceSwitchReceipt: inputSourceSwitchReceipt
+            inputSourceSwitchReceipt: inputSourceSwitchReceipt,
+            blind: applyingBlindCorrection
         )
         undoTransaction = transaction
         originalChoiceState = .shortcutOnly
@@ -1695,14 +1847,22 @@ class EventTapManager {
             return false
         }
 
-        guard
-              now().timeIntervalSince(transaction.createdAt) <= EventTapManager.undoLifetime,
-              focusInspector.anchoredOriginalFocusToken(
-                  transaction.focusToken,
-                  original: transaction.decision.replacement,
-                  boundaryUTF16Count: transaction.boundarySequence.producedUTF16Count,
-                  shouldContinue: { true }
-              ) != nil else {
+        guard now().timeIntervalSince(transaction.createdAt) <= EventTapManager.undoLifetime else {
+            clearUndoTransaction(notify: true)
+            return false
+        }
+
+        // blind 교정은 AX가 없어 앵커 검증을 할 수 없습니다. 교정과 같은 안전
+        // 논리로 검증을 건너뜁니다 — 다른 실제 키가 오면 이 트랜잭션이 먼저
+        // 폐기되므로(handleKeyDown의 clearUndoTransaction), ⌘Z는 교정 직후
+        // 커서가 결과 바로 뒤에 있을 때에만 발동합니다.
+        if !transaction.blind,
+           focusInspector.anchoredOriginalFocusToken(
+               transaction.focusToken,
+               original: transaction.decision.replacement,
+               boundaryUTF16Count: transaction.boundarySequence.producedUTF16Count,
+               shouldContinue: { true }
+           ) == nil {
             clearUndoTransaction(notify: true)
             return false
         }
@@ -2371,6 +2531,7 @@ class EventTapManager {
         automaticCorrectionFocusToken = nil
         softProbeRefusalKeys = 0
         apostropheBreakStrokeCount = nil
+        blindFieldActive = false
         // 미지원 관찰은 **앱 단위** 근거이므로 여기서 비우지 않습니다. 토큰·포커스가
         // 바뀔 때마다 0이 되면 상한에 영영 닿지 못해 학습이 죽습니다. 앱이 바뀌는
         // 시점(`resetAutomaticCorrectionState`)에서만 비웁니다.
@@ -2444,7 +2605,9 @@ class EventTapManager {
 
     private static func diagnostic(_ message: @autoclosure () -> String) {
         guard diagnosticsEnabled else { return }
-        print("[Mackor][diagnostic] \(message())")
+        // NSLog는 통합 로그(os_log)로 흘러 `log stream`에서 보입니다. print는
+        // LaunchServices로 뜬 GUI 앱에서 어디에도 안 잡혀 디버깅이 불가능했습니다.
+        NSLog("[Mackor][diagnostic] %@", message())
     }
 
     // MARK: - 권한 확인

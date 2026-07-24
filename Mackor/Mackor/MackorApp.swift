@@ -166,6 +166,17 @@ class AppCoordinator: ObservableObject {
             }
             .store(in: &cancellables)
 
+        appMonitor.$isBlindAutoCorrectionActive
+            .combineLatest($hasAccessibility)
+            .map { blindActive, hasAccessibility in
+                blindActive && hasAccessibility
+            }
+            .removeDuplicates()
+            .sink { [weak self] active in
+                self?.eventTapManager.blindAutoCorrectionEnabled = active
+            }
+            .store(in: &cancellables)
+
         appMonitor.$inputSourceKind
             .removeDuplicates()
             .sink { [weak self] inputSourceKind in
@@ -884,41 +895,50 @@ struct MackorPanel: View {
             //   unknown     아직 관찰 못 함             → 켜짐(흐림) · "확인 중"
             //   unsupported 텍스트 역할을 반복해서 못 봄 → 꺼짐 · "미지원"
             let style = Self.allAppsAutoStyle(for: support)
-            HStack(spacing: 4) {
-                Toggle(isOn: .constant(support != .unsupported)) {
-                    Text("자판자동").font(.system(size: 11))
-                }
-                .toggleStyle(.switch)
-                .controlSize(.mini)
-                .disabled(true)
-                Text(style.label).font(.system(size: 9)).foregroundColor(.secondary)
-                if support == .unsupported {
-                    supportRequestButton(item)
-                }
-            }
-            .opacity(style.opacity)
-        } else {
-            switch targetAppManager.axAutoCorrectionSupport(bundleID: item.bundleID, name: item.name) {
-            case .unsupported:
-                // 이미 켜져 있으면(과거·수동 설정) 끌 수 있게 실제 값을 그대로
-                // 두고, 꺼져 있을 때만 잠급니다. 표시가 저장·엔진 상태와 어긋나
-                // "꺼짐처럼 보이는데 실제론 켜져 동작"하는 거짓을 막습니다.
-                let isOn = targetAppManager.autoCorrectionIsOn(
-                    bundleID: item.bundleID, name: item.name
-                )
+            if support == .unsupported {
+                // 미지원은 AX 경로가 불가하므로 "자판자동" 토글 하나가 곧 강제
+                // 교정입니다(전체 범위에서도 앱별 blind opt-in).
                 HStack(spacing: 4) {
-                    Toggle(isOn: isOn ? autoBinding(item) : .constant(false)) {
+                    Toggle(isOn: blindBinding(item)) {
                         Text("자판자동").font(.system(size: 11))
                     }
                     .toggleStyle(.switch)
                     .controlSize(.mini)
-                    .disabled(!isOn)
-                    Text(isOn ? "미지원·켜짐" : "미지원")
+                    Text("강제 · ⌘Z 복구")
                         .font(.system(size: 9))
                         .foregroundColor(.secondary)
                     supportRequestButton(item)
                 }
-                .opacity(isOn ? 0.75 : 0.4)
+            } else {
+                HStack(spacing: 4) {
+                    Toggle(isOn: .constant(true)) {
+                        Text("자판자동").font(.system(size: 11))
+                    }
+                    .toggleStyle(.switch)
+                    .controlSize(.mini)
+                    .disabled(true)
+                    Text(style.label).font(.system(size: 9)).foregroundColor(.secondary)
+                }
+                .opacity(style.opacity)
+            }
+        } else {
+            switch targetAppManager.axAutoCorrectionSupport(bundleID: item.bundleID, name: item.name) {
+            case .unsupported:
+                // 미지원 앱은 AX 경로가 원리적으로 불가하므로, "자판자동" 토글
+                // 하나가 곧 강제(blind) 교정입니다. 죽은 비활성 토글을 없애 줄을
+                // `조합` + `자판자동` 2개로 줄입니다. 켜면 알아서 blind로 동작하고,
+                // 위험은 옆의 짧은 안내로만 남깁니다.
+                HStack(spacing: 4) {
+                    Toggle(isOn: blindBinding(item)) {
+                        Text("자판자동").font(.system(size: 11))
+                    }
+                    .toggleStyle(.switch)
+                    .controlSize(.mini)
+                    Text("강제 · ⌘Z 복구")
+                        .font(.system(size: 9))
+                        .foregroundColor(.secondary)
+                    supportRequestButton(item)
+                }
             case .supported:
                 // 지원 확인된 앱은 opt-out 기본 ON(사용자가 끄기 전까지 켜짐).
                 HStack(spacing: 4) {
@@ -1052,6 +1072,23 @@ struct MackorPanel: View {
                         false, bundleID: item.bundleID, name: item.name
                     )
                 }
+            }
+        )
+    }
+
+    /// AX 없는 앱의 blind 교정 토글. 미지원 줄에만 노출됩니다. 켜면 그 앱이
+    /// 대상으로 등록되고 blind 교정이 켜집니다(검증 없이 지우고 다시 씀).
+    private func blindBinding(_ item: PanelAppItem) -> Binding<Bool> {
+        Binding(
+            get: {
+                targetAppManager.isBlindAutoCorrectionEnabled(
+                    bundleID: item.bundleID, appName: item.name
+                )
+            },
+            set: { enable in
+                targetAppManager.setBlindAutoCorrection(
+                    enable, bundleID: item.bundleID, name: item.name
+                )
             }
         )
     }

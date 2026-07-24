@@ -12,6 +12,11 @@ class AppMonitor: ObservableObject {
     /// 한/영 오입력 자동 보정이 현재 입력 소스를 관찰 중인지
     @Published private(set) var isAutoCorrectionActive: Bool = false
 
+    /// 현재 앱에서 AX 없는 blind 교정이 사용자에 의해 켜져 있는지.
+    /// EventTapManager는 필드가 AX 미지원 role일 때만 이 값으로 blind 교정을
+    /// 발동합니다(보안 필드·정상 AX 필드는 이 값과 무관하게 기존 경로).
+    @Published private(set) var isBlindAutoCorrectionActive: Bool = false
+
     /// 대상 앱이 현재 포커스 중인지
     @Published private(set) var isTargetAppFront: Bool = false
 
@@ -425,8 +430,26 @@ class AppMonitor: ObservableObject {
         if isActive != state.composition {
             isActive = state.composition
         }
-        if isAutoCorrectionActive != state.autoCorrection {
-            isAutoCorrectionActive = state.autoCorrection
+
+        // blind 교정은 사용자가 이 앱에 명시적으로 켠 경우에만. 실제 발동은
+        // EventTapManager가 필드 role 미지원까지 확인해 결정합니다(여기서는
+        // "이 앱에 사용자가 켰는가 + Mackor 켜짐 + 입력 소스 지원"까지만).
+        let blindActive = isEnabled
+            && (targetAppManager?.isBlindAutoCorrectionEnabled(
+                bundleID: frontAppBundleID,
+                appName: frontAppName
+            ) ?? false)
+            && inputSourceKind != .unsupported
+
+        // blind를 켜면 탭의 자동 교정 기계 자체가 돌아야 하므로(키열 버퍼링·경계),
+        // 자동 교정 활성에 blind를 OR합니다. AX 미지원 앱은 storedAutoCorrection이
+        // 꺼져 있어도 blind opt-in만으로 엔진이 켜집니다.
+        let autoActive = state.autoCorrection || blindActive
+        if isAutoCorrectionActive != autoActive {
+            isAutoCorrectionActive = autoActive
+        }
+        if isBlindAutoCorrectionActive != blindActive {
+            isBlindAutoCorrectionActive = blindActive
         }
     }
 }
