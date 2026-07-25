@@ -6,6 +6,16 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>Mackor</title>
         <item>
+            <title>1.9</title>
+            <pubDate>Sat, 25 Jul 2026 21:36:32 +0900</pubDate>
+            <link>https://github.com/Keilkim/MacKoreanImefixer/releases/download/v1.9</link>
+            <sparkle:version>15</sparkle:version>
+            <sparkle:shortVersionString>1.9</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <sparkle:releaseNotesLink sparkle:edSignature="wp0LDfcEgGbLokRw2mkVzp9ZYDxkR8yJASKKeuCaml+xp48F6U+Q4RhIJVsoM0nTm4XpqvxIi3NvdtJzao2CBw==" sparkle:length="1608">https://github.com/Keilkim/MacKoreanImefixer/releases/download/v1.9/Mackor-1.9-15.md</sparkle:releaseNotesLink>
+            <enclosure url="https://github.com/Keilkim/MacKoreanImefixer/releases/download/v1.9/Mackor-1.9-15.zip" length="2545551" type="application/octet-stream" sparkle:edSignature="3Qs4NCauzmDjmA4FjXqTC1jmrhjGGHzTB0YjjuXSQnBIMkXX5oetmpeI+7WeDuoY0Ns1962DHV9F1HEF72T7DQ=="/>
+        </item>
+        <item>
             <title>1.8</title>
             <pubDate>Sat, 25 Jul 2026 20:07:05 +0900</pubDate>
             <link>https://github.com/Keilkim/MacKoreanImefixer/releases/download/v1.8</link>
@@ -68,6 +78,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: Ab1Nr3y9S56fxIaSLklvyDnsNx0ffXSkhd/Kb6MnQfw2QctLOKzXCX8pllRkaKY5Hy3OTFNlANdxT7+QvCOZBg==
-length: 6301
+edSignature: vthzDWY/LNd1UVaQn9wiOerNVUsvmh10oHf3SponHx86dHV3HndB3WEtFOMoq0OXFeaQyccDMvNXY3euG2ZACA==
+length: 7280
 -->
