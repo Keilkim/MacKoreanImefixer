@@ -165,6 +165,8 @@
   .btn .gh { width: 1.05em; height: 1.05em; fill: currentColor; }
   .cta-note { font-size: 0.85rem; color: var(--faint); }
   .cta-note b { color: var(--muted); font-weight: 600; }
+  .cta-users { margin-top: -0.45rem; }
+  .cta-users b { color: var(--text); font-variant-numeric: tabular-nums; }
 
   /* ─── 섹션 ─── */
   .label { display: inline-block; font-family: var(--mono); font-size: 0.73rem; font-weight: 500; letter-spacing: 0.13em; text-transform: uppercase; color: var(--muted); margin: 0 0 1.05rem; }
@@ -305,6 +307,7 @@
           </a>
         </div>
         <p class="cta-note">무료 · 설치 후 <b>손쉬운 사용 권한</b> 한 번이면 끝납니다.</p>
+        <p class="cta-note cta-users" id="users" hidden><b id="usersCount">0</b>명의 사용자가 사용 중입니다 · GitHub 릴리스 누적 다운로드 기준</p>
       </div>
     </header>
 
@@ -540,6 +543,21 @@
           section.classList.add("in");
           if (rule) rule.hidden = false;
         }
+      })
+      .catch(function () {});
+
+    // 누적 사용자 수 — CI가 하루 한 번 갱신하는 downloads.json(announcements.json과 같은
+    // 오리진)만 읽습니다. 방문자 브라우저가 GitHub API를 직접 부르지 않으므로 외부 요청·추적이
+    // 없고, 파일이 없거나 숫자가 아니면 줄을 숨긴 채로 둡니다(점진적 향상).
+    fetch("downloads.json", { cache: "no-cache" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        if (!data || typeof data.total !== "number" || !isFinite(data.total) || data.total < 1) return;
+        var line = document.getElementById("users");
+        var count = document.getElementById("usersCount");
+        if (!line || !count) return;
+        count.textContent = Math.floor(data.total).toLocaleString("ko-KR");
+        line.hidden = false;
       })
       .catch(function () {});
   })();
