@@ -1,6 +1,14 @@
 {
   "announcements": [
     {
+      "id": "2026-07-25-mackor-1-6",
+      "date": "2026-07-25",
+      "kind": "fix",
+      "title": "Mackor 1.6 — Chrome 자판자동 지원, 조합 버그 수정",
+      "body": "Chrome에서 자판 자동 교정이 걸리지 않던 문제를 고쳤습니다. Chrome은 접근성 트리를 뒤늦게 만들어 지원 확인이 언제나 헛쳤는데, 확인을 여러 번 나눠 시도하도록 바꿨습니다. 주소창에서도 한글 검색어를 교정합니다(Enter로 제출할 때는 되돌릴 수 없어 제외). 겹받침을 지웠다 다시 쓰면 '닭'이 '달ㄱ'이 되던 문제 등 글자가 깨지던 버그 5건도 함께 고쳤습니다.",
+      "url": "https://github.com/Keilkim/MacKoreanImefixer/releases/tag/v1.6"
+    },
+    {
       "id": "2026-07-25-mackor-1-5",
       "date": "2026-07-25",
       "kind": "fix",
