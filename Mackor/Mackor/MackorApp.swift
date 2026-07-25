@@ -900,6 +900,7 @@ struct MackorPanel: View {
                 .font(.caption)
                 .foregroundColor(.secondary)
             Spacer()
+            updateCheckButton
             announcementBell
             Button {
                 showingSettings = true
@@ -909,6 +910,35 @@ struct MackorPanel: View {
             .buttonStyle(.borderless)
         }
         .padding(12)
+    }
+
+    /// 업데이트 확인은 설정 화면 안에 묻혀 있었다. 새 소식·설정과 같은 급의
+    /// 동작이므로 footer 로 올린다(업데이트 확인 · 새 소식 · 설정 순서).
+    ///
+    /// 자동 확인은 하루 한 번 돌지만, 방금 고쳐졌다는 소식을 듣고 **지금** 받고
+    /// 싶은 사용자가 설정까지 들어가야 하는 것은 한 단계 많다.
+    ///
+    /// 로컬 빌드에는 feed URL 이 없어 updater 가 구성되지 않는다. 그 경우 눌러도
+    /// 아무 일이 없는 버튼을 보여주는 대신 아예 감춘다.
+    @ViewBuilder
+    private var updateCheckButton: some View {
+        if updaterController.isConfigured {
+            let unread = coordinator.unreadReleaseVersion
+            Button {
+                updaterController.checkForUpdates()
+            } label: {
+                Label(
+                    "업데이트",
+                    systemImage: unread != nil
+                        ? "arrow.down.circle.fill"
+                        : "arrow.triangle.2.circlepath"
+                )
+                .foregroundColor(unread != nil ? .accentColor : nil)
+            }
+            .buttonStyle(.borderless)
+            .disabled(!updaterController.canCheckForUpdates)
+            .help(unread.map { "새 버전 v\($0) 이 있습니다" } ?? "업데이트 확인")
+        }
     }
 
     private var announcementBell: some View {
@@ -1302,10 +1332,9 @@ struct MackorPanel: View {
                             coordinator.showCurrentReleaseNotes()
                         }
                     }
-                    Button("업데이트 확인…") {
-                        updaterController.checkForUpdates()
-                    }
-                    .disabled(!updaterController.isConfigured || !updaterController.canCheckForUpdates)
+                    // 업데이트 확인은 footer 로 옮겼다(업데이트 · 새 소식 · 설정).
+                    // 여기에도 두면 같은 동작이 두 곳에 생겨 어느 쪽이 최신인지
+                    // 헷갈린다. 변경사항 보기는 성격이 달라 이 화면에 남긴다.
                     VStack(alignment: .leading, spacing: 4) {
                         Toggle("새 소식 확인", isOn: Binding(
                             get: { announcementCenter.checkEnabled },
