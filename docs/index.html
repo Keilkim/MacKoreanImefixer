@@ -310,7 +310,7 @@
         </div>
         <p class="cta-note">무료 · 설치 후 <b>손쉬운 사용 권한</b> 한 번이면 끝납니다.</p>
         <p class="cta-note cta-ver" id="ver" hidden>최신 <b id="verTag"></b> · <a id="verLink" href="https://github.com/Keilkim/MacKoreanImefixer/releases" target="_blank" rel="noopener">변경 내용</a></p>
-        <p class="cta-note cta-users" id="users" hidden><b id="usersCount">0</b>명의 사용자가 사용 중입니다</p>
+        <p class="cta-note cta-users" id="users" hidden>지금까지 <b id="usersCount">0</b>번 다운로드되었습니다</p>
       </div>
     </header>
 
@@ -582,9 +582,14 @@
       })
       .catch(function () {});
 
-    // 누적 사용자 수 — CI가 하루 한 번 갱신하는 downloads.json(announcements.json과 같은
-    // 오리진)만 읽습니다. 방문자 브라우저가 GitHub API를 직접 부르지 않으므로 외부 요청·추적이
+    // 누적 다운로드 수 — CI가 갱신하는 downloads.json(announcements.json과 같은 오리진)만
+    // 읽습니다. 방문자 브라우저가 GitHub API를 직접 부르지 않으므로 외부 요청·추적이
     // 없고, 파일이 없거나 숫자가 아니면 줄을 숨긴 채로 둡니다(점진적 향상).
+    //
+    // "사용자 수"라고 부르지 않는 이유: 이 값은 GitHub 릴리스 자산의 다운로드 수 합계라
+    // 재다운로드·크롤러·릴리스 검증 스크립트(verify-published.sh가 실행마다 .dmg·.pkg·
+    // 별칭을 내려받습니다)가 전부 섞여 있고, 받았다가 지운 사람도 빠지지 않습니다.
+    // 셀 수 있는 것만 그대로 말합니다.
     fetch("downloads.json", { cache: "no-cache" })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (data) {
