@@ -17,21 +17,71 @@ enum FocusedInputSafety {
         fileprivate let element: AXUIElement?
         fileprivate let initialSelection: CFRange
 
+        /// 이 필드에서 **되돌릴 수 없는 경계**(Return·Enter·Tab)에 교정해도 되는가.
+        ///
+        /// 주소·URL 입력란에서 `false`가 됩니다. 그 경계의 교정은
+        /// `performSubmitCorrection`이 `defer`로 제출키를 무조건 주입하므로,
+        /// 페이지가 넘어가 ⌘Z(6초)도 원문 칩도 구조적으로 실패합니다. 반면
+        /// Space·`,`·`?`·`!`는 이동을 만들지 않아 복구가 온전히 작동하므로
+        /// 그쪽은 막지 않습니다 — fail-closed를 "필드 전체"가 아니라
+        /// "복구 불가능한 지점"에 겁니다.
+        let allowsIrreversibleBoundary: Bool
+
         /// 테스트에서는 실제 Accessibility 요소에 접근하지 않고도 이벤트
         /// 흐름의 fail-closed 동작을 검증할 수 있어야 합니다. 운영 코드가
         /// 만드는 토큰에는 항상 `element`가 들어갑니다.
-        init(syntheticSelectionLocation: CFIndex) {
+        ///
+        /// `allowsIrreversibleBoundary`는 기본 `true`입니다 — 기존 테스트가
+        /// 고정한 제출 경계 동작이 한 건도 바뀌지 않아야 합니다.
+        init(
+            syntheticSelectionLocation: CFIndex,
+            allowsIrreversibleBoundary: Bool = true
+        ) {
             element = nil
             initialSelection = CFRange(
                 location: syntheticSelectionLocation,
                 length: 0
             )
+            self.allowsIrreversibleBoundary = allowsIrreversibleBoundary
         }
 
-        fileprivate init(element: AXUIElement, initialSelection: CFRange) {
+        fileprivate init(
+            element: AXUIElement,
+            initialSelection: CFRange,
+            allowsIrreversibleBoundary: Bool
+        ) {
             self.element = element
             self.initialSelection = initialSelection
+            self.allowsIrreversibleBoundary = allowsIrreversibleBoundary
         }
+    }
+
+    /// 메타데이터 힌트 판정. 두 등급의 **검사 순서**가 안전의 핵심이라
+    /// 순수 함수로 뽑아 테스트로 고정합니다.
+    enum MetadataHint: Equatable {
+        /// 필드 전체를 확정 거부. 비밀번호·보안 입력란.
+        case secure(String)
+        /// 되돌릴 수 없는 경계(Return·Enter·Tab)에서만 차단. 주소·URL 입력란.
+        case irreversibleOnly
+        case clear
+    }
+
+    /// 1등급 — 보안. 어떤 경우에도 완화되지 않습니다.
+    static let secureHints = ["password", "passcode", "암호", "비밀번호"]
+    /// 2등급 — 제출 경계에서만 막을 필드.
+    static let irreversibleHints = ["address", "url", "web address", "주소", "웹 주소"]
+
+    /// **보안을 반드시 먼저** 검사합니다. `"비밀번호 주소"`처럼 두 등급이 함께
+    /// 걸리는 메타데이터에서 보안이 이겨야 하기 때문입니다. 배열을 둘로 쪼갠
+    /// 순간 이 순서가 코드 순서에만 의존하게 되므로 테스트로 고정합니다.
+    static func classifyMetadata(_ metadata: String) -> MetadataHint {
+        if let hit = secureHints.first(where: metadata.contains) {
+            return .secure(hit)
+        }
+        if irreversibleHints.contains(where: metadata.contains) {
+            return .irreversibleOnly
+        }
+        return .clear
     }
 
     /// 이벤트 탭 콜백이 응답하지 않는 앱의 Accessibility IPC에 오래
@@ -150,11 +200,8 @@ enum FocusedInputSafety {
         // AXComboBox는 브라우저 웹페이지의 입력란이 흔히 쓰는 역할이다.
         // 이것이 빠져 있어서 Safari·Chrome에서 자동 교정이 전혀 걸리지 않았다.
         //
-        // 주소창을 걱정할 필요는 없다. 실측으로 확인했다 — Safari 주소창은
-        // role 검사를 통과한 뒤 아래 메타데이터 필터("주소"/"url"/"search")에
-        // 걸려 거부된다(진단 로그 `focus token protected metadata`).
-        // role 검사가 먼저이고 메타데이터 필터가 나중이므로, 여기에 역할을
-        // 추가해도 그 보호는 그대로 유지된다.
+        // 주소창은 아래 2등급 힌트에서 **제출 경계만** 막힌다. 필드 전체를
+        // 거부하지 않는다 — 근거는 그 자리 주석 참고.
         let supportedRoles: Set<String> = [
             kAXTextFieldRole as String,
             kAXTextAreaRole as String,
@@ -167,8 +214,8 @@ enum FocusedInputSafety {
 
         let subrole = values[1] as? String
         // 비밀번호 필드는 항상 제외합니다. 검색 필드(kAXSearchFieldSubrole)는
-        // 한국어 사용자가 한글을 가장 많이 입력하는 곳이므로 허용합니다. 주소창은
-        // 이 검사가 아니라 아래 메타데이터 필터의 "주소"/"url"에서 걸립니다(실측).
+        // 한국어 사용자가 한글을 가장 많이 입력하는 곳이므로 허용합니다.
+        // 주소창은 여기가 아니라 아래 2등급 힌트에서 제출 경계만 막힙니다.
         let protectedSubroles: Set<String> = [
             kAXSecureTextFieldSubrole as String,
         ]
@@ -177,47 +224,77 @@ enum FocusedInputSafety {
             return .ineligible
         }
 
-        // URL 오교정과 비밀번호 유출만 막습니다.
+        // 힌트는 **두 등급**입니다. 이전에는 하나의 배열이었고 어느 쪽에 걸리든
+        // 필드 전체를 확정 거부했습니다.
         //
-        // 이전에는 "search/검색/location/위치"까지 막았는데, 이 힌트는 URL 보호에
-        // 불필요하면서 한국어 사용자가 한글을 가장 많이 치는 검색창·게시글·댓글창을
-        // 통째로 차단했습니다. 주소창(옴니박스)은 "주소"/"url"/"web address" 힌트로
-        // 계속 걸리므로 URL 보호는 유지됩니다(실측: 주소창은 이 필터에서 걸림).
+        // 등급을 나눈 이유: 주소창을 통째로 막는 것은 과했습니다. 실측하면 URL
+        // 자체는 애초에 교정 경로에 닿지 못합니다 — `naver.com`은
+        // `EventTapManager`의 마침표 유예가 공백 run 전체를 폐기하고(`:902-907`),
+        // `localhost:3000`·`my-site`·`192.168.0.1`은 비자모 기호가 토큰을
+        // 폐기합니다(`:891-898`). 도메인 라벨 113개 실측 파괴 0건입니다.
+        //
+        // 실제로 파괴되는 것은 URL이 아니라 **2글자 약어**였습니다(`sk`→나,
+        // `go`→해, `gh`→호, `ch`→초, `dk`→아, `ro`→개, `wp`→제 — 현실적 2글자
+        // 토큰 97개 중 7개). 그리고 그 파괴가 **되돌릴 수 없게 되는 유일한
+        // 지점**은 제출 경계뿐입니다. 그래서 fail-closed를 필드 전체가 아니라
+        // 그 지점 하나에 다시 겁니다(아래 `allowsIrreversibleBoundary`).
         let metadata = values[2...5]
             .compactMap { ($0 as? String)?.lowercased() }
             .joined(separator: " ")
-        let protectedHints = [
-            "address", "url", "web address", "주소", "웹 주소",
-            "password", "passcode", "암호", "비밀번호",
-        ]
-        if let hit = protectedHints.first(where: metadata.contains) {
+
+        let irreversibleHinted: Bool
+        switch classifyMetadata(metadata) {
+        case .secure(let hit):
             diagnostic("focus token protected metadata hint=\(hit) \(diagnosticContext(role: role))")
             return .ineligible
+        case .irreversibleOnly:
+            irreversibleHinted = true
+        case .clear:
+            irreversibleHinted = false
         }
         // "못 읽었다"와 "선택 영역이 비어있지 않다"는 원인도 해법도 다르므로
         // 진단에서 반드시 구분합니다. 전자는 앱이 캐럿 정보를 안 주는 것이고,
         // 후자는 사용자가 실제로 글자를 선택해 둔 것입니다.
         guard let selection = selectedTextRange(from: values[6]) else {
             diagnostic("focus token caret unreadable \(diagnosticContext(role: role))")
-            return .unavailable
+            // URL 힌트 필드는 실패 경로에서 **오늘과 동일하게** 확정 거부로
+            // 되돌립니다. `.unavailable`은 EventTapManager에서 blind opt-in 앱의
+            // `blindFieldActive`를 켜는 분기이므로, 여기서 그냥 흘려보내면
+            // "주소" 라벨이 붙은 필드에 AX 검증 없는 삭제+재입력이 새로 열립니다.
+            // `.ineligible`만이 그 플래그를 끄는 유일한 분기입니다.
+            return irreversibleHinted ? .ineligible : .unavailable
         }
         guard selection.length == 0 else {
             // 선택 영역이 있는 건 명확한 상태이지 일시적 실패는 아닙니다. 다만
             // 이 키가 곧 그 선택을 지우므로, 다음 키에서 다시 물으면 대개 빈
             // 캐럿으로 바뀝니다("weather" 전체 선택 후 덮어쓰기 등). 그래서
             // 즉시 확정 거부하지 않고 별도 케이스로 알려, 호출자가 제한된
-            // 횟수만 재확인하게 합니다. 주소창처럼 늘 전체 선택된 필드는 위쪽
-            // 메타데이터 필터(:179)가 먼저 .ineligible로 걸러내므로, 여기에는
-            // "URL이 아니면서 선택을 유지하는" 드문 필드만 도달합니다.
+            // 횟수만 재확인하게 합니다.
+            //
+            // URL 힌트 필드는 예외로 오늘과 같은 확정 거부를 유지합니다. 두 몫을
+            // 합니다 — (1) 위 caret-unreadable과 같은 이유로 blind 경로를 막고,
+            // (2) ⌘L 직후 옴니박스가 전체 선택된 상태의 첫 키를 `.ineligible`로
+            // 래치해, 인라인 자동완성이 붙은 채로 교정이 들어가 삭제 개수가
+            // 어긋나는 사고를 구조적으로 없앱니다. 대가는 "⌘L 직후 첫 단어는
+            // 교정되지 않는다"이고, 이건 알려진 동작으로 문서화합니다.
             diagnostic(
                 "focus token has selection len=\(selection.length) "
                     + diagnosticContext(role: role)
             )
-            return .ineligibleTransientSelection
+            return irreversibleHinted ? .ineligible : .ineligibleTransientSelection
         }
 
-        diagnostic("focus token ok \(diagnosticContext(role: role))")
-        return .eligible(FocusToken(element: element, initialSelection: selection))
+        diagnostic(
+            "focus token ok \(diagnosticContext(role: role))"
+                + (irreversibleHinted ? " submitBlocked" : "")
+        )
+        return .eligible(
+            FocusToken(
+                element: element,
+                initialSelection: selection,
+                allowsIrreversibleBoundary: !irreversibleHinted
+            )
+        )
     }
 
     static func isCurrentFocus(_ token: FocusToken, utf16Offset: Int) -> Bool {
@@ -450,9 +527,13 @@ enum FocusedInputSafety {
         let matches = text == original
         diagnostic("caret text check caret=\(caret.location) start=\(start) matches=\(matches)")
         guard shouldContinue(), matches else { return nil }
+        // 재앵커는 **같은 필드**를 다시 가리키는 것이므로 제출 경계 허용 여부를
+        // 원본 토큰에서 그대로 물려받습니다. 여기서 true로 새로 만들면 주소창
+        // 토큰이 재앵커를 거치는 것만으로 제출 차단을 우회합니다.
         return FocusToken(
             element: element,
-            initialSelection: CFRange(location: start, length: 0)
+            initialSelection: CFRange(location: start, length: 0),
+            allowsIrreversibleBoundary: token.allowsIrreversibleBoundary
         )
     }
 

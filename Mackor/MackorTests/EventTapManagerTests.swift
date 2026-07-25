@@ -1487,6 +1487,97 @@ final class EventTapManagerTests: XCTestCase {
         }
     }
 
+    // MARK: - 주소·URL 입력란 (제출 경계만 차단)
+    //
+    // 옴니박스를 통째로 막던 것을 "되돌릴 수 없는 경계 하나"만 막는 것으로
+    // 좁혔다. 근거: `performSubmitCorrection`이 defer로 제출키를 무조건
+    // 주입하므로 교정 직후 페이지가 넘어가고, 그러면 ⌘Z(6초)도 원문 칩도
+    // 되돌릴 대상이 사라져 오교정이 그대로 확정된다. Space·`,`·`?`·`!`는
+    // 이동을 만들지 않아 복구가 온전하다.
+    //
+    // 실측된 파괴는 전부 2글자 medium 교정이다(sk→나, go→해, gh→호, ch→초,
+    // dk→아, ro→개, wp→제 — 현실적 2글자 토큰 97개 중 7개).
+
+    /// 주소창에서 Return·Enter·Tab은 교정 없이 그대로 통과해야 한다.
+    func testSubmitBoundaryIsNotCorrectedInAddressFields() {
+        for submitKeycode: UInt16 in [0x24, 0x4C, 0x30] {
+            let output = FakeKeyboardOutput()
+            let focus = FakeFocusInspector()
+            focus.isIrreversibleBoundaryBlocked = true
+            let manager = makeManager(output: output, focus: focus)
+            manager.inputSourceKind = .supportedLatin
+            manager.isAutoCorrectionEnabled = true
+
+            type("gksrmf", into: manager)
+            XCTAssertNotNil(
+                manager.handleKeyDown(keyDown(submitKeycode)),
+                "주소창의 제출 키는 붙잡지 말고 그대로 통과시켜야 합니다 (keycode \(submitKeycode))"
+            )
+
+            XCTAssertTrue(
+                output.actions.isEmpty,
+                "주소창 제출 경계에서 교정이 나갔습니다 (keycode \(submitKeycode)): \(output.actions)"
+            )
+        }
+    }
+
+    /// 같은 주소창이라도 Space 경계에서는 정상 교정된다.
+    /// "제출만 닫고 나머지는 연다"를 고정한다.
+    func testSpaceBoundaryStillCorrectsInAddressFields() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.isIrreversibleBoundaryBlocked = true
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("gksrmf", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(
+            output.actions.contains(.text("한글")),
+            "주소창 Space 경계 교정이 막혔습니다: \(output.actions)"
+        )
+    }
+
+    /// `.trailingPeriods` 상태(`gksrmf.` + Return)도 같은 게이트를 지나야 한다.
+    /// 마침표는 즉시 경계가 아니라 유예 상태로 들어가므로 경로가 다르다.
+    func testTrailingPeriodSubmitIsAlsoBlockedInAddressFields() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.isIrreversibleBoundaryBlocked = true
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("gksrmf", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x2F)))   // .
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x24)))   // Return
+
+        XCTAssertTrue(
+            output.actions.isEmpty,
+            "마침표 뒤 제출 경계에서 교정이 나갔습니다: \(output.actions)"
+        )
+    }
+
+    /// 일반 필드의 제출 경계 동작은 한 건도 바뀌지 않아야 한다.
+    /// (`FocusToken`의 기본값이 `allowsIrreversibleBoundary = true`인 것을 고정)
+    func testSubmitBoundaryUnchangedInNormalFields() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("gksrmf", into: manager)
+        XCTAssertNil(
+            manager.handleKeyDown(keyDown(0x24)),
+            "일반 필드에서는 제출 키를 붙잡아 교정해야 합니다"
+        )
+        XCTAssertTrue(output.actions.contains(.text("한글")))
+    }
+
     func testSubmitCorrectionDoesNotUseTheDelayedPostBoundaryScheduler() {
         // Space 계열의 20ms 정착 scheduler를 제출 키에도 사용하면, 그 사이
         // 다음 물리 키가 Enter를 추월할 수 있습니다. 제출 교정은 keyDown
@@ -3515,8 +3606,23 @@ private final class FakeKeyboardOutput: EventTapKeyboardOutputting {
 }
 
 private final class FakeFocusInspector: EventTapFocusInspecting {
-    let token = FocusedInputSafety.FocusToken(syntheticSelectionLocation: 0)
-    let reanchoredToken = FocusedInputSafety.FocusToken(syntheticSelectionLocation: 0)
+    /// 주소·URL 힌트 필드를 흉내 냅니다. 켜면 발급되는 토큰의
+    /// `allowsIrreversibleBoundary`가 false가 되어 제출 경계(Return·Enter·Tab)
+    /// 교정만 막히고, Space·문장부호 경계는 그대로 동작해야 합니다.
+    var isIrreversibleBoundaryBlocked = false {
+        didSet {
+            token = FocusedInputSafety.FocusToken(
+                syntheticSelectionLocation: 0,
+                allowsIrreversibleBoundary: !isIrreversibleBoundaryBlocked
+            )
+            reanchoredToken = FocusedInputSafety.FocusToken(
+                syntheticSelectionLocation: 0,
+                allowsIrreversibleBoundary: !isIrreversibleBoundaryBlocked
+            )
+        }
+    }
+    var token = FocusedInputSafety.FocusToken(syntheticSelectionLocation: 0)
+    var reanchoredToken = FocusedInputSafety.FocusToken(syntheticSelectionLocation: 0)
     var tokenAvailable = true
     var currentFocusMatches = true
     var anchoredTextMatches = true

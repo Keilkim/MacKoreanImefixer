@@ -1230,10 +1230,20 @@ class EventTapManager {
 
         let focusToken = automaticCorrectionFocusToken
         let decision: CorrectionDecision?
+        // 주소·URL 입력란은 **이 경계에서만** 교정하지 않습니다.
+        //
+        // `performSubmitCorrection`은 `defer`로 제출키를 무조건 주입하므로 교정
+        // 직후 페이지가 넘어갑니다. 그러면 ⌘Z(6초)도 원문 칩도 되돌릴 대상이
+        // 사라져 구조적으로 실패하고 오교정이 그대로 확정됩니다. 실측상 파괴는
+        // 전부 2글자 medium 교정(`sk`→나, `go`→해, `gh`→호 …)이고,
+        // Space·`,`·`?`·`!` 경계에서는 같은 교정이 나도 복구가 온전히 작동합니다.
+        // 그래서 필드 전체가 아니라 되돌릴 수 없는 이 지점 하나만 닫습니다.
+        //
+        // `.trailingPeriods` 상태(`sk.`+Enter)도 이 게이트를 지납니다.
         if isAutoCorrectionEnabled,
            hasEligibleToken,
            automaticCorrectionFieldAllowed == true,
-           focusToken != nil {
+           focusToken?.allowsIrreversibleBoundary == true {
             // 제출 키 자체는 아직 앱에 도착하지 않았지만, 앞서 통과시킨
             // 후행 마침표는 화면에 있으므로 그 길이만큼 건너뛰어 토큰의
             // 마지막 글자를 방향 증거로 읽습니다.
