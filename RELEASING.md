@@ -77,9 +77,13 @@ Developer ID와 notarytool 프로필은 macOS Keychain에 둡니다. Sparkle 개
 
 먼저 PR/`main` GitHub Actions의 전체 XCTest와 Release Analyze가 통과했는지 확인하고, 깨끗하게 커밋된 작업 트리에서 필요한 환경변수를 설정한 뒤 실행합니다. `prepare-release.sh`는 공식 산출물을 만들기 전에 전체 XCTest를 다시 실행합니다.
 
+작업 트리 검사는 `--untracked-files=all`이므로 **추적되지 않는 파일이 하나라도 있으면 중단합니다.** 커밋하거나 저장소 밖으로 옮긴 뒤 실행합니다.
+
 ```bash
-scripts/prepare-release.sh <version> <new-build-number> /absolute/path/to/Mackor-<version>.md
+scripts/prepare-release.sh <version> <new-build-number> dist/releases/Mackor-<version>-<build>.md
 ```
+
+릴리스 노트 파일명은 산출물과 같은 `Mackor-<version>-<build>.md` 규약입니다. 이 파일이 그대로 릴리스 자산이 되고 appcast의 `releaseNotesLink`가 EdDSA로 서명하므로, **게시 후에는 한 글자도 고칠 수 없습니다**(고치면 서명 길이·해시가 어긋나 업데이트 창이 노트를 거부합니다). 문구는 빌드 전에 확정하세요.
 
 필수 환경변수의 전체 목록은 `scripts/prepare-release.sh`를 인자 없이 실행하면 볼 수 있습니다. 스크립트는 테스트부터 공증과 Sparkle 피드 검증까지 순서대로 수행하되 외부에 아무것도 게시하지 않습니다.
 
@@ -102,6 +106,20 @@ dist/releases/<version>-<build>/
 ## 3. 공개 순서
 
 공개 순서는 업데이트 중인 사용자가 아직 존재하지 않는 파일을 받지 않도록 반드시 지킵니다.
+
+0. **릴리스 커밋을 먼저 push합니다.** GitHub은 아직 없는 태그를 만들 때 대상 브랜치가 **원격에서** 가리키는 커밋에 붙입니다. 로컬에만 있는 커밋 위에서 릴리스를 만들면 태그가 조용히 그 이전 커밋에 붙고, 자산·appcast는 정상이라 어떤 검증도 이를 잡지 못합니다(v1.9에서 실제로 발생). push한 뒤 다음이 일치하는지 확인합니다.
+
+   ```bash
+   git push origin main
+   git rev-parse origin/main            # prepare-release.sh 를 돌린 HEAD 와 같아야 합니다
+   ```
+
+   `v<version>` 태그는 **산출물을 빌드한 커밋**, 즉 appcast 게시 커밋 직전 커밋을 가리켜야 합니다. 게시 후 확인:
+
+   ```bash
+   gh api repos/<owner>/<repo>/git/ref/tags/v<version> --jq '.object.sha'
+   git log --oneline v<이전>..v<version>   # 이번 릴리스의 커밋이 전부 보여야 합니다
+   ```
 
 1. 정확히 `v<version>` 태그의 GitHub **Draft Release**를 만들고 PKG, DMG, ZIP, 릴리스 노트, SHA-256 파일을 업로드합니다.
    - 여기에 더해 **버전 없는 고정 이름 `Mackor.dmg`** 를 같은 릴리스에 하나 더 올립니다. 이는 `Mackor-<version>-<build>.dmg`와 **바이트가 동일한 복사본**이며, 웹사이트(`docs/index.html`)의 다운로드 버튼이 가리키는 `releases/latest/download/Mackor.dmg` 링크가 버전이 올라가도 항상 최신을 주도록 하기 위한 별칭입니다. Sparkle 자동 업데이트는 이 별칭을 쓰지 않고 계속 버전 이름 자산을 사용합니다.
