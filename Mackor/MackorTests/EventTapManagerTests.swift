@@ -776,6 +776,40 @@ final class EventTapManagerTests: XCTestCase {
         )
     }
 
+    /// 어퍼스트로피 뒤의 Backspace는 엔진 버퍼를 건드리지 않아야 한다.
+    ///
+    /// `'`는 화면에만 찍히고 엔진·미러에는 들어가지 않는다. 그래서 이 Backspace가
+    /// 실제로 지우는 문자는 `'`인데, 한때 `.collecting` 분기가 무조건 엔진의 자모
+    /// 스트로크를 pop했다. 그러면 `apostropheBreakStrokeCount`는 그대로 남은 채
+    /// 엔진과 화면이 어긋나, `apostropheCorrection`이 화면에 없는 `'`를 끼운
+    /// original을 만들고 삭제 개수가 화면 글자 수와 맞지 않게 된다.
+    ///
+    /// Backspace 2회면 `letterStrokeCount <= 1` 분기가 상태를 스스로 비우므로
+    /// **1회**가 최소 재현이고, 그 뒤 자모를 2개 더 쳐야 `breakIndex < count`를
+    /// 통과해 실제로 어긋난 교정이 나간다.
+    func testBackspaceAfterApostropheDoesNotDesyncEngineBuffer() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .koreanTwoSet
+        manager.isAutoCorrectionEnabled = true
+
+        type("it", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(Self.apostropheKeycode)))
+        XCTAssertNotNil(
+            manager.handleKeyDown(keyDown(0x33)),
+            "어퍼스트로피를 지우는 Backspace는 앱으로 통과해야 합니다"
+        )
+        type("rk", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(
+            output.actions.isEmpty,
+            "엔진과 화면이 어긋난 채 교정이 나갔습니다: \(output.actions)"
+        )
+    }
+
     // MARK: - blind 교정 (AX 없는 앱 · 사용자 opt-in)
     //
     // 한컴처럼 AX에 텍스트를 안 내놓지만 합성 입력은 받는 앱에서, 사용자가
@@ -972,6 +1006,37 @@ final class EventTapManagerTests: XCTestCase {
         XCTAssertTrue(
             output.actions.isEmpty,
             "보호 필드에서 blind 교정이 발동했습니다: \(output.actions)"
+        )
+    }
+
+    /// 같은 토큰 안에서 `.unavailable` → `.ineligible` 순서로 프로브가 바뀌어도
+    /// blind 교정이 발동해서는 안 된다.
+    ///
+    /// `blindFieldActive`는 `.unavailable`에서도 켜지는데, 한때 `.ineligible`
+    /// 케이스가 그 플래그를 끄지 않았다. 그래서 "첫 키는 AX가 느려 실패 →
+    /// 다음 키에서 조회가 성공해 보호 필드(`AXSecureTextField`)로 판명"이라는
+    /// 순서에서 blind가 살아남아, 프로브가 방금 거부한 비밀번호 칸에서 AX 검증
+    /// 없는 삭제+재입력이 일어났다. 위 테스트는 첫 프로브부터 `.ineligible`인
+    /// 경우만 보므로 이 혼합 순서를 잡지 못한다.
+    func testBlindCorrectionCancelledWhenLaterProbeRejectsField() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        // 첫 키가 재시도 상한(3회)을 전부 .unavailable로 소진 → blind 켜짐,
+        // 플래그는 nil 유지. 그 뒤 조회는 .ineligible(보호 필드 확정 거부).
+        focus.transientFailuresRemaining = 3
+        focus.tokenAvailable = false
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+        manager.blindAutoCorrectionEnabled = true
+
+        type("gksrmf", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(
+            output.actions.isEmpty,
+            "확정 거부된 보호 필드에서 blind 교정이 발동했습니다: \(output.actions)"
         )
     }
 
@@ -1420,6 +1485,97 @@ final class EventTapManagerTests: XCTestCase {
             // 커서는 원문 끝(경계 문자 없음)에서 확인해야 합니다.
             XCTAssertEqual(focus.currentFocusOffsets, [6])
         }
+    }
+
+    // MARK: - 주소·URL 입력란 (제출 경계만 차단)
+    //
+    // 옴니박스를 통째로 막던 것을 "되돌릴 수 없는 경계 하나"만 막는 것으로
+    // 좁혔다. 근거: `performSubmitCorrection`이 defer로 제출키를 무조건
+    // 주입하므로 교정 직후 페이지가 넘어가고, 그러면 ⌘Z(6초)도 원문 칩도
+    // 되돌릴 대상이 사라져 오교정이 그대로 확정된다. Space·`,`·`?`·`!`는
+    // 이동을 만들지 않아 복구가 온전하다.
+    //
+    // 실측된 파괴는 전부 2글자 medium 교정이다(sk→나, go→해, gh→호, ch→초,
+    // dk→아, ro→개, wp→제 — 현실적 2글자 토큰 97개 중 7개).
+
+    /// 주소창에서 Return·Enter·Tab은 교정 없이 그대로 통과해야 한다.
+    func testSubmitBoundaryIsNotCorrectedInAddressFields() {
+        for submitKeycode: UInt16 in [0x24, 0x4C, 0x30] {
+            let output = FakeKeyboardOutput()
+            let focus = FakeFocusInspector()
+            focus.isIrreversibleBoundaryBlocked = true
+            let manager = makeManager(output: output, focus: focus)
+            manager.inputSourceKind = .supportedLatin
+            manager.isAutoCorrectionEnabled = true
+
+            type("gksrmf", into: manager)
+            XCTAssertNotNil(
+                manager.handleKeyDown(keyDown(submitKeycode)),
+                "주소창의 제출 키는 붙잡지 말고 그대로 통과시켜야 합니다 (keycode \(submitKeycode))"
+            )
+
+            XCTAssertTrue(
+                output.actions.isEmpty,
+                "주소창 제출 경계에서 교정이 나갔습니다 (keycode \(submitKeycode)): \(output.actions)"
+            )
+        }
+    }
+
+    /// 같은 주소창이라도 Space 경계에서는 정상 교정된다.
+    /// "제출만 닫고 나머지는 연다"를 고정한다.
+    func testSpaceBoundaryStillCorrectsInAddressFields() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.isIrreversibleBoundaryBlocked = true
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("gksrmf", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(
+            output.actions.contains(.text("한글")),
+            "주소창 Space 경계 교정이 막혔습니다: \(output.actions)"
+        )
+    }
+
+    /// `.trailingPeriods` 상태(`gksrmf.` + Return)도 같은 게이트를 지나야 한다.
+    /// 마침표는 즉시 경계가 아니라 유예 상태로 들어가므로 경로가 다르다.
+    func testTrailingPeriodSubmitIsAlsoBlockedInAddressFields() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.isIrreversibleBoundaryBlocked = true
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("gksrmf", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x2F)))   // .
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x24)))   // Return
+
+        XCTAssertTrue(
+            output.actions.isEmpty,
+            "마침표 뒤 제출 경계에서 교정이 나갔습니다: \(output.actions)"
+        )
+    }
+
+    /// 일반 필드의 제출 경계 동작은 한 건도 바뀌지 않아야 한다.
+    /// (`FocusToken`의 기본값이 `allowsIrreversibleBoundary = true`인 것을 고정)
+    func testSubmitBoundaryUnchangedInNormalFields() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("gksrmf", into: manager)
+        XCTAssertNil(
+            manager.handleKeyDown(keyDown(0x24)),
+            "일반 필드에서는 제출 키를 붙잡아 교정해야 합니다"
+        )
+        XCTAssertTrue(output.actions.contains(.text("한글")))
     }
 
     func testSubmitCorrectionDoesNotUseTheDelayedPostBoundaryScheduler() {
@@ -3450,8 +3606,23 @@ private final class FakeKeyboardOutput: EventTapKeyboardOutputting {
 }
 
 private final class FakeFocusInspector: EventTapFocusInspecting {
-    let token = FocusedInputSafety.FocusToken(syntheticSelectionLocation: 0)
-    let reanchoredToken = FocusedInputSafety.FocusToken(syntheticSelectionLocation: 0)
+    /// 주소·URL 힌트 필드를 흉내 냅니다. 켜면 발급되는 토큰의
+    /// `allowsIrreversibleBoundary`가 false가 되어 제출 경계(Return·Enter·Tab)
+    /// 교정만 막히고, Space·문장부호 경계는 그대로 동작해야 합니다.
+    var isIrreversibleBoundaryBlocked = false {
+        didSet {
+            token = FocusedInputSafety.FocusToken(
+                syntheticSelectionLocation: 0,
+                allowsIrreversibleBoundary: !isIrreversibleBoundaryBlocked
+            )
+            reanchoredToken = FocusedInputSafety.FocusToken(
+                syntheticSelectionLocation: 0,
+                allowsIrreversibleBoundary: !isIrreversibleBoundaryBlocked
+            )
+        }
+    }
+    var token = FocusedInputSafety.FocusToken(syntheticSelectionLocation: 0)
+    var reanchoredToken = FocusedInputSafety.FocusToken(syntheticSelectionLocation: 0)
     var tokenAvailable = true
     var currentFocusMatches = true
     var anchoredTextMatches = true

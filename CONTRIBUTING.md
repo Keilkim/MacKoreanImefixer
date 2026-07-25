@@ -63,7 +63,7 @@ PR을 열기 전에 알아두셔야 CI에서 놀라지 않습니다. `.github/wo
 
 ### 엔진 동결 (R4-1)
 
-IMK 마이그레이션 동안 코어 규칙 자산 **31파일**이 바이트 단위로 바뀌지 않았음을 보증합니다. 해시 대조뿐 아니라 기준 태그 `pre-imk`와 직접 diff까지 봅니다. 여기에 손대면 CI가 **설계대로** 실패합니다.
+코어 규칙 자산 **31파일**이 기준 태그 이후 바이트 단위로 바뀌지 않았음을 보증합니다. 해시 대조뿐 아니라 기준 태그와 직접 diff까지 봅니다. 여기에 손대면 CI가 **설계대로** 실패합니다. 현재 기준 태그는 `rules-v6`이며, 이력은 `ci.yml`의 R4-1 블록 주석에 남습니다(`pre-imk` → `rules-v5` → `rules-v6`).
 
 동결된 Swift 파일:
 
@@ -73,7 +73,12 @@ InputSourceController · KSX1001Table · KeycodeToJamoMap · LayoutCorrectionPol
 WrongLayoutCorrectionEngine
 ```
 
-전체 목록은 `scripts/engine-freeze.sha256`에 있습니다. 이 파일들을 고쳐야 하는 변경은 지금 시점에 병합할 수 없습니다 — 이슈로 먼저 이야기해 주세요.
+전체 목록은 `scripts/engine-freeze.sha256`에 있습니다. 이 파일들을 고쳐야 하는 변경은 **이슈로 먼저 합의**해 주세요. 영구 금지는 아니고, 개정하려면 한 커밋 안에서 다음을 전부 해야 합니다.
+
+1. `python3 -B scripts/rulebench/bench.py`로 재현율·오탐을 재측정하고 결과를 PR 본문에 붙입니다. 교정 규칙을 건드렸다면 골든(`Corpus/structure-correction/v2/golden.tsv`)도 재생성합니다.
+2. `shasum -a 256 $(awk '{print $2}' scripts/engine-freeze.sha256) > /tmp/f && mv /tmp/f scripts/engine-freeze.sha256`로 매니페스트를 재생성합니다. **정렬하지 마세요** — 기존 순서를 유지해야 diff가 읽힙니다.
+3. 새 매니페스트 해시(`shasum -a 256 scripts/engine-freeze.sha256`)를 `ci.yml`의 `ENGINE_FREEZE_EXPECTED_SHA256`에 반영하고, 같은 블록의 기준 태그 이력 주석에 개정 사유와 bench 결과를 추가한 뒤 diff 대상 태그를 새 이름으로 바꿉니다.
+4. **병합 커밋에 그 태그를 달아 push합니다.** 태그가 없으면 이후 모든 CI가 `git fetch refs/tags/<새 태그>`에서 실패하므로 순서가 중요합니다.
 
 동결되지 않은 곳(`EventTapManager` · `FocusedInputSafety` · `AppMonitor` · `LexicalGuard` · `LexicalTiebreaker` · `MonosyllableLexicon` · `TargetAppManager` · `MackorApp`)은 평소대로 고칠 수 있습니다.
 

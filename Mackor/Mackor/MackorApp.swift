@@ -126,7 +126,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         - 공백·,·?·!에서 평가하며 마침표는 URL 보호를 위해 잠시 유예합니다
         - 영문 입력 소스에서 실제 Shift로 친 ALL CAPS 단어는 보존합니다
         - 보정 뒤 시스템 한/영 입력 소스도 의도한 언어로 바뀝니다
-        - 검색 입력란은 지원하며 비밀번호·주소·보안 입력 필드에서는 작동하지 않습니다
+        - 검색 입력란은 지원하며 비밀번호·보안 입력 필드에서는 작동하지 않습니다
+        - 주소·URL 입력란은 Enter·Tab으로 제출할 때만 교정하지 않습니다
         - 지원하는 입력란에서는 보정 직후 원래 입력을 4~6초간 클릭해 복원할 수 있습니다
         - 결과 8자 이하의 짧은 보정은 원문 칩이 없어도 6초 안에 ⌘Z로 되돌릴 수 있습니다
         - 입력 내용은 저장하거나 외부로 전송하지 않습니다
@@ -705,7 +706,7 @@ struct MackorPanel: View {
             }
             Button("취소", role: .cancel) { pendingAutoApp = nil }
         } message: { item in
-            Text("\(item.name) 전체에 적용됩니다. 브라우저라면 모든 웹사이트가 같은 설정을 씁니다. 검색 입력란은 지원하며 비밀번호·주소·보안 필드에서는 작동하지 않습니다.")
+            Text("\(item.name) 전체에 적용됩니다. 브라우저라면 모든 웹사이트가 같은 설정을 씁니다. 검색 입력란은 지원하며 비밀번호·보안 필드에서는 작동하지 않습니다. 주소·URL 입력란은 Enter·Tab 제출 시에만 교정하지 않습니다.")
         }
         .alert("지원하는 모든 앱에서 자동 교정을 켤까요?", isPresented: $pendingAllAppsScope) {
             Button("모든 앱에 적용") {
@@ -714,7 +715,7 @@ struct MackorPanel: View {
             }
             Button("취소", role: .cancel) { pendingAllAppsScope = false }
         } message: {
-            Text("모든 앱·웹사이트의 지원되는 입력란에 적용됩니다. 비밀번호·주소·보안 필드는 제외됩니다.")
+            Text("모든 앱·웹사이트의 지원되는 입력란에 적용됩니다. 비밀번호·보안 필드는 제외되고, 주소·URL 입력란은 Enter·Tab 제출 시에만 제외됩니다.")
         }
         .alert(
             "강제 교정을 켤까요?",
@@ -1274,7 +1275,7 @@ struct MackorPanel: View {
                 get: { targetAppManager.autoCorrectionScope == .allApps },
                 set: { setAllAppsAutoCorrection($0) }
             ))
-            Text("켜면 앱 목록으로 제한하지 않고, 지원하는 모든 앱·웹사이트의 입력란에서 한/영 오입력을 자동 보정합니다. 접근성으로 글자를 읽을 수 없는 앱(목록에 '미지원'으로 표시)에서는 동작하지 않습니다. 비밀번호·주소·보안 필드도 제외됩니다. 앱별로만 켜려면 이 스위치를 끄고 목록에서 앱마다 '자판자동'을 켜세요.")
+            Text("켜면 앱 목록으로 제한하지 않고, 지원하는 모든 앱·웹사이트의 입력란에서 한/영 오입력을 자동 보정합니다. 접근성으로 글자를 읽을 수 없는 앱(목록에 '미지원'으로 표시)에서는 동작하지 않습니다. 비밀번호·보안 필드도 제외되고, 주소·URL 입력란은 Enter·Tab 제출 시에만 제외됩니다. 앱별로만 켜려면 이 스위치를 끄고 목록에서 앱마다 '자판자동'을 켜세요.")
                 .font(.caption2).foregroundColor(.secondary)
         }
     }

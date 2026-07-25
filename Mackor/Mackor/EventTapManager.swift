@@ -200,10 +200,13 @@ class EventTapManager {
     private var _isAutoCorrectionEnabled: Bool = false
     private var automaticCorrectionFieldAllowed: Bool?
     /// 현재 필드가 "AX엔 텍스트 없음 + 사용자 blind opt-in"이라 검증 없이 교정할
-    /// 대상인가. `.ineligibleUnsupportedRole` 프로브에서만 켜지고(보안 필드는
-    /// 절대 아님이 구조적으로 보장 — 그 케이스는 `!IsSecureEventInputEnabled()`
-    /// 뒤에만 반환됨), clearAutomaticCorrectionFocus에서 비워집니다. 이 값이
-    /// 켜져 있으면 AX 미지원이어도 기록을 이어가고 경계에서 blind 교정합니다.
+    /// 대상인가. `.ineligibleUnsupportedRole`과 `.unavailable` 프로브에서 켜집니다
+    /// — 둘 다 보안 필드가 아님이 보장되는 케이스입니다(보안 필드는 프로브 첫
+    /// 줄에서 `.ineligible`로 빠지고, 이 둘은 그 뒤에만 옵니다).
+    ///
+    /// 끄는 곳은 두 군데입니다: `.ineligible`(확정 거부 — 같은 토큰 안에서 뒤늦게
+    /// 보호 필드로 판명된 경우)과 `clearAutomaticCorrectionFocus`(토큰 경계).
+    /// 이 값이 켜져 있으면 AX 미지원이어도 기록을 이어가고 경계에서 blind 교정합니다.
     private var blindFieldActive = false
     /// applyCorrection 체인이 blind 교정을 실행 중인 동안만 true. finalizeCorrection이
     /// 이 값으로 UndoTransaction.blind를 세웁니다(동기 체인이라 안전).
@@ -793,6 +796,19 @@ class EventTapManager {
                 return event
             }
 
+            // 어퍼스트로피는 화면에만 찍히고 엔진·미러에는 들어가지 않습니다
+            // (아래 어퍼스트로피 분기는 apostropheBreakStrokeCount만 기록하고
+            // 이벤트를 통과시킵니다). 그래서 이 백스페이스가 실제로 지우는 문자는
+            // `'`인데, 아래 `.collecting` 분기는 엔진의 자모 스트로크를 pop합니다.
+            // 그대로 두면 apostropheCorrection이 화면에 없는 `'`를 끼운 original을
+            // 만들어 originalCharacterCount가 화면 글자 수와 어긋납니다 — 삭제 수가
+            // 어긋나면 텍스트가 깨집니다. 위 trailing-period 처리와 같은 방침으로
+            // 교정 기회만 포기하고 엔진은 건드리지 않습니다.
+            if isAutoCorrectionEnabled, apostropheBreakStrokeCount != nil {
+                invalidateAutomaticCorrectionTokenUntilBoundary()
+                return event
+            }
+
             // 기록 게이트(아래 `!= false`)와 짝을 맞춥니다. 미해결(nil) 창에서도
             // 정방향 키는 엔진에 기록되므로, 백스페이스도 nil에서 엔진을 줄여야
             // 엔진 버퍼가 화면을 정확히 미러합니다. == true로 두면 nil 창의
@@ -900,9 +916,12 @@ class EventTapManager {
             if !isAlreadyDiscarding, automaticCorrectionFieldAllowed == nil {
                 // 조회가 *실패*한 것과 이 필드가 *교정 대상이 아닌* 것은 다릅니다.
                 //
-                // 실측: Chrome의 차가운 첫 조회는 약 57ms 걸려 이 경로의 50ms
-                // 제한을 넘습니다. 그 타임아웃을 "교정 금지"로 확정해 버리면
-                // Chrome에서는 자동 교정이 영영 걸리지 않습니다. 실제로 그랬습니다.
+                // 실측: Chrome의 차가운 첫 조회는 약 57ms 걸립니다. 상한이 50ms이던
+                // 시절 이 조회는 잘려 *실패*로 돌아왔고(지금은 100ms —
+                // `FocusedInputSafety.messagingTimeout`), 그 타임아웃을 "교정 금지"로
+                // 확정해 버리면 Chrome에서는 자동 교정이 영영 걸리지 않았습니다.
+                // 상한을 올린 뒤에도 더 느린 앱은 여전히 실패할 수 있으므로 이
+                // 구분(실패 ≠ 거부)은 그대로 유지합니다.
                 //
                 // 실패한 조회 자체가 AX 연결을 데우므로 예산 안에서는 곧바로
                 // 재시도합니다. 예산을 넘기면 키열만 보존하고 다음 글자에서
@@ -946,6 +965,12 @@ class EventTapManager {
                     automaticCorrectionFocusToken = nil
                     automaticCorrectionFieldAllowed = false
                     unsupportedRoleObservations = 0
+                    // 같은 토큰의 앞선 키가 .unavailable/.ineligibleUnsupportedRole로
+                    // blind를 켰을 수 있습니다. 확정 거부가 나온 이상 그 상태를 반드시
+                    // 취소합니다 — 안 그러면 아래 기록 게이트(`|| blindFieldActive`)와
+                    // 경계 blind 분기가 살아남아, 프로브가 방금 "보호 필드"라고 거부한
+                    // 입력란에서 AX 검증 없는 삭제+재입력이 일어납니다.
+                    blindFieldActive = false
 
                 case .ineligibleUnsupportedRole:
                     // 판정은 위와 같습니다(확정 거부). 다른 것은 이 신호가 앱이
@@ -977,7 +1002,7 @@ class EventTapManager {
                 case .unavailable:
                     automaticCorrectionFocusToken = nil
                     // blind opt-in 앱은 AX 실패 **이유**를 가리지 않습니다. 한컴처럼
-                    // AX가 무거운 앱은 50ms 예산 안에서 프로브가 토큰마다
+                    // AX가 무거운 앱은 100ms 예산 안에서 프로브가 토큰마다
                     // .unavailable(느림)과 .ineligibleUnsupportedRole(역할없음)을
                     // 오갑니다. .unsupportedRole에서만 blind를 켜면 교정이 간헐적으로
                     // 빠집니다. .unavailable도 즉시 blind로 처리합니다 — 이 케이스는
@@ -1205,10 +1230,20 @@ class EventTapManager {
 
         let focusToken = automaticCorrectionFocusToken
         let decision: CorrectionDecision?
+        // 주소·URL 입력란은 **이 경계에서만** 교정하지 않습니다.
+        //
+        // `performSubmitCorrection`은 `defer`로 제출키를 무조건 주입하므로 교정
+        // 직후 페이지가 넘어갑니다. 그러면 ⌘Z(6초)도 원문 칩도 되돌릴 대상이
+        // 사라져 구조적으로 실패하고 오교정이 그대로 확정됩니다. 실측상 파괴는
+        // 전부 2글자 medium 교정(`sk`→나, `go`→해, `gh`→호 …)이고,
+        // Space·`,`·`?`·`!` 경계에서는 같은 교정이 나도 복구가 온전히 작동합니다.
+        // 그래서 필드 전체가 아니라 되돌릴 수 없는 이 지점 하나만 닫습니다.
+        //
+        // `.trailingPeriods` 상태(`sk.`+Enter)도 이 게이트를 지납니다.
         if isAutoCorrectionEnabled,
            hasEligibleToken,
            automaticCorrectionFieldAllowed == true,
-           focusToken != nil {
+           focusToken?.allowsIrreversibleBoundary == true {
             // 제출 키 자체는 아직 앱에 도착하지 않았지만, 앞서 통과시킨
             // 후행 마침표는 화면에 있으므로 그 길이만큼 건너뛰어 토큰의
             // 마지막 글자를 방향 증거로 읽습니다.

@@ -5,6 +5,8 @@ final class TargetAppManagerTests: XCTestCase {
     private let targetAppsKey = "TargetApps"
     private let initializedKey = "TargetAppsInitialized"
     private let autoCorrectionScopeKey = "AutoCorrectionScope"
+    private let axSupportKey = "AXAutoCorrectionSupport"
+    private let optOutKey = "AutoCorrectionOptOut"
 
     private var defaults: UserDefaults {
         .standard
@@ -248,9 +250,47 @@ final class TargetAppManagerTests: XCTestCase {
         XCTAssertTrue(defaults.bool(forKey: initializedKey))
     }
 
+    /// 목록에 보이지만 `isListable`이 아닌 앱도 토글이 켜진 채 유지되어야 한다.
+    ///
+    /// 최전면 앱은 `isCorrectionCapable`만으로 목록에 끼어들 수 있어(패널의
+    /// mergedItems), 화이트리스트 밖 Apple 앱처럼 `.supported`이면서 비-listable인
+    /// 앱이 토글에 보인다. 그런데 켜기 경로가 `.supported`만 보고 저장을 건너뛰던
+    /// 한때, 조회 쪽은 `isListable`에서 걸려 false를 돌려주었다 — 토글이 켜자마자
+    /// 되돌아오고 기능도 켜지지 않았다. 끄기 경로는 항상 저장하므로 비대칭이었다.
+    func testNonListableSupportedAppStaysOnAfterUserEnables() {
+        let manager = TargetAppManager()
+        // 화이트리스트(safari·mail·메시지·notes·reminders·textedit·iWork·freeform)
+        // 밖의 Apple 번들 → isCorrectionCapable == true, isListable == false
+        let bundleID = "com.apple.iCal"
+        let name = "캘린더"
+
+        manager.noteAutoCorrectionSupported(bundleID: bundleID)
+        XCTAssertEqual(
+            manager.axAutoCorrectionSupport(bundleID: bundleID, name: name),
+            .supported
+        )
+        XCTAssertFalse(
+            MackorAppFilter.isListable(bundleID: bundleID, name: name),
+            "이 테스트는 비-listable 번들을 전제로 합니다"
+        )
+
+        manager.setAutoCorrectionByUser(true, bundleID: bundleID, name: name)
+
+        XCTAssertTrue(
+            manager.autoCorrectionIsOn(bundleID: bundleID, name: name),
+            "비-listable 지원 앱의 토글이 켜자마자 되돌아왔습니다"
+        )
+
+        // 끄기는 그대로 동작해야 한다(회귀 방지).
+        manager.setAutoCorrectionByUser(false, bundleID: bundleID, name: name)
+        XCTAssertFalse(manager.autoCorrectionIsOn(bundleID: bundleID, name: name))
+    }
+
     private func clearStoredState() {
         defaults.removeObject(forKey: targetAppsKey)
         defaults.removeObject(forKey: initializedKey)
         defaults.removeObject(forKey: autoCorrectionScopeKey)
+        defaults.removeObject(forKey: axSupportKey)
+        defaults.removeObject(forKey: optOutKey)
     }
 }

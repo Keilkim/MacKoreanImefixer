@@ -101,4 +101,36 @@ final class AppMonitorTests: XCTestCase {
             }
         }
     }
+
+    /// 지원 학습 프로브는 한 번이 아니라 사다리여야 한다.
+    ///
+    /// 고정하는 회귀: Chrome이 자판 자동 교정 대상으로 **영영 학습되지 않던**
+    /// 문제. Chrome은 `AXManualAccessibility`(-25205)도
+    /// `AXEnhancedUserInterface`(-25208)도 받지 않고, 보조 기술이 트리를 조회하면
+    /// 그때부터 웹 AX 트리를 비동기로 짓는다. 그래서 250ms 한 번짜리 프로브는
+    /// 차가운 Chrome을 언제나 놓쳤고, 놓치면 `.unknown`으로 남아 사용자가 손수
+    /// 목록에 추가하지 않는 한 교정이 켜지지 않았다.
+    ///
+    /// 인스턴스 경로(`schedulePassiveSupportProbe`)는 init이 NSWorkspace·TIS를
+    /// 실제로 읽어 테스트할 수 없으므로, 사다리의 **모양**을 여기서 고정한다.
+    func testPassiveSupportProbeUsesLadderNotSingleShot() {
+        let delays = AppMonitor.passiveSupportProbeDelaysMs
+
+        XCTAssertGreaterThan(
+            delays.count, 1,
+            "one-shot으로 되돌아가면 Chrome류 지연 트리를 다시 놓친다"
+        )
+        XCTAssertEqual(
+            delays, delays.sorted(),
+            "rung은 단조 증가해야 겹치지 않는다"
+        )
+        XCTAssertEqual(
+            delays.first, 250,
+            "첫 rung은 기존 타이밍을 유지해 빠른 앱의 학습이 늦어지지 않아야 한다"
+        )
+        XCTAssertGreaterThanOrEqual(
+            delays.last ?? 0, 2000,
+            "마지막 rung이 웹 AX 트리 생성 실측 지연을 덮어야 한다"
+        )
+    }
 }
