@@ -6,6 +6,14 @@ Mackor의 사용자에게 보이는 변경 사항을 이 파일에 기록합니�
 
 ## [Unreleased]
 
+## [1.7] — 2026-07-25
+
+### 수정
+
+- **앱 목록에서 토글을 누르면 창이 그대로 닫히던 문제를 해결합니다.** 메뉴바에서 Mackor을 열고 `자판자동`이나 `조합` 스위치를 누르면 설정이 바뀌지 않고 패널이 닫혀서, 다시 열어 한 번 더 눌러야 했습니다. Mackor은 Dock에 뜨지 않는 메뉴바 앱이라 패널이 떠도 앱이 활성 상태가 되지 않았고, 그래서 첫 클릭이 스위치에 닿지 않고 앱을 깨우는 데 쓰인 뒤 패널이 사라졌습니다. 이제 패널을 열 때 앱이 함께 활성화되어 한 번에 눌립니다.
+
+- **확인창의 버튼을 누르면 패널이 닫히던 문제를 해결합니다.** "자동 교정을 켤까요?" 같은 확인창에서 `켜기`를 누르든 `취소`를 누르든 패널이 닫혔습니다. 확인창이 별도의 창이라 그것이 닫힐 때 패널이 함께 사라졌기 때문입니다. 이제 확인창을 패널 안에 직접 그려서 창이 닫히는 일이 없습니다. 바깥 어두운 곳을 눌러도 취소되고, Enter·Esc 키도 그대로 동작합니다.
+
 ## [1.6] — 2026-07-25
 
 ### 변경
@@ -152,7 +160,8 @@ v1.3부터 Return·숫자패드 Enter·Tab에서 흐름을 뒤집어 처리합�
 함께 표시하고, 수명을 ⌘Z 트랜잭션과 같은 6초로 맞췄습니다. 칩은 사라졌는데
 되돌리기는 아직 되는 간극이 없어집니다.
 
-[Unreleased]: https://github.com/Keilkim/MacKoreanImefixer/compare/v1.6...HEAD
+[Unreleased]: https://github.com/Keilkim/MacKoreanImefixer/compare/v1.7...HEAD
+[1.7]: https://github.com/Keilkim/MacKoreanImefixer/compare/v1.6...v1.7
 [1.6]: https://github.com/Keilkim/MacKoreanImefixer/compare/v1.5...v1.6
 [1.5]: https://github.com/Keilkim/MacKoreanImefixer/compare/v1.4...v1.5
 [1.4]: https://github.com/Keilkim/MacKoreanImefixer/compare/v1.3...v1.4
