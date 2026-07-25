@@ -33,6 +33,7 @@ jobs:
             MackorIMEProbe/build.sh \
             scripts/prepare-release.sh \
             scripts/prepare-appcast.sh \
+            scripts/collect-downloads.sh \
             scripts/validate-release.sh
 
       # R4-1 동결 가드: 코어 규칙 자산 31파일(엔진 9·순수 테스트 8·코퍼스 5·
