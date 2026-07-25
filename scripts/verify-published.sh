@@ -256,7 +256,11 @@ items = data.get("announcements")
 if not isinstance(items, list):
     sys.exit("announcements.json 에 announcements 배열이 없습니다.")
 tag = "releases/tag/v" + version
-if not any(tag in str(item.get("url", "")) for item in items):
+# endswith 로 **정확히** 끝나는지 본다. 부분 문자열이면 v1.10 항목 하나가 있을 때
+# v1.1 을 검사해도 통과한다 — 새 소식 누락을 잡으라고 만든 검사가 누락을 놓치는 형태다.
+def points_at_this_release(item):
+    return str(item.get("url") or "").rstrip("/").endswith(tag)
+if not any(points_at_this_release(item) for item in items):
     sys.exit("이번 릴리스(v%s)의 새 소식 항목이 없습니다. url 이 %s 로 끝나는 항목을 배열 맨 앞에 추가하세요." % (version, tag))
 seen = [item.get("id") for item in items]
 if len(seen) != len(set(seen)):
