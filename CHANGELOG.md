@@ -6,6 +6,14 @@ Mackor의 사용자에게 보이는 변경 사항을 이 파일에 기록합니�
 
 ## [Unreleased]
 
+## [1.9] — 2026-07-25
+
+### 변경
+
+- **새 버전이 나오면 메뉴에서 바로 보입니다.** 지금까지는 업데이트가 있어도 설정 화면에 들어가야 확인할 수 있었습니다. 이제 새 버전을 찾으면 패널 아래쪽에 `업데이트 v1.9`가 버전 번호와 함께 나타납니다. 새 버전이 없을 때는 아무것도 표시하지 않습니다. 직접 확인하고 싶으면 `설정 → 업데이트 확인…`이 그대로 있습니다.
+
+  업데이트는 이전과 같이 **직접 눌러야** 설치됩니다. 확인만 하루 한 번 자동으로 하고, 무인 설치는 하지 않습니다.
+
 ## [1.8] — 2026-07-25
 
 ### 변경
@@ -184,7 +192,8 @@ v1.3부터 Return·숫자패드 Enter·Tab에서 흐름을 뒤집어 처리합�
 함께 표시하고, 수명을 ⌘Z 트랜잭션과 같은 6초로 맞췄습니다. 칩은 사라졌는데
 되돌리기는 아직 되는 간극이 없어집니다.
 
-[Unreleased]: https://github.com/Keilkim/MacKoreanImefixer/compare/v1.8...HEAD
+[Unreleased]: https://github.com/Keilkim/MacKoreanImefixer/compare/v1.9...HEAD
+[1.9]: https://github.com/Keilkim/MacKoreanImefixer/compare/v1.8...v1.9
 [1.8]: https://github.com/Keilkim/MacKoreanImefixer/compare/v1.7...v1.8
 [1.7]: https://github.com/Keilkim/MacKoreanImefixer/compare/v1.6...v1.7
 [1.6]: https://github.com/Keilkim/MacKoreanImefixer/compare/v1.5...v1.6
