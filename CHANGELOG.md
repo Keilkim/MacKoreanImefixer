@@ -6,6 +6,14 @@ Mackor의 사용자에게 보이는 변경 사항을 이 파일에 기록합니�
 
 ## [Unreleased]
 
+## [1.10] — 2026-07-25
+
+### 수정
+
+- **교정이 안 되는 앱을 "미지원"으로 알려주지 못하던 문제를 해결합니다.** 일러스트레이터나 한글처럼 글자를 읽어올 수 없는 앱은, 몇 번 실패하면 목록에 `미지원`으로 표시되고 강제로라도 교정할지 물어봅니다. 그래야 *토글은 켜져 있는데 아무 일도 안 일어나는* 상태를 원인도 모른 채 겪지 않습니다. 1.9에서 엑셀 문제를 고치면서 이 학습이 멈췄습니다 — 한 글자짜리 단어만 치거나, 앱이 느려 실패 이유가 섞이면 아무리 쳐도 안 쌓였습니다. 세는 기준을 단어 단위로 되돌렸습니다.
+
+- **"이 버전 건너뛰기"를 누르면 업데이트 표시가 사라집니다.** 지금까지는 건너뛰어도 패널 아래 업데이트 버튼이 앱을 껐다 켤 때까지 남았고, 그 버튼을 누르면 방금 건너뛴 바로 그 버전이 다시 나왔습니다. "나중에 알림"은 업데이트가 실제로 남아 있는 것이므로 이전과 같이 계속 표시합니다.
+
 ## [1.9] — 2026-07-25
 
 ### 수정
@@ -196,7 +204,8 @@ v1.3부터 Return·숫자패드 Enter·Tab에서 흐름을 뒤집어 처리합�
 함께 표시하고, 수명을 ⌘Z 트랜잭션과 같은 6초로 맞췄습니다. 칩은 사라졌는데
 되돌리기는 아직 되는 간극이 없어집니다.
 
-[Unreleased]: https://github.com/Keilkim/MacKoreanImefixer/compare/v1.9...HEAD
+[Unreleased]: https://github.com/Keilkim/MacKoreanImefixer/compare/v1.10...HEAD
+[1.10]: https://github.com/Keilkim/MacKoreanImefixer/compare/v1.9...v1.10
 [1.9]: https://github.com/Keilkim/MacKoreanImefixer/compare/v1.8...v1.9
 [1.8]: https://github.com/Keilkim/MacKoreanImefixer/compare/v1.7...v1.8
 [1.7]: https://github.com/Keilkim/MacKoreanImefixer/compare/v1.6...v1.7

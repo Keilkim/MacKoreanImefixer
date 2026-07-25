@@ -7,8 +7,8 @@ set -Eeuo pipefail
 
 APP_NAME="Mackor"
 DISPLAY_NAME="Mackor - 한글 입력 보정"
-VERSION="${VERSION:-1.9}"
-BUILD_NUMBER="${BUILD_NUMBER:-15}"
+VERSION="${VERSION:-1.10}"
+BUILD_NUMBER="${BUILD_NUMBER:-16}"
 IDENTIFIER="com.mackor.app"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
 PROJECT_DIR="$SCRIPT_DIR/Mackor"
