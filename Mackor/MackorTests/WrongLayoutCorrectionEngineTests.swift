@@ -197,6 +197,39 @@ final class WrongLayoutCorrectionEngineTests: XCTestCase {
         XCTAssertNotNil(timedEngine.processBoundary(.space))
     }
 
+    /// 백스페이스로 버퍼를 완전히 비운 뒤 오래 쉬어도, 그 다음 단어는 교정된다.
+    ///
+    /// `processBackspace()`가 버퍼를 비우면서 `lastKeystrokeUptime`을 남겨 두면,
+    /// `record()`의 간격 검사가 **빈 버퍼**에 대해 옛 타임스탬프와 비교해
+    /// `discardCurrentToken()`을 부른다. 간격 검사의 의도는 "긴 정지 뒤의
+    /// 접미사를 완전한 단어로 오인하지 않는" 것인데, 남길 접미사가 하나도 없는
+    /// 상황에서 새로 시작하는 단어를 통째로 버리게 된다.
+    ///
+    /// 오타를 지우고 잠깐 생각한 뒤 다시 치는 흔한 패턴이다.
+    func testBackspaceToEmptyBufferDoesNotPoisonNextToken() throws {
+        var uptime: TimeInterval = 0
+        let timedEngine = WrongLayoutCorrectionEngine(
+            maximumInterKeystrokeInterval: 1,
+            uptime: { uptime }
+        )
+
+        record("gksrmf", source: .supportedLatin, into: timedEngine)
+        for _ in 0..<6 {
+            timedEngine.processBackspace()
+        }
+
+        // 지운 뒤 간격 상한을 넘겨 쉰다. 버퍼는 이미 비어 있으므로 이 정지는
+        // 다음 토큰에 아무 영향도 주지 않아야 한다.
+        uptime = 3
+        record("gksrmf", source: .supportedLatin, into: timedEngine)
+
+        let decision = try XCTUnwrap(
+            timedEngine.processBoundary(.space),
+            "빈 버퍼에 남은 타임스탬프가 다음 단어를 통째로 폐기했습니다"
+        )
+        XCTAssertEqual(decision.replacement, "한글")
+    }
+
     func testKeystrokesWithinTheIntervalStayInTheSameToken() throws {
         var uptime: TimeInterval = 0
         let timedEngine = WrongLayoutCorrectionEngine(

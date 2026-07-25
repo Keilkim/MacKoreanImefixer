@@ -114,7 +114,13 @@ class HangulCompositionTracker {
             // 복합종성 → 단일종성 (닭→달)
             if let first = jongFirst {
                 jong = first
-                jongFirst = nil
+                // `jongFirst`는 `jong`과 **세트**로 유지해야 합니다. 정방향
+                // 경로(handleSyllable)도 둘을 같은 값으로 함께 세팅합니다.
+                // 여기서 nil로 비우면 `.syllableJong`으로 돌아온 뒤
+                // handleSyllableJong의 겹받침 결합 분기(`if let first = jongFirst`)가
+                // 실패해, 결합 가능한 상황인데도 음절을 확정하고 새 초성을
+                // 시작합니다 — 닭→BS→달→ㄱ이 "닭"이 아니라 "달ㄱ"이 됐습니다.
+                jongFirst = first
                 state = .syllableJong
                 return .handled(delete: 1, insert: currentComposing)
             } else {

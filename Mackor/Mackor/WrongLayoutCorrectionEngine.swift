@@ -171,16 +171,26 @@ final class WrongLayoutCorrectionEngine {
     /// Mirrors a backspace that removed the most recent buffered letter.
     /// An overflowed/unsafe token stays discarded until a real boundary because
     /// the engine no longer knows how much of that token remains on screen.
+    ///
+    /// 버퍼가 비면 `lastKeystrokeUptime`도 함께 비웁니다. `reset()`·
+    /// `discardCurrentToken()`이 하는 것과 같은 정리입니다.
+    ///
+    /// 안 비우면 `record()`의 간격 검사가 **빈 버퍼**에 대해 옛 타임스탬프와
+    /// 비교합니다. 백스페이스로 토큰을 다 지운 뒤 `maximumInterKeystrokeInterval`
+    /// 보다 오래 쉬면, 접미사가 아니라 새로 시작하는 단어를 통째로
+    /// `discardCurrentToken()`으로 버렸습니다 — 간격 검사의 의도와 정반대입니다.
     func processBackspace() {
         guard !discardingUntilBoundary else { return }
         guard !strokes.isEmpty else {
             tokenInputSource = nil
+            lastKeystrokeUptime = nil
             return
         }
 
         strokes.removeLast()
         if strokes.isEmpty {
             tokenInputSource = nil
+            lastKeystrokeUptime = nil
         }
     }
 

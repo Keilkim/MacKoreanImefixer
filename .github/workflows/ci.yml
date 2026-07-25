@@ -42,13 +42,21 @@ jobs:
       # 커밋으로만 가능하고, 그 diff가 곧 개정 기록이 된다.
       #
       # 기준 태그 이력: pre-imk (IMK 마이그레이션 동결) → rules-v5 (v4.3 규칙
-      # 개정: R-E13 j+모음, R-E14 어중 대문자 — bench 오탐 0 증가·재현율 개선).
+      # 개정: R-E13 j+모음, R-E14 어중 대문자 — bench 오탐 0 증가·재현율 개선)
+      # → rules-v6 (조합/토큰 수명 버그 2건. 교정 **규칙**은 한 줄도 안 바뀌어
+      # golden.tsv·genrules.py·EnglishPhonotactics.swift는 그대로이고 bench 지표도
+      # 동일하다 — 영→한 재현율 98.08%·오탐 87, 한→영 재현율 97.44%·오탐 0:
+      #   · HangulCompositionTracker: 겹받침 백스페이스가 jongFirst를 비워
+      #     닭→BS→ㄱ이 "달ㄱ"이 되던 것(정방향은 jong과 세트로 세팅한다)
+      #   · WrongLayoutCorrectionEngine: 백스페이스로 버퍼를 비워도
+      #     lastKeystrokeUptime이 남아, 지운 뒤 쉬면 다음 단어가 통째로 폐기되던 것
+      #   두 파일의 순수 테스트에 각 회귀 케이스를 추가했다).
       #
       # 두 겹으로 검사한다. 해시 대조만 하면 같은 PR에서 엔진과 매니페스트를 함께
-      # 바꿔 통과시킬 수 있으므로, 기준 태그 rules-v5와 직접 diff도 함께 본다.
+      # 바꿔 통과시킬 수 있으므로, 기준 태그 rules-v6과 직접 diff도 함께 본다.
       - name: Verify engine freeze (R4-1)
         run: |
-          ENGINE_FREEZE_EXPECTED_SHA256=c2a423ad524016ebb86cf081ba5973e8f80657996ccda9bb1a0f43cd4682a459
+          ENGINE_FREEZE_EXPECTED_SHA256=debf1ae6b6fa356bfd42107a5db3beb43e7e3ee559509976a4a617e912cd36f9
           ENGINE_FREEZE_ACTUAL_SHA256=$(shasum -a 256 scripts/engine-freeze.sha256 | awk '{print $1}')
           if [ "$ENGINE_FREEZE_ACTUAL_SHA256" != "$ENGINE_FREEZE_EXPECTED_SHA256" ]; then
             echo "R4-1 위반: 동결 매니페스트 자체가 변경됨" >&2
@@ -56,16 +64,16 @@ jobs:
           fi
           shasum -a 256 -c scripts/engine-freeze.sha256
 
-          git fetch --force --quiet origin 'refs/tags/rules-v5:refs/tags/rules-v5'
-          git rev-parse --verify refs/tags/rules-v5 >/dev/null
-          CHANGED=$(git diff --name-only refs/tags/rules-v5 HEAD -- \
+          git fetch --force --quiet origin 'refs/tags/rules-v6:refs/tags/rules-v6'
+          git rev-parse --verify refs/tags/rules-v6 >/dev/null
+          CHANGED=$(git diff --name-only refs/tags/rules-v6 HEAD -- \
             $(awk '{print $2}' scripts/engine-freeze.sha256))
           if [ -n "$CHANGED" ]; then
-            echo "R4-1 위반: 동결 대상이 기준 태그 rules-v5 이후 변경됨" >&2
+            echo "R4-1 위반: 동결 대상이 기준 태그 rules-v6 이후 변경됨" >&2
             echo "$CHANGED" >&2
             exit 1
           fi
-          echo "동결 대상 $(wc -l < scripts/engine-freeze.sha256)파일: rules-v5와 동일"
+          echo "동결 대상 $(wc -l < scripts/engine-freeze.sha256)파일: rules-v6과 동일"
 
       # Layer 1 어휘 자산은 엔진 동결과 **별도**로 관리한다.
       #
