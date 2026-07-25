@@ -1033,12 +1033,33 @@ class EventTapManager {
                     blindFieldActive = false
 
                 case .ineligibleUnsupportedRole:
-                    // 판정은 위와 같습니다(확정 거부). 다른 것은 이 신호가 앱이
-                    // AX에 텍스트를 안 내놓는다는 뜻일 수 있다는 점뿐입니다.
-                    // 같은 앱에서 연속으로 쌓일 때만 미지원으로 학습합니다.
+                    // **즉시 굳히지 않습니다.** 역할은 토큰 도중에 바뀔 수 있습니다.
+                    //
+                    // 스프레드시트가 그렇습니다 — Excel 은 셀로 이동한 뒤 첫 글자를
+                    // 칠 때 비로소 셀 편집기를 만듭니다. 그래서 그 첫 키의 프로브는
+                    // 아직 그리드를 보고 `.ineligibleUnsupportedRole` 을 돌려주는데,
+                    // 여기서 확정 거부로 굳히면 위 `== nil` 가드 때문에 다시 묻지
+                    // 않아 **그 단어 전체가 통째로 버려집니다.** 다음 단어부터는
+                    // 정상이라 "셀 바꾸면 첫 단어만 안 된다"로 보입니다. 잠깐
+                    // 기다렸다 치면 되는 것도 같은 이유입니다(편집기가 먼저 생김).
+                    //
+                    // `.ineligibleTransientSelection` 이 쓰는 것과 같은 부드러운
+                    // 거부로 처리합니다 — 플래그를 nil 로 두어 키열은 계속 기록하고
+                    // 다음 키에서 다시 확인하되, 상한 키 수까지 계속 역할이 아니면
+                    // 그때 확정 거부로 굳힙니다. AX 에 텍스트를 아예 안 내놓는 앱은
+                    // 상한 안에서 굳으므로 기존 동작이 유지됩니다.
                     automaticCorrectionFocusToken = nil
-                    automaticCorrectionFieldAllowed = false
-                    noteUnsupportedRoleObservation()
+                    softProbeRefusalKeys += 1
+                    if softProbeRefusalKeys
+                        >= EventTapManager.maximumSoftProbeRefusalKeys {
+                        automaticCorrectionFieldAllowed = false
+                        // 미지원 학습은 **확정 거부로 굳을 때만** 셉니다. 위에서
+                        // 소프트 거부로 바꾸면서 한 토큰에 프로브가 여러 번 돌게
+                        // 됐는데, 매번 세면 관찰이 실제보다 빨리 쌓여 앱이 두 단어
+                        // 만에 미지원으로 굳습니다. 굳는 시점에 한 번만 세면 예전과
+                        // 같이 "토큰 하나당 관찰 하나"가 유지됩니다.
+                        noteUnsupportedRoleObservation()
+                    }
                     // 사용자가 이 앱에 blind 교정을 켰다면, AX 미지원이 곧
                     // "검증 없이 교정할 대상"이라는 신호입니다. 기록을 이어가고
                     // (아래 게이트의 `|| blindFieldActive`) 경계에서 blind

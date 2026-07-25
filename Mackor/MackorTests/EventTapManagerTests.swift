@@ -1521,6 +1521,52 @@ final class EventTapManagerTests: XCTestCase {
         }
     }
 
+    /// 토큰 첫 키에서 역할이 아직 텍스트가 아니어도 그 단어를 버리지 않는다.
+    ///
+    /// 고정하는 회귀: 스프레드시트에서 셀을 옮긴 뒤 **첫 단어만** 교정되지 않던
+    /// 문제. Excel은 셀로 이동한 뒤 첫 글자를 칠 때 비로소 셀 편집기를 만들어서,
+    /// 그 첫 키의 프로브는 아직 그리드를 보고 `.ineligibleUnsupportedRole`을
+    /// 돌려준다. 한때 이것을 즉시 확정 거부로 굳혔는데, 그러면 `== nil` 가드
+    /// 때문에 다시 묻지 않아 그 단어 전체가 통째로 버려졌다. 잠깐 기다렸다 치면
+    /// 됐던 것도 같은 이유다(편집기가 먼저 생긴다).
+    func testRoleRefusalOnFirstKeyDoesNotDiscardTheWord() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.unsupportedRoleProbesRemaining = 1   // 첫 프로브만 그리드
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("gksrmf", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(
+            output.actions.contains(.text("한글")),
+            "셀 이동 직후 첫 단어가 교정되지 않았습니다: \(output.actions)"
+        )
+    }
+
+    /// 상한까지 계속 역할이 아니면 그때는 확정 거부로 굳는다.
+    /// AX에 텍스트를 아예 안 내놓는 앱(Illustrator류)의 기존 동작을 지킨다.
+    func testPersistentRoleRefusalStillLatches() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.alwaysUnsupportedRole = true
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+
+        type("gksrmf", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(
+            output.actions.isEmpty,
+            "AX 미지원 앱에서 교정이 나갔습니다: \(output.actions)"
+        )
+    }
+
     // MARK: - 주소·URL 입력란 (제출 경계만 차단)
     //
     // 옴니박스를 통째로 막던 것을 "되돌릴 수 없는 경계 하나"만 막는 것으로
@@ -3675,6 +3721,10 @@ private final class FakeFocusInspector: EventTapFocusInspecting {
     /// 요소를 아예 안 내놓는 앱(Adobe Illustrator 실측: 메뉴 2,976개, 텍스트 0개)을
     /// 흉내 냅니다.
     var alwaysUnsupportedRole = false
+    /// 이 횟수만큼 `.ineligibleUnsupportedRole`을 돌려준 뒤 정상으로 돌아옵니다.
+    /// 스프레드시트를 흉내 냅니다 — Excel은 셀로 이동한 뒤 **첫 글자를 칠 때**
+    /// 비로소 셀 편집기를 만들어서, 그 첫 프로브는 아직 그리드를 봅니다.
+    var unsupportedRoleProbesRemaining = 0
     /// 조회가 일어날 때마다 불립니다. 조회 하나가 AX 예산을 통째로 쓰는 앱을
     /// 흉내 내려고 테스트가 여기서 시계를 밀 수 있습니다.
     var onProbeRequest: (() -> Void)?
@@ -3697,6 +3747,11 @@ private final class FakeFocusInspector: EventTapFocusInspecting {
     func probeAutomaticCorrectionFocus() -> FocusedInputSafety.FocusProbe {
         onProbeRequest?()
         if alwaysUnsupportedRole {
+            tokenRequestCount += 1
+            return .ineligibleUnsupportedRole
+        }
+        if unsupportedRoleProbesRemaining > 0 {
+            unsupportedRoleProbesRemaining -= 1
             tokenRequestCount += 1
             return .ineligibleUnsupportedRole
         }
