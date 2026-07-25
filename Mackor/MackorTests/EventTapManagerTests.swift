@@ -1487,6 +1487,40 @@ final class EventTapManagerTests: XCTestCase {
         }
     }
 
+    /// `ambiguousBothValid` 로 판정된 한 음절도 단음절 자산으로 구제되어야 한다.
+    ///
+    /// 고정하는 회귀: 자산에는 넣었는데 **런타임이 조회하지 않아** 아무 일도
+    /// 일어나지 않던 버그. `ambiguousBothValid` 경로는 LexicalTiebreaker 만
+    /// 보는데 그 자산에는 1음절이 0개라(MonosyllableLexiconTests 가 고정) 항상
+    /// nil 이었다. 그래서 `만`(aks)·`좀`(wha)·`돼`(eho)·`들`(emf) 같은 일상어가
+    /// 자산에 있는데도 영영 교정되지 않았다.
+    ///
+    /// 생성기 쪽 구멍(자산에 아예 안 들어가던 것)과 조회 쪽 구멍(넣어도 안 보던
+    /// 것)이 같은 원인의 양쪽 절반이었다. 둘 다 막아야 실제로 동작한다.
+    func testAmbiguousMonosyllablesAreRescuedFromTheAsset() throws {
+        for (keys, expected) in [
+            ("aks", "만"), ("wha", "좀"), ("eho", "돼"), ("emf", "들"),
+            ("emd", "등"), ("aud", "명"), ("auc", "몇"), ("duf", "열"),
+        ] {
+            let output = FakeKeyboardOutput()
+            let manager = makeManager(
+                output: output,
+                monosyllableLexicon: try makeMonosyllableLexicon()
+            )
+            manager.inputSourceKind = .supportedLatin
+            manager.isAutoCorrectionEnabled = true
+
+            type(keys, into: manager)
+            XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+            XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+            XCTAssertTrue(
+                output.actions.contains(.text(expected)),
+                "\(keys) → \(expected) 가 교정되지 않았습니다: \(output.actions)"
+            )
+        }
+    }
+
     // MARK: - 주소·URL 입력란 (제출 경계만 차단)
     //
     // 옴니박스를 통째로 막던 것을 "되돌릴 수 없는 경계 하나"만 막는 것으로

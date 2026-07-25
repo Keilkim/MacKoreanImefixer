@@ -23,7 +23,7 @@
 # 여기 남는 위험은 **소문자 단독 토큰**뿐이다.
 keys	status	code	reason
 ch	active	ABBR_LOWER	channel·chapter의 관용 축약. 초 — mono-admit.tsv 로 열어 둠
-cma	active	ABBR_LOWER	CMA(증권 종합계좌). 결과 `츰`은 코퍼스 빈도 0의 비단어라 한국어 쪽 비용이 0이다
+cma	prospective	ABBR_LOWER	CMA(증권 종합계좌). 결과 `츰`은 코퍼스 빈도 0의 비단어라 한국어 쪽 비용이 0이다
 dhl	prospective	ABBR_LOWER	DHL — 외
 dir	prospective	CLI_THIRD	dir 명령 — 약. 지금은 `ambiguousBothValid` 분기(주인이 LexicalTiebreaker)라 이 계층에 오지 않는다
 dl	active	ABBR_LOWER	HTML <dl> / download. 이 — mono-admit.tsv 로 열어 둠
@@ -41,3 +41,58 @@ tl	active	ABBR_LOWER	TL;DR / timeline. 시 — mono-admit.tsv 로 열어 둠
 tls	prospective	ABBR_LOWER	TLS — 신
 wp	active	ABBR_LOWER	WordPress / well played. 제 — mono-admit.tsv 로 열어 둠
 xml	prospective	ABBR_LOWER	XML — 틔
+
+# --- 2026-07-25: 사전 출처(mono-kodict) 확장이 데려온 소문자 약어 ---
+#
+# macOS 한국어 사전을 출처로 붙이며 590개가 새로 열렸고, 그중 아래 항목들이
+# 이 원장이 이미 정의한 ABBR_LOWER 부류에 그대로 해당한다. 자동 게이트
+# (웹스터 1934 · macOS 영어 사전 · $PATH · 로케일)는 '사전 표제어가 아닌
+# 약어'를 원리적으로 못 잡는다 — 그래서 이 원장이 존재한다.
+#
+# 판정 기준은 mono-admit.tsv 가 go→해 를 되돌리며 세운 것과 같다:
+# 한국어 쪽 이득이 0에 가깝거나, 양쪽 다 흔하면 손대지 않는다.
+cls	prospective	ABBR_LOWER	Python classmethod 첫 인자 관례 `def f(cls)`, DOS/Windows 화면 지우기 명령 cls, Co — 친
+tps	prospective	ABBR_LOWER	TPS = transactions per second. 한국 백엔드·인프라 문서에서 'tps 3000'처럼 소문자로 흔히 쓴다 — 센
+xhr	prospective	ABBR_LOWER	XHR = XMLHttpRequest. Chrome DevTools 네트워크 탭 필터 이름이 그대로 XHR이고, 코드·대화에서 — 톡
+rps	prospective	ABBR_LOWER	RPS = requests per second(부하 테스트·API 성능), rock-paper-scissors — 겐
+dps	prospective	ABBR_LOWER	DPS = damage per second. 게임 커뮤니티에서 소문자 dps로 굳어 쓰인다 — 엔
+vps	prospective	ABBR_LOWER	VPS = Virtual Private Server. 호스팅·서버 문맥에서 소문자로 흔하다 — 펜
+rnd	prospective	ABBR_LOWER	rnd = random의 관용 축약(변수명·Math.rnd·BASIC RND), 그리고 R&D를 소문자 rnd로 적는 표기 — 궁
+wms	prospective	ABBR_LOWER	WMS = Warehouse Management System. 한국 물류·SI 업계 문서에서 매우 잦다(ERP·TMS·OMS와 — 즌
+wps	prospective	ABBR_LOWER	WPS Office(아시아권 오피스 스위트), Wi-Fi Protected Setup — 젠
+tns	prospective	ABBR_LOWER	Oracle TNS(tnsnames.ora, TNS 리스너) — 파일명이 소문자 tns로 시작해 DBA가 그대로 친다 — 순
+tld	prospective	ABBR_LOWER	TLD = Top-Level Domain. DNS·도메인 문맥에서 소문자 tld로 코드·설정에 자주 등장 — 싱
+chr	prospective	ABBR_LOWER	chr() — Python·PHP·BASIC의 문자 변환 내장 함수. 소문자 표기가 규범 — 촉
+qhd	prospective	ABBR_LOWER	QHD = 2560×1440 디스플레이 해상도. 모니터·스마트폰 스펙 표기에 한국에서 매우 잦다 — 봉
+fhd	prospective	ABBR_LOWER	FHD = 1920×1080 Full HD. qhd와 같은 스펙 표기 문맥 — 롱
+dnf	prospective	ABBR_LOWER	DNF = Did Not Finish(러닝·사이클), Dungeon&Fighter, disjunctive normal form — 울
+skc	prospective	ABBR_LOWER	SKC(KOSPI 상장 화학사), 함께 열린 skd(낭)는 SKD(반조립 생산) — 낯
+tnx	prospective	ABBR_LOWER	tnx = thanks의 채팅 축약(소문자 전용 표기) — 숱
+sht	prospective	ABBR_LOWER	sht = 비속어 자체검열 표기 / SHT — 놋
+thr	prospective	ABBR_LOWER	thr = thread 축약/관용 변수명 — 속
+tos	prospective	ABBR_LOWER	IP 헤더 TOS 필드 + ToS(Terms of Service) — 샌
+rhs	prospective	ABBR_LOWER	RHS = right-hand side. 수학·파서·문법 설명에서 소문자 관용 — 곤
+qos	prospective	ABBR_LOWER	QoS = Quality of Service. 설정 파일·CLI에서 소문자 qos — 밴
+vnd	prospective	ABBR_LOWER	application/vnd.* MIME 타입, VND(베트남 동 통화코드) — 풍
+shs	prospective	ABBR_LOWER	SHS = Secure Hash Standard(NIST) — 논
+smd	prospective	ABBR_LOWER	smd(8) = macOS ServiceManagement 데몬, SMD = surface-mount device — 능
+wls	prospective	ABBR_LOWER	WLS = weighted least squares, WebLogic Server — 진
+fhs	prospective	ABBR_LOWER	FHS = Filesystem Hierarchy Standard, fhs = filehandle 복수 변수 — 론
+dlq	prospective	ABBR_LOWER	DLQ = dead letter queue(메시지 큐), tsort -dlq 플래그 — 입
+cnf	prospective	ABBR_LOWER	.cnf 설정 파일 확장자(my.cnf), CNF = conjunctive normal form — 출
+wmd	prospective	ABBR_LOWER	WMD = weapons of mass destruction — 증
+tmr	prospective	ABBR_LOWER	tmr = tomorrow 채팅 축약, timer 식별자 축약 — 슥
+tks	prospective	ABBR_LOWER	tks = thanks 축약(비즈니스 메일에서 통용) — 산
+vhd	prospective	ABBR_LOWER	.vhd = 가상 하드디스크 이미지 확장자이자 VHDL 소스 확장자 — 퐁
+ros	prospective	ABBR_LOWER	ROS = Robot Operating System. ros 명령·패키지명이 전부 소문자 — 갠
+ror	prospective	ABBR_LOWER	RoR = Ruby on Rails — 객
+dur	prospective	ABBR_LOWER	dur = duration 축약 식별자(코드·컬럼명), 영어 감탄사 dur — 역
+dpr	prospective	ABBR_LOWER	DPR = device pixel ratio(웹 프론트엔드에서 소문자 dpr 표준), DPR Korea — 엑
+xof	prospective	ABBR_LOWER	tar -xof 플래그 묶음, XOF = 서아프리카 CFA 프랑 통화코드 — 탤
+ena	prospective	ABBR_LOWER	terminfo ena_acs capability, ena = ENA(AWS Elastic Network Adapter) 드라 — 둠
+dif	prospective	ABBR_LOWER	diff 의 관용 축약 — 지역변수·필드명으로 흔하다 — 얄
+dls	prospective	ABBR_LOWER	DLS(파생결합증권) — 한국 금융 맥락에서 매우 흔하고, `dls` 소문자 식별자로도 쓰인다 — 인
+dys	prospective	ABBR_LOWER	지역변수 `dys`(dysymtab), 접두사 dys- — 욘
+dpf	prospective	ABBR_LOWER	DPF(디젤 미립자 필터) — 자동차 커뮤니티에서 상시 사용 — 엘
+skd	prospective	ABBR_LOWER	SKD(반조립 생산) — skc 와 같은 SK 계열 부류 — 낭
+vpt	prospective	ABBR_LOWER	VPT — vps 와 같은 부류로 함께 열렸다 — 펫

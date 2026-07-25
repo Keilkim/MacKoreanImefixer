@@ -395,6 +395,16 @@ class EventTapManager {
         case shortcutOnly
     }
 
+    /// 입력란을 옮기는 키 뒤에 AX를 예열할 지연(ms).
+    ///
+    /// 0을 넣어 즉시 한 번 데우고, 앱이 새 요소를 늦게 만드는 경우를 뒤 rung이
+    /// 잡습니다. 간격은 AppMonitor의 앱 전환 사다리(50/120/250)와 같은 근거 —
+    /// 콜드 예열 1회 실측(약 57ms)보다 벌려 rung이 겹치지 않게 합니다.
+    static let focusMoveWarmDelaysMs = [0, 60, 150, 320]
+
+    /// 입력란 이동 세대. 방향키 연타 시 이전 이동의 예열 rung을 취소합니다.
+    private var focusMoveGeneration: UInt64 = 0
+
     /// 조합을 확정시키는 키들 (방향키, 엔터 등)
     private static let commitKeycodes: Set<UInt16> = [
         0x7C, 0x7B, 0x7E, 0x7D,  // 방향키 (우좌상하)
@@ -592,6 +602,32 @@ class EventTapManager {
         print("[Mackor] Event tap 중지됨.")
     }
 
+    /// 입력란을 옮기는 키(방향키·Return·Enter·Tab) 뒤에 AX를 예열합니다.
+    ///
+    /// 새 입력란의 AX 요소는 앱이 만들어 줄 때까지 없습니다. Excel의 셀,
+    /// 폼의 다음 칸이 그렇고, 앱은 그것을 즉시 만들지 않습니다(Chromium의 웹
+    /// 트리와 같은 성질). 즉시 1회 예열만 하면 그 조회가 옛 요소를 읽거나
+    /// 실패하고, 사용자가 바로 치기 시작한 첫 단어가 통째로 교정에서 빠집니다
+    /// — "셀 바꾸고 바로 치면 안 되고 조금 기다리면 된다"는 보고가 이것입니다.
+    ///
+    /// 그래서 즉시 + 지연 rung 으로 덮습니다. 세대를 올려 이전 이동의 남은
+    /// rung 을 취소하므로 방향키를 연타해도 마지막 이동의 사다리만 돕니다.
+    /// 예열은 결과를 쓰지 않고 버리므로 판정에 영향이 없고, 탭 콜백을 막지
+    /// 않도록 마우스 클릭 경로와 똑같이 메인 큐로 넘깁니다.
+    private func scheduleFocusMoveWarmLadder() {
+        guard isActive || isAutoCorrectionEnabled else { return }
+        focusMoveGeneration &+= 1
+        let generation = focusMoveGeneration
+        for delayMs in EventTapManager.focusMoveWarmDelaysMs {
+            DispatchQueue.main.asyncAfter(
+                deadline: .now() + .milliseconds(delayMs)
+            ) { [weak self] in
+                guard let self, self.focusMoveGeneration == generation else { return }
+                FocusedInputSafety.warmFocusCache()
+            }
+        }
+    }
+
     /// 시스템이 탭을 비활성화했을 때(`tapDisabledByTimeout`/`tapDisabledByUserInput`)
     /// 콜백에서 호출합니다.
     ///
@@ -750,6 +786,10 @@ class EventTapManager {
            let pending = makeSubmitCorrection(stroke: submitStroke) {
             commitCompositionIfNeeded()
             performSubmitCorrection(pending)
+            // 이 경로는 아래 commitKeycodes 로 내려가지 않고 여기서 끝나므로
+            // 예열을 따로 겁니다. 스프레드시트에서 가장 흔한 패턴이 바로
+            // 이것입니다 — 셀에 치고 Enter 로 교정과 이동을 한 번에 한다.
+            scheduleFocusMoveWarmLadder()
             return nil
         }
 
@@ -861,12 +901,18 @@ class EventTapManager {
             // 사다리는 돌지 않습니다.
             //
             // 마우스 클릭에는 이미 같은 예열이 있습니다(handleMouseDown).
-            // 키보드로 옮기는 경우만 빠져 있던 것을 맞춥니다. 예열은 결과를
-            // 쓰지 않고 버리므로 판정에 영향이 없고, 탭 콜백을 막지 않도록
-            // 클릭 경로와 똑같이 async로 넘깁니다.
-            if isActive || isAutoCorrectionEnabled {
-                DispatchQueue.main.async { FocusedInputSafety.warmFocusCache() }
-            }
+            // 키보드로 옮기는 경우만 빠져 있던 것을 맞춥니다.
+            //
+            // **한 번으로는 부족합니다.** 새 셀의 AX 요소는 앱이 만들어 줄
+            // 때까지 없고, Excel은 그것을 즉시 만들지 않습니다(Chromium의 웹
+            // 트리와 같은 성질). 즉시 1회 예열만 하면 그 조회가 옛 요소를 읽거나
+            // 실패하고, 사용자가 바로 치기 시작한 첫 단어가 통째로 교정에서
+            // 빠집니다 — "셀 바꾸고 바로 치면 안 되고 조금 기다리면 된다".
+            //
+            // 그래서 AppMonitor의 앱 전환 예열과 같은 사다리로 덮습니다.
+            // 세대를 올려 이전 이동의 남은 rung을 취소하므로, 방향키를 연타해도
+            // 마지막 이동의 사다리만 돕니다.
+            scheduleFocusMoveWarmLadder()
             return event
         }
 
@@ -2282,7 +2328,15 @@ class EventTapManager {
               let latin = LayoutCorrectionPolicy.latinCandidate(for: keystrokes),
               let korean = tiebreaker.resolve(latin: latin),
               latin != korean else {
-            return nil
+            // tiebreaker 자산에는 **1음절이 0개**다(MonosyllableLexiconTests 가
+            // 고정한다). 그래서 `만`(aks)·`좀`(wha)·`돼`(eho)처럼 한 음절짜리
+            // `ambiguousBothValid` 는 여기서 항상 nil 이 되어, 자산에 넣어도
+            // 런타임이 영영 조회하지 않았다.
+            //
+            // 자산 쪽 구멍은 생성기에서 막았지만(같은 원인의 다른 절반),
+            // 조회 쪽도 같이 막아야 실제로 동작한다. 단음절 사전으로 폴백한다.
+            // 그쪽은 게이트를 통과한 키열만 담고 있으므로 안전 조건은 동일하다.
+            return monosyllableCorrection(boundary: boundary, keystrokes: keystrokes)
         }
 
         EventTapManager.diagnostic(
@@ -2344,7 +2398,17 @@ class EventTapManager {
         return monosyllableCorrection(boundary: boundary, keystrokes: keystrokes)
     }
 
-    /// 이미 `weakKoreanStructure`임을 검증한 물리 키열에만 동결 자산을 적용합니다.
+    /// 동결 자산(`ko-mono.v1.txt`)으로 한 음절을 구제합니다.
+    ///
+    /// 호출부는 둘이다 — `weakKoreanStructure`(규칙이 증거 부족으로 포기한 칸)와
+    /// `ambiguousBothValid`(양쪽 문법을 다 만족해 규칙이 가르지 못한 칸, 단
+    /// tiebreaker 가 1음절을 못 받아 폴백으로 온 경우). 두 분기 모두 자산이
+    /// 유일한 근거이고, 자산은 영어사전·$PATH·로케일 게이트를 통과한 키열만
+    /// 담으므로 안전 조건은 같다.
+    ///
+    /// 이 함수는 분기를 재검사하지 않는다. 대신 자산과 **동결 조합기**가 같은
+    /// 음절을 가리킬 때만 진행한다(아래 대조). 파괴가 일어나려면 해시로 동결된
+    /// 자산과 pre-imk 로 동결된 조합기가 동시에 틀려야 한다.
     private func monosyllableCorrection(
         boundary: CorrectionBoundary,
         keystrokes: [PhysicalKeystroke]
@@ -2368,7 +2432,7 @@ class EventTapManager {
         }
 
         EventTapManager.diagnostic(
-            "monosyllable rescue rule=weakKoreanStructure len=\(keystrokes.count) "
+            "monosyllable rescue len=\(keystrokes.count) "
                 + FocusedInputSafety.diagnosticContext()
         )
 

@@ -246,6 +246,58 @@ final class MonosyllableLexiconTests: XCTestCase {
         XCTAssertEqual(monosyllableValues, 0, "ko-lexicon 에 1음절 값이 생겼습니다 — 보류 전제가 깨집니다")
     }
 
+    /// 사전 출처가 실제로 일상어를 열었는지 고정한다.
+    ///
+    /// 출처는 셋이다 — `keep`(동결 엔진이 이미 하던 교정), 사람이 부류별로 선언한 것,
+    /// 그리고 `사전`(macOS 한국어 맞춤법 검사기가 단어로 인정한 음절). 마지막 것을
+    /// 넣기 전에는 부류 상한이 커버리지를 제한해 `온`·`첫`·`길`·`축` 같은 일상어가
+    /// 그냥 빠져 있었다.
+    func testDictionarySourceOpensEverydayWords() throws {
+        let lexicon = try loadLexicon()
+        let expected = [
+            "dhs": "온", "cjt": "첫", "rlf": "길", "cnr": "축", "Qjs": "뻔",
+            "xhd": "통", "vks": "판", "vhr": "폭", "Tlr": "씩",
+            "rkqt": "값", "sjrt": "넋", "Rhc": "꽃", "dnpq": "웹",
+        ]
+        for (keys, hangul) in expected {
+            XCTAssertEqual(lexicon.resolve(latin: keys), hangul, "\(keys)→\(hangul) 가 열려 있지 않습니다")
+        }
+    }
+
+    /// 사전 출처가 열 수 있는 키열의 형태를 고정한다.
+    ///
+    /// 2키는 약어로 포화된 공간이라(db·ep·co·fl·wl·xl·rh) 자동 출처가 열면 안 되고,
+    /// 어중 대문자(`dPs`)는 `english_lookup_key` 가 nil 이라 **어떤 게이트도 적용되지
+    /// 않으므로** 자동 출처가 열면 관문을 우회하는 것과 같다. 둘 다 사람이
+    /// `mono-source.ko.tsv` 나 `mono-admit.tsv` 에 사유와 함께 적을 때만 열린다.
+    func testDictionarySourceShapeIsConstrained() throws {
+        for row in try loadAsset() where row.provenance == "사전" {
+            XCTAssertGreaterThanOrEqual(row.keys.count, 3, "\(row.keys): 사전 출처가 2키를 열었습니다")
+            let tail = row.keys.dropFirst()
+            XCTAssertFalse(
+                tail.contains(where: { $0.isUppercase }),
+                "\(row.keys): 사전 출처가 어중 대문자를 열었습니다 — 게이트가 적용되지 않습니다"
+            )
+        }
+    }
+
+    /// 흔한 약어·확장자·식별자는 자산에 없어야 한다. 자산이 커질수록 중요하다.
+    func testAssetExcludesCommonAbbreviationsAfterExpansion() throws {
+        let lexicon = try loadLexicon()
+        let abbreviations = [
+            "dmg", "zip", "pdf", "png", "jpg", "svg", "csv", "log", "tmp", "exe",
+            "api", "sdk", "cli", "gui", "url", "ssh", "ssl", "cdn", "cpu", "gpu",
+            "ram", "usb", "sql", "npm", "git", "aws", "env", "var", "doc", "img",
+            // 사전 출처 확장이 데려왔다가 검증에서 되돌린 것들
+            "cls", "chr", "thr", "tld", "tos", "rhs", "qos", "vnd", "rnd", "dnf",
+            "dlq", "cnf", "smd", "wls", "fhs", "dps", "vps", "xhr", "tps", "rps",
+            "wms", "wps", "tns", "qhd", "fhd", "dpr", "dpf", "dls", "dur", "dif",
+        ]
+        for keys in abbreviations {
+            XCTAssertNil(lexicon.resolve(latin: keys), "\(keys) 가 자산에 있습니다 — 약어를 파괴합니다")
+        }
+    }
+
     /// 파괴 표면의 크기 자체를 고정한다. 자산이 조용히 자라면 여기서 걸린다.
     ///
     /// 상한은 `make_mono_lexicon.py` 의 `SURFACE_LIMIT` 과 같은 값을 유지한다.
@@ -257,9 +309,10 @@ final class MonosyllableLexiconTests: XCTestCase {
     func testRepositoryAssetSizeIsBounded() throws {
         let rows = try loadAsset()
         XCTAssertGreaterThanOrEqual(rows.count, 400)
-        XCTAssertLessThanOrEqual(rows.count, 620, "파괴 표면이 상한을 넘었습니다")
+        XCTAssertLessThanOrEqual(rows.count, 1250, "파괴 표면이 상한을 넘었습니다")
+        // `사전` = macOS 한국어 맞춤법 검사기가 단어로 인정한 음절(자동 출처).
         let allowed: Set<String> = [
-            "keep", "조사", "대명사", "의존명사", "수관형사", "감탄사", "부사", "용언활용",
+            "keep", "사전", "조사", "대명사", "의존명사", "수관형사", "감탄사", "부사", "용언활용",
         ]
         for row in rows {
             XCTAssertTrue(allowed.contains(row.provenance), "\(row.keys): 알 수 없는 부류 \(row.provenance)")

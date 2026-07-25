@@ -59,6 +59,10 @@
     python3 -B make_mono_lexicon.py surface    # 파괴 표면 상한 검사 (CI)
     python3 -B make_mono_lexicon.py audit      # 비결정적 감사($PATH). CI 금지.
 
+사전 스냅샷 갱신(OS 사전이 바뀌었을 때만):
+    swift scripts/lexicon/scan_ko_dictionary.swift > scripts/lexicon/mono-kodict.v1.txt
+    swift scripts/lexicon/scan_en_dictionary.swift > scripts/lexicon/mono-endict.v1.txt
+
 갱신 절차:
     1) mono-source.ko.tsv · mono-veto.tsv · mono-admit.tsv 중 하나를 편집한다
     2) generate -> verify -> surface -> audit (audit 출력은 PR 본문에 붙인다)
@@ -82,6 +86,8 @@ SOURCE = HERE / "mono-source.ko.tsv"
 VETO = HERE / "mono-veto.tsv"
 ADMIT = HERE / "mono-admit.tsv"
 GATES = HERE / "mono-gates.v1.txt"
+KODICT = HERE / "mono-kodict.v1.txt"
+ENDICT = HERE / "mono-endict.v1.txt"
 OUT = HERE / "ko-mono.v1.txt"
 KO_LEX = HERE / "ko-lexicon.v1.txt"
 FIXTURE = REPO / "Corpus" / "lexical" / "v1" / "monosyllable.tsv"
@@ -92,16 +98,22 @@ LOCALE_DIR = "/usr/share/locale"
 
 # 파괴 표면 상한. 올릴 때는 사유를 커밋 메시지에 남긴다.
 #
+# 620 -> 1250: macOS 한국어 사전 스냅샷(`mono-kodict.v1.txt`)을 출처로 추가했다.
+# 무엇이 한국어 단어인지를 사람 선언이 아니라 사전이 답하므로 부류 상한이 더
+# 이상 커버리지를 제한하지 않는다. 안전은 세 관문이 담당한다 — 웹스터 1934,
+# macOS 영어 사전, 그리고 손 원장(veto). 사전 출처는 3키 이상만 열어 약어로
+# 포화된 2글자 공간을 통째로 배제한다.
+#
 # 600 -> 620: `ambiguousBothValid` 보류를 걷어내면서 선언된 일상 단음절 12개
 # (돼 든 들 듯 등 딴 만 명 몇 백 열 편)가 자산에 들어왔다. 그 보류는
 # LexicalTiebreaker 로 넘기는 것이었는데 그쪽 자산에 1음절이 0개(불변식 9)라
 # 넘길 곳이 없었고, 결과적으로 버려지고 있었다. 12개 전부 영어 사전·$PATH·
 # 로케일 게이트를 통과한 키열이므로 파괴 표면이 실질적으로 늘지는 않는다.
-SURFACE_LIMIT = 620
+SURFACE_LIMIT = 1250
 # T2(닫혀 있지 않은 부류) 총합 상한.
 T2_LIMIT = 60
 T2_CLASSES = ("감탄사", "부사", "용언활용")
-CLASSES = ("keep", "조사", "대명사", "의존명사", "수관형사") + T2_CLASSES
+CLASSES = ("keep", "사전", "조사", "대명사", "의존명사", "수관형사") + T2_CLASSES
 VETO_CODES = ("ABBR_LOWER", "CLI_THIRD")
 VETO_STATUS = ("active", "prospective")
 
@@ -221,6 +233,42 @@ def read_gates():
     return hits
 
 
+def read_kodict():
+    """macOS 한국어 사전이 단어로 인정한 1음절 스냅샷.
+
+    이 저장소에는 한국어 단음절 사전이 없다(`ko_words.txt` 에 1음절 0개). 그래서
+    지금까지는 사람이 부류별로 선언했고, 부류 상한에 닿으면 `온`·`첫`·`길`·`축`
+    같은 일상어가 그냥 빠졌다. macOS 는 그 사전을 이미 갖고 있으므로 판정을
+    자동화한다 — 11,172음절 중 1,115개만 인정하므로 변별력이 있다.
+
+    스냅샷을 읽는 이유는 `read_gates` 와 같다: OS 자산은 기계마다 다르고, CI 가
+    다시 스캔하면 자산과 무관한 원인으로 실패한다. 갱신은
+    `swift scripts/lexicon/scan_ko_dictionary.swift` 로 명시적으로 한다.
+    """
+    if not KODICT.exists():
+        return set()
+    return {line for line in read_lines(KODICT) if line and not line.startswith("#")}
+
+
+def read_endict():
+    """macOS 영어 사전이 단어로 인정한 짧은 라틴 문자열 스냅샷.
+
+    기존 EN 게이트(`/usr/share/dict/words`, 웹스터 1934)를 **보강**한다. 두 목록은
+    서로 다른 구멍을 갖는다(실측):
+
+      웹스터가 놓침  dmg(확장자) db co fl xl — 현대 약어를 모른다
+      맥이 놓침      sla sha rhe sus — 사어이거나 최신 슬랭이다
+
+    그래서 합집합으로 쓴다. 다만 이 목록은 **사전 출처에만** 적용한다 — `keep`
+    (오늘 이미 동작하는 교정)에 적용하면 `오`(dh)·`아`(dk)·`다`(ek) 같은 기존
+    동작이 사라져 불변식 3(KEEP 완전성)이 깨진다. 선언·admit 도 사람이 위험을
+    적고 연 통로이므로 건드리지 않는다.
+    """
+    if not ENDICT.exists():
+        return set()
+    return {line for line in read_lines(ENDICT) if line and not line.startswith("#")}
+
+
 def read_veto():
     """거부 원장. `키열 -> (status, code, reason)`."""
     rows = {}
@@ -313,6 +361,7 @@ def build():
     hits = read_gates() if GATES.exists() else scan_os_gates(domain)
     veto = read_veto()
     admit = set(read_admit())
+    endict = read_endict()
 
     entries = {}
     provenance = {}
@@ -329,9 +378,42 @@ def build():
         entries[keys] = syllable
         provenance[keys] = "keep"
 
-    # RESCUE — 선언한 한글의 키열 투영.
+    # RESCUE — 선언한 한글 + 사전이 인정한 한글의 키열 투영.
+    #
+    # 선언(`mono-source.ko.tsv`)은 부류 상한이 정지 조건이라 안전하지만, 상한에
+    # 닿으면 일상어가 그냥 빠진다. 사전 스냅샷(`mono-kodict.v1.txt`)은 그 한계를
+    # 없앤다 — 무엇이 한국어 단어인지를 사람이 아니라 macOS 사전이 답한다.
+    # 안전은 여전히 `gate()` 가 담당하므로 두 출처의 규율은 같다.
     source_rows, bounds = read_source()
-    for cls, word in source_rows:
+    declared = {word for _cls, word in source_rows}
+    # 사전 출처는 **3키 이상만** 연다.
+    #
+    # 2글자 라틴 문자열의 공간은 약어로 포화돼 있다 — db(데이터베이스)·ep(에피소드)·
+    # co(회사)·fl(플로리다)·wl(무선)·xl(엑셀)·rh(혈액형)… 이들은 어느 영어 사전에도
+    # 표제어로 없어서 EN 게이트가 잡지 못하고, 그래서 `mono-veto.tsv` 라는 손
+    # 원장이 따로 있는 것이다. 사전이 `데`·`채`·`리`를 한국어 단어로 인정한다는
+    # 사실과, 사용자가 `ep `·`co `·`fl ` 을 영어로 칠 일이 있다는 사실은 둘 다 참이고
+    # 그 충돌은 사전으로 풀 수 없다.
+    #
+    # 반면 한 음절짜리 한국어 단어를 **단독으로** 치는 일은 조사·의존명사(만·좀·들)를
+    # 빼면 드물다. 그 부류는 이미 `mono-source.ko.tsv` 에 선언돼 있고, 2키를 열려면
+    # 그 파일이나 `mono-admit.tsv` 에 사람이 사유와 함께 적어야 한다 — 상한과
+    # 위험 기록이 붙는 통로다. 사전이 그 통로를 우회하지 못하게 한다.
+    dict_rows = [
+        ("사전", word)
+        for word in sorted(read_kodict())
+        if word not in declared
+        and len(g.ko_to_keys(word) or "") >= 3
+        # 맥 영어 사전이 단어로 보면 열지 않는다. 사전 출처는 사람 판단이
+        # 한 줄도 안 붙은 자동 경로이므로 가장 엄격한 관문을 통과해야 한다.
+        and (g.ko_to_keys(word) or "").lower() not in endict
+        # 어중 대문자(`dPs`)는 `english_lookup_key` 가 None 이라 **어떤 게이트도
+        # 적용되지 않는다**(정책 C). 게이트가 평가할 수 없는 키열을 자동 출처가
+        # 여는 것은 관문을 우회하는 것과 같으므로, 그런 키열은 사람이
+        # `mono-admit.tsv` 에 사유와 함께 적을 때만 열린다.
+        and english_lookup_key(g.ko_to_keys(word) or "") is not None
+    ]
+    for cls, word in list(source_rows) + dict_rows:
         keys = g.ko_to_keys(word)
         if not keys:
             rejected.append((word, "-", cls, "NOKEYS"))
@@ -365,7 +447,13 @@ def build():
         entries[keys] = word
         # 같은 키열을 여러 부류가 선언하면 먼저 온 부류를 쓴다. `keep` 라벨은
         # 부류 선언이 있으면 그쪽으로 승격한다 — 자산이 감사 가능해야 하기 때문이다.
-        if provenance.get(keys) in (None, "keep"):
+        # `keep` 은 "오늘 동결 엔진이 이미 하는 교정"이라는 뜻이라, 사람이 부류를
+        # 선언하면 그쪽이 더 많은 정보를 담으므로 승격한다. 다만 `사전`은 자동
+        # 출처라 `keep` 보다 정보가 **적다** — 덮으면 "어느 행이 오늘의 동결이고
+        # 어느 행이 이번에 새로 연 것인지"가 파일에서 사라져 리뷰가 성립하지 않는다.
+        if provenance.get(keys) is None or (
+            provenance.get(keys) == "keep" and cls != "사전"
+        ):
             provenance[keys] = cls
 
     return entries, provenance, rejected, bounds, veto, domain, hits, admit
