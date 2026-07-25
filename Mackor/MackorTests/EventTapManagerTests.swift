@@ -3275,6 +3275,64 @@ final class EventTapManagerTests: XCTestCase {
         XCTAssertEqual(learned, 0, "두 단어만으로 앱을 미지원으로 굳혔습니다")
     }
 
+    /// 한 글자짜리 단어만 쳐도 미지원 학습이 쌓여야 한다.
+    ///
+    /// 회귀 방지. 관찰을 "소프트 거부 상한(2키)에 닿는 순간"에 매달았더니 상한보다
+    /// 짧은 토큰은 그 지점에 영영 닿지 못해 학습이 죽었다. 열 단어를 쳐도 0이었다.
+    /// 관찰 단위는 키 수가 아니라 **토큰**이다.
+    func testSingleKeyTokensStillAccumulateUnsupportedObservations() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.alwaysUnsupportedRole = true
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+        var learned = 0
+        manager.onAutoCorrectionUnsupported = { learned += 1 }
+
+        // 자모 하나 + 공백. 토큰 길이가 소프트 거부 상한(2)보다 짧다.
+        for _ in 0..<6 {
+            type("g", into: manager)
+            XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+            XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+        }
+
+        XCTAssertEqual(learned, 1, "한 글자 토큰에서 미지원 학습이 일어나지 않았습니다")
+        XCTAssertTrue(output.actions.isEmpty, "미지원 앱에서 화면을 바꿨습니다")
+    }
+
+    /// 역할 거부와 AX 소진이 한 토큰 안에서 섞여도 관찰을 회수해야 한다.
+    ///
+    /// 회귀 방지. `softProbeRefusalKeys`는 세 분기가 공유하는 하나의 카운터라,
+    /// `.unavailable`이 먼저 상한을 채워 확정 거부로 굳히면 같은 토큰에서 역할
+    /// 거부를 이미 봤는데도 관찰이 회수되지 않았다. 굳은 뒤에는 재프로브 가드가
+    /// 막아 영영 회수되지 않는다. 한컴처럼 AX가 무거운 앱의 실측 패턴이다.
+    func testMixedRoleAndUnavailableRefusalStillLearnsUnsupported() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+        var learned = 0
+        manager.onAutoCorrectionUnsupported = { learned += 1 }
+
+        for _ in 0..<6 {
+            // 토큰마다: 첫 키는 역할 거부, 그다음 키는 AX 소진으로 상한을 채운다.
+            focus.unsupportedRoleProbesRemaining = 1
+            focus.transientFailuresRemaining = 1000
+            type("gksrmf", into: manager)
+            XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+            XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+            focus.transientFailuresRemaining = 0
+        }
+
+        XCTAssertEqual(
+            learned, 1,
+            "역할 거부를 봤는데 .unavailable이 먼저 굳혀서 관찰이 사라졌습니다"
+        )
+        XCTAssertTrue(output.actions.isEmpty, "미지원 앱에서 화면을 바꿨습니다")
+    }
+
     /// 필드 단위 거부(비밀번호·주소창)는 앱 학습 근거가 아니다.
     /// 이걸 세면 Safari가 비밀번호 칸 하나 때문에 통째로 미지원이 된다.
     func testFieldLevelRefusalNeverLearnsUnsupported() {

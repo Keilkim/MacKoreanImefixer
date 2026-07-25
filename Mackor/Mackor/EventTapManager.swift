@@ -220,6 +220,19 @@ class EventTapManager {
     /// "포커스가 텍스트 역할이 아니다"를 연속으로 본 횟수. 다른 결과가 한 번이라도
     /// 나오면 0으로 되돌아갑니다.
     private var unsupportedRoleObservations = 0
+    /// 이 토큰에서 `.ineligibleUnsupportedRole` 을 한 번이라도 봤는지.
+    ///
+    /// 미지원 학습의 단위는 **토큰 하나당 관찰 하나**입니다. 그 불변식을
+    /// "거부를 봤다"는 사실 자체에 매답니다 — 어느 분기가 상한을 채웠는지에
+    /// 매달면 새는 경로가 생기기 때문입니다. `softProbeRefusalKeys` 는
+    /// 세 분기가 공유하므로 `.unavailable` 이 상한을 채워 굳히면 역할 거부를
+    /// 봤는데도 관찰이 회수되지 않고, 상한(2)보다 짧은 토큰은 굳는 지점 자체에
+    /// 닿지 못합니다. 실제로 한컴처럼 프로브가 `.unavailable` 과
+    /// `.ineligibleUnsupportedRole` 을 오가는 앱에서 학습이 영영 멈췄습니다.
+    ///
+    /// `softProbeRefusalKeys` 와 같은 자리(`clearAutomaticCorrectionFocus`)에서
+    /// 소비·리셋하므로 토큰 경계를 넘어 새지 않습니다.
+    private var sawUnsupportedRoleThisToken = false
     private var tokenCaptureState: TokenCaptureState = .idle
     private var pendingCorrectionState: PendingCorrectionState = .none
     private var originalChoiceState: OriginalChoiceState = .none
@@ -1015,7 +1028,11 @@ class EventTapManager {
                     automaticCorrectionFocusToken = token
                     automaticCorrectionFieldAllowed = true
                     // 텍스트 역할을 실제로 봤으므로 미지원 근거가 끊깁니다.
+                    // 이 토큰의 앞선 키가 역할 거부를 봤더라도 함께 취소합니다 —
+                    // 안 그러면 경계에서 관찰이 하나 회수돼 방금 끊은 근거가
+                    // 되살아납니다.
                     unsupportedRoleObservations = 0
+                    sawUnsupportedRoleThisToken = false
                 case .ineligible:
                     // 보안 입력·보호 subrole·보호 메타데이터 — 확정 거부.
                     // 즉시 래치, 재확인 없음(기존과 동일).
@@ -1025,6 +1042,7 @@ class EventTapManager {
                     automaticCorrectionFocusToken = nil
                     automaticCorrectionFieldAllowed = false
                     unsupportedRoleObservations = 0
+                    sawUnsupportedRoleThisToken = false
                     // 같은 토큰의 앞선 키가 .unavailable/.ineligibleUnsupportedRole로
                     // blind를 켰을 수 있습니다. 확정 거부가 나온 이상 그 상태를 반드시
                     // 취소합니다 — 안 그러면 아래 기록 게이트(`|| blindFieldActive`)와
@@ -1049,16 +1067,21 @@ class EventTapManager {
                     // 그때 확정 거부로 굳힙니다. AX 에 텍스트를 아예 안 내놓는 앱은
                     // 상한 안에서 굳으므로 기존 동작이 유지됩니다.
                     automaticCorrectionFocusToken = nil
+                    // 미지원 학습은 여기서 세지 않고 **표시만** 합니다. 실제 관찰은
+                    // 토큰이 끝날 때(`clearAutomaticCorrectionFocus`) 한 번 회수합니다.
+                    //
+                    // 소프트 거부로 바꾸면서 한 토큰에 프로브가 여러 번 돌게 됐으므로
+                    // 매번 세면 관찰이 실제보다 빨리 쌓여 앱이 두 단어 만에 미지원으로
+                    // 굳습니다. 그렇다고 "굳는 순간"에 매달면 반대로 영영 안 세집니다 —
+                    // 상한(2)보다 짧은 토큰은 굳는 지점에 닿지 못하고, 아래 두 분기가
+                    // 같은 카운터를 공유해 `.unavailable` 이 먼저 상한을 채우면 역할
+                    // 거부를 봤는데도 회수되지 않습니다. 토큰 끝에서 한 번 세면 두
+                    // 경우 모두 정확히 하나가 됩니다.
+                    sawUnsupportedRoleThisToken = true
                     softProbeRefusalKeys += 1
                     if softProbeRefusalKeys
                         >= EventTapManager.maximumSoftProbeRefusalKeys {
                         automaticCorrectionFieldAllowed = false
-                        // 미지원 학습은 **확정 거부로 굳을 때만** 셉니다. 위에서
-                        // 소프트 거부로 바꾸면서 한 토큰에 프로브가 여러 번 돌게
-                        // 됐는데, 매번 세면 관찰이 실제보다 빨리 쌓여 앱이 두 단어
-                        // 만에 미지원으로 굳습니다. 굳는 시점에 한 번만 세면 예전과
-                        // 같이 "토큰 하나당 관찰 하나"가 유지됩니다.
-                        noteUnsupportedRoleObservation()
                     }
                     // 사용자가 이 앱에 blind 교정을 켰다면, AX 미지원이 곧
                     // "검증 없이 교정할 대상"이라는 신호입니다. 기록을 이어가고
@@ -2661,6 +2684,14 @@ class EventTapManager {
     }
 
     private func clearAutomaticCorrectionFocus() {
+        // 토큰이 끝납니다. 이 토큰에서 역할 거부를 봤다면 여기서 관찰 하나를
+        // 회수합니다 — 프로브가 몇 번 돌았든, 어느 분기가 확정 거부로 굳혔든
+        // 상관없이 정확히 하나입니다. 소비 지점을 여기 한 곳으로 모아 두면
+        // "토큰 하나당 관찰 하나"가 분기 구조와 무관하게 성립합니다.
+        if sawUnsupportedRoleThisToken {
+            noteUnsupportedRoleObservation()
+        }
+        sawUnsupportedRoleThisToken = false
         automaticCorrectionFieldAllowed = nil
         automaticCorrectionFocusToken = nil
         softProbeRefusalKeys = 0

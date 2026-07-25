@@ -234,6 +234,38 @@ else
     echo "[건너뜀] SPARKLE_SIGN_UPDATE가 없어 EdDSA 재검증을 생략했습니다(구조 검증은 모두 통과)."
 fi
 
+# 이번 버전의 새 소식이 실제로 있는지 확인한다.
+#
+# 공지는 릴리스와 별개 파일이라 아무 검사도 걸려 있지 않았고, 실제로 v1.9 를
+# 준비하면서 빠뜨릴 뻔했다. 빠져도 릴리스·appcast·다운로드는 전부 정상이라
+# 기존 7단계 중 어느 것도 잡지 못한다 — 사용자만 "새 버전이 떴는데 무엇이
+# 바뀌었는지는 어디에도 없는" 상태가 된다.
+#
+# 여기(final)에 두는 이유: 공지는 appcast 와 같은 커밋으로 마지막에 올라가므로
+# validate-release.sh(빌드 시점)에 두면 아직 없는 것이 정상이라 항상 실패한다.
+ANNOUNCEMENTS_PATH="$ROOT_DIR/docs/announcements.json"
+if [ -f "$ANNOUNCEMENTS_PATH" ]; then
+    /usr/bin/python3 -c '
+import json, sys
+path, version = sys.argv[1], sys.argv[2]
+try:
+    data = json.load(open(path, encoding="utf-8"))
+except Exception as error:
+    sys.exit("announcements.json 을 JSON 으로 읽지 못했습니다: %s" % error)
+items = data.get("announcements")
+if not isinstance(items, list):
+    sys.exit("announcements.json 에 announcements 배열이 없습니다.")
+tag = "releases/tag/v" + version
+if not any(tag in str(item.get("url", "")) for item in items):
+    sys.exit("이번 릴리스(v%s)의 새 소식 항목이 없습니다. url 이 %s 로 끝나는 항목을 배열 맨 앞에 추가하세요." % (version, tag))
+seen = [item.get("id") for item in items]
+if len(seen) != len(set(seen)):
+    sys.exit("announcements.json 에 중복된 id 가 있습니다: %s" % seen)
+' "$ANNOUNCEMENTS_PATH" "$VERSION" \
+        || fail "새 소식 확인에 실패했습니다(위 메시지 참고)."
+    echo "[확인] docs/announcements.json 에 v$VERSION 새 소식이 있습니다."
+fi
+
 echo ""
 echo "[완료] Mackor $VERSION ($BUILD_NUMBER) 게시 상태 검증(final)을 통과했습니다."
 echo "[안전] 이 스크립트는 어떤 파일도 업로드·변경하지 않았습니다."

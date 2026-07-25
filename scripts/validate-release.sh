@@ -96,9 +96,26 @@ done < <(/usr/bin/sed -n 's/^[[:space:]]*MARKETING_VERSION = \(.*\);$/\1/p' "$PB
 
 # pbxproj에는 앱 타깃 외 타깃(테스트 등)의 CURRENT_PROJECT_VERSION도 있으므로
 # MARKETING_VERSION이 이번 버전인 블록의 값만 비교합니다.
+#
+# 짝짓기는 `buildSettings = { ... }` 블록 단위로 하고 중괄호 깊이로 끝을 찾습니다.
+# 이전 판은 "CURRENT_PROJECT_VERSION 줄을 만나면 기억해 두었다가 MARKETING_VERSION
+# 줄에서 출력"하는 방식이라 **블록 안 줄 순서에 의존**했습니다. 지금은 Xcode가
+# 빌드 설정을 알파벳순으로 써서 C가 M보다 앞이라 우연히 맞지만, 순서가 바뀌면
+# 직전 블록(테스트 타깃 등)의 값이 남아 비교되고, 그 값이 우연히 일치하면
+# **조용히 통과**합니다. 버전 드리프트를 잡으라고 있는 검사가 드리프트를 놓치는
+# 형태라 순서에 기대지 않게 고쳤습니다.
 PBX_BUILD_NUMBERS="$(/usr/bin/awk -v want="$VERSION" '
-    /CURRENT_PROJECT_VERSION = /  { sub(/;$/, "", $3); build = $3 }
-    /MARKETING_VERSION = /        { sub(/;$/, "", $3); if ($3 == want) print build }
+    /buildSettings = \{/ { inblock = 1; depth = 1; build = ""; mv = ""; next }
+    inblock {
+        opens = gsub(/\{/, "{"); closes = gsub(/\}/, "}")
+        depth += opens - closes
+        if ($0 ~ /CURRENT_PROJECT_VERSION = /) { v = $3; sub(/;$/, "", v); build = v }
+        if ($0 ~ /MARKETING_VERSION = /)       { v = $3; sub(/;$/, "", v); mv = v }
+        if (depth <= 0) {
+            if (mv == want) print (build == "" ? "(없음)" : build)
+            inblock = 0
+        }
+    }
 ' "$PBXPROJ_PATH")"
 [ -n "$PBX_BUILD_NUMBERS" ] \
     || fail "project.pbxproj에 MARKETING_VERSION = $VERSION 인 타깃이 없습니다."
