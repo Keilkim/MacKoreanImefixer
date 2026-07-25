@@ -912,32 +912,29 @@ struct MackorPanel: View {
         .padding(12)
     }
 
-    /// 업데이트 확인은 설정 화면 안에 묻혀 있었다. 새 소식·설정과 같은 급의
-    /// 동작이므로 footer 로 올린다(업데이트 확인 · 새 소식 · 설정 순서).
+    /// 새 버전이 **확인된 경우에만** 나타나는 알림 버튼.
     ///
-    /// 자동 확인은 하루 한 번 돌지만, 방금 고쳐졌다는 소식을 듣고 **지금** 받고
-    /// 싶은 사용자가 설정까지 들어가야 하는 것은 한 단계 많다.
+    /// 평소에는 아무 것도 보여주지 않는다. 누를 이유가 없는 버튼이 상시 자리를
+    /// 차지하면 새 소식 종처럼 "뭔가 있다"는 신호로 읽혀 사용자를 헛되이 부른다.
+    /// 수동 확인이 필요하면 설정 화면의 `업데이트 확인…` 이 그대로 있다.
     ///
-    /// 로컬 빌드에는 feed URL 이 없어 updater 가 구성되지 않는다. 그 경우 눌러도
-    /// 아무 일이 없는 버튼을 보여주는 대신 아예 감춘다.
+    /// 값의 출처는 `UpdaterController.availableUpdateVersion` 이고, Sparkle 이
+    /// 하루 한 번 자동 확인에서 새 버전을 찾았을 때만 채워진다. 앱을 방금 켠
+    /// 직후에는 새 버전이 있어도 잠시 비어 있을 수 있는데, 그건 숨기는 쪽이
+    /// 안전한 오차다 — 없는 업데이트를 있다고 하는 것보다 낫다.
     @ViewBuilder
     private var updateCheckButton: some View {
-        if updaterController.isConfigured {
-            let unread = coordinator.unreadReleaseVersion
+        if updaterController.isConfigured,
+           let version = updaterController.availableUpdateVersion {
             Button {
                 updaterController.checkForUpdates()
             } label: {
-                Label(
-                    "업데이트",
-                    systemImage: unread != nil
-                        ? "arrow.down.circle.fill"
-                        : "arrow.triangle.2.circlepath"
-                )
-                .foregroundColor(unread != nil ? .accentColor : nil)
+                Label("업데이트 v\(version)", systemImage: "arrow.down.circle.fill")
+                    .foregroundColor(.accentColor)
             }
             .buttonStyle(.borderless)
             .disabled(!updaterController.canCheckForUpdates)
-            .help(unread.map { "새 버전 v\($0) 이 있습니다" } ?? "업데이트 확인")
+            .help("새 버전 v\(version) 이 있습니다")
         }
     }
 
@@ -1332,9 +1329,13 @@ struct MackorPanel: View {
                             coordinator.showCurrentReleaseNotes()
                         }
                     }
-                    // 업데이트 확인은 footer 로 옮겼다(업데이트 · 새 소식 · 설정).
-                    // 여기에도 두면 같은 동작이 두 곳에 생겨 어느 쪽이 최신인지
-                    // 헷갈린다. 변경사항 보기는 성격이 달라 이 화면에 남긴다.
+                    // footer 의 업데이트 버튼은 **새 버전이 확인됐을 때만** 뜨는
+                    // 알림이다. 지금 당장 직접 확인하고 싶은 사용자를 위해 수동
+                    // 경로는 여기 남긴다 — 둘은 역할이 다르므로 중복이 아니다.
+                    Button("업데이트 확인…") {
+                        updaterController.checkForUpdates()
+                    }
+                    .disabled(!updaterController.isConfigured || !updaterController.canCheckForUpdates)
                     VStack(alignment: .leading, spacing: 4) {
                         Toggle("새 소식 확인", isOn: Binding(
                             get: { announcementCenter.checkEnabled },
