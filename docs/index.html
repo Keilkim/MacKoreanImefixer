@@ -165,6 +165,8 @@
   .btn .gh { width: 1.05em; height: 1.05em; fill: currentColor; }
   .cta-note { font-size: 0.85rem; color: var(--faint); }
   .cta-note b { color: var(--muted); font-weight: 600; }
+  .cta-ver a { color: var(--muted); text-decoration: none; border-bottom: 1px solid var(--gridx); }
+  .cta-ver a:hover { border-color: var(--accent); }
   .cta-users { margin-top: -0.45rem; }
   .cta-users b { color: var(--text); font-variant-numeric: tabular-nums; }
 
@@ -307,6 +309,7 @@
           </a>
         </div>
         <p class="cta-note">무료 · 설치 후 <b>손쉬운 사용 권한</b> 한 번이면 끝납니다.</p>
+        <p class="cta-note cta-ver" id="ver" hidden>최신 <b id="verTag"></b> · <a id="verLink" href="https://github.com/Keilkim/MacKoreanImefixer/releases" target="_blank" rel="noopener">변경 내용</a></p>
         <p class="cta-note cta-users" id="users" hidden><b id="usersCount">0</b>명의 사용자가 사용 중입니다</p>
       </div>
     </header>
@@ -494,7 +497,40 @@
     // 같은 GitHub Pages 오리진의 상대 경로라 외부 요청·추적이 아니며,
     // JS가 없거나 파일이 없으면 섹션은 조용히 숨긴 채로 둡니다(점진적 향상).
     var KIND_LABELS = { apps: "새 지원 앱", fix: "버그 수정", notice: "공지" };
-    fetch("announcements.json", { cache: "no-cache" })
+    // 최신 버전 표기. 릴리스마다 이 파일을 고치지 않도록 appcast 가 답하게 한다.
+  //
+  // GitHub API 대신 appcast 를 읽는 이유: 같은 서버라 요청 제한이 없고(비인증
+  // GitHub API 는 IP 당 시간당 60회라 방문자가 몰리면 그냥 안 보인다), 무엇보다
+  // 앱의 자동 업데이트가 보는 것과 **같은 원천**이라 둘이 어긋날 수 없다.
+  //
+  // 실패하면 아무 것도 보여주지 않는다(hidden 유지) — 틀린 버전을 보여주는 것보다 낫다.
+  fetch("appcast.xml")
+    .then(function (r) { return r.ok ? r.text() : null; })
+    .then(function (xml) {
+      if (!xml) return;
+      var doc = new DOMParser().parseFromString(xml, "application/xml");
+      if (doc.querySelector("parsererror")) return;
+      var item = doc.querySelector("item");
+      if (!item) return;
+      var v = item.getElementsByTagNameNS(
+        "http://www.andymatuschak.org/xml-namespaces/sparkle",
+        "shortVersionString"
+      )[0];
+      if (!v || !/^[0-9.]+$/.test(v.textContent.trim())) return;
+      var box = document.getElementById("ver");
+      var tag = document.getElementById("verTag");
+      var link = document.getElementById("verLink");
+      if (!box || !tag) return;
+      tag.textContent = "v" + v.textContent.trim();
+      if (link) {
+        link.href = "https://github.com/Keilkim/MacKoreanImefixer/releases/tag/v"
+          + v.textContent.trim();
+      }
+      box.hidden = false;
+    })
+    .catch(function () {});
+
+  fetch("announcements.json", { cache: "no-cache" })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (data) {
         if (!data || !Array.isArray(data.announcements) || !data.announcements.length) return;
