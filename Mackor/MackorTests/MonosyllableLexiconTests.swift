@@ -182,11 +182,12 @@ final class MonosyllableLexiconTests: XCTestCase {
         // (1934년 웹스터의 사어·방언이라 현대 영어 문장에 단독으로 안 나온다).
         // 아래 testAdmittedKeysAreOpenedDeliberately 가 그쪽을 고정한다.
         //
-        // `sus` 는 열었다가 되돌렸다 — 현대 영어에서 "that's sus"로 흔히 쓰고
-        // 결과(`년`)가 욕설로 읽힐 수 있어 공개 사고 위험이 크다.
+        // `sus`(년)·`go`(해) 는 열었다가 되돌렸다. 양쪽 다 흔한 말이면 손대지
+        // 않는 것이 원칙이다 — 파괴는 비대칭적으로 비싸다. `go `는 영어에서
+        // 가장 흔한 동사 중 하나이고, `sus` 는 결과가 욕설로 읽힐 수 있다.
         let words = [
             "an", "sh", "th", "do", "so", "to", "en", "ao", "wo",
-            "sus", "dha",
+            "sus", "dha", "go",
         ]
         for keys in words {
             XCTAssertNil(lexicon.resolve(latin: keys), "\(keys) 가 자산에 있습니다 — 영어를 파괴합니다")
@@ -203,7 +204,7 @@ final class MonosyllableLexiconTests: XCTestCase {
         let lexicon = try loadLexicon()
         let admitted = [
             "eh": "도", "dl": "이", "dml": "의", "dp": "에", "sk": "나",
-            "tl": "시", "ch": "초", "wp": "제", "gh": "호", "go": "해",
+            "tl": "시", "ch": "초", "wp": "제", "gh": "호",
             "ro": "개", "di": "야", "Eh": "또", "aht": "못",
             "sla": "님", "sha": "놈", "rhe": "곧", "wha": "좀", "Rho": "꽤",
         ]

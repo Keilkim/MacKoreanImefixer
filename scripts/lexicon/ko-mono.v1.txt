@@ -382,7 +382,6 @@ gmr	흑	감탄사
 gn	후	감탄사
 gnja	훰	keep
 gnla	휨	keep
-go	해	용언활용
 goT	했	keep
 goq	햅	keep
 gp	헤	감탄사
