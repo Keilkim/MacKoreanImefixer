@@ -20,8 +20,19 @@ class AppMonitor: ObservableObject {
     /// 대상 앱이 현재 포커스 중인지
     @Published private(set) var isTargetAppFront: Bool = false
 
-    /// 메뉴의 현재 대상 표시에도 사용하는 앞쪽 앱 번들 ID
+    /// 엔진이 쓰는 **실제** 앞쪽 앱 번들 ID. Mackor 자신도 그대로 들어옵니다.
+    ///
+    /// 패널을 열면 Mackor이 앞쪽 앱이 되고, 그때 `isTargetAppFront`가 false가 되어
+    /// 조합·교정이 꺼집니다. 그게 맞습니다 — 사용자가 지금 치는 곳은 Mackor의
+    /// 앱 검색창이지 대상 앱이 아니므로, 여기에 한글 조합을 밀어 넣으면 안 됩니다.
     @Published private(set) var frontAppBundleID: String?
+
+    /// 목록 UI가 쓰는 "사용자가 방금까지 쓰던 앱". Mackor 자신은 넣지 않습니다.
+    ///
+    /// 패널을 열면 위 `frontAppBundleID`는 Mackor이 되지만, 사용자가 목록에서
+    /// 찾는 앱은 여전히 직전에 쓰던 앱입니다. 이 값을 따로 두지 않으면 패널을
+    /// 여는 순간 "● 사용 중" 배지가 사라지고 그 앱이 목록 맨 위에서 밀려납니다.
+    @Published private(set) var uiFrontAppBundleID: String?
 
     /// 한글 IME가 활성 상태인지
     @Published private(set) var isKoreanIME: Bool = false
@@ -165,6 +176,11 @@ class AppMonitor: ObservableObject {
 
         frontAppBundleID = frontApp.bundleIdentifier
         frontAppName = frontApp.localizedName
+        // 목록 UI용 값은 Mackor 자신일 때 갱신하지 않아, 패널을 열어도 직전에
+        // 쓰던 앱이 "사용 중"으로 남고 목록 맨 위 자리를 지킵니다.
+        if frontApp.processIdentifier != ProcessInfo.processInfo.processIdentifier {
+            uiFrontAppBundleID = frontApp.bundleIdentifier
+        }
         prepareLazyAccessibilityIfNeeded(for: frontApp)
         // 전환할 때마다 세대를 올려 이전 앱 사다리를 취소하고, 대상 앱이면 새
         // 사다리를 예약합니다. 비대상/자기 앱으로 가면 세대만 오르고 예약은

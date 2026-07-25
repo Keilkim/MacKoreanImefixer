@@ -687,51 +687,114 @@ struct MackorPanel: View {
         // 다시 스캔해 그 사이 설치·실행한 앱도 나타나게 합니다(비어 있지 않으면
         // 로딩 표시 없이 제자리에서 갱신되어 깜빡이지 않습니다).
         .onAppear {
+            // 패널이 열릴 때 앱을 활성화합니다.
+            //
+            // Mackor은 LSUIElement(액세서리) 앱이라 메뉴바 항목을 눌러도 앱이
+            // 활성 상태가 되지 않습니다. 그러면 패널 안 첫 클릭이 컨트롤에
+            // 닿지 않고 **앱 활성화에 먹히고**, 그 과정에서 패널이 key를 잃어
+            // 그대로 닫힙니다. 사용자에게는 "토글을 누르면 창이 꺼진다,
+            // 두 번 열어야 눌린다"로 보입니다.
+            //
+            // 목록의 "● 사용 중" 배지와 정렬은 `uiFrontAppBundleID`를 쓰므로
+            // 여기서 Mackor이 앞쪽 앱이 되어도 직전에 쓰던 앱을 계속 가리킵니다.
+            // 반면 엔진이 보는 `frontAppBundleID`는 실제대로 Mackor이 되어
+            // 조합·교정이 꺼지는데, 그게 맞습니다 — 지금 타이핑하는 곳은
+            // 대상 앱이 아니라 이 패널의 앱 검색창입니다.
+            NSApp.activate(ignoringOtherApps: true)
             coordinator.installedAppsCatalog.refresh()
             coordinator.announcementCenter.refreshIfEnabled()
         }
-        // 확인창은 NSAlert.runModal 대신 SwiftUI .alert로 띄웁니다. window 스타일
-        // 메뉴바 패널에서 runModal은 패널을 닫고 런루프를 막습니다.
-        .alert(
-            "자동 교정을 켤까요?",
-            isPresented: Binding(
-                get: { pendingAutoApp != nil },
-                set: { if !$0 { pendingAutoApp = nil } }
-            ),
-            presenting: pendingAutoApp
-        ) { item in
-            Button("켜기") {
-                targetAppManager.setAutoCorrection(true, bundleID: item.bundleID, name: item.name)
-                pendingAutoApp = nil
+        // 확인창은 **패널 안에** 그립니다. 별도 창을 절대 띄우지 않습니다.
+        //
+        // 이력: NSAlert.runModal → 패널을 닫고 런루프를 막았습니다. SwiftUI
+        // `.alert`로 옮겼더니 이번엔 버튼(켜기·취소 둘 다)을 누르는 순간 패널이
+        // 닫혔습니다. window 스타일 MenuBarExtra 패널은 key 상태를 잃으면 스스로
+        // 사라지는데, 별도 창을 띄웠다 닫으면 key가 패널로 돌아오지 않기
+        // 때문입니다. 창을 하나도 만들지 않는 것이 유일하게 확실한 해법입니다.
+        .overlay {
+            if let item = pendingAutoApp {
+                confirmationCard(
+                    title: "자동 교정을 켤까요?",
+                    message: "\(item.name) 전체에 적용됩니다. 브라우저라면 모든 웹사이트가 같은 설정을 씁니다. 검색 입력란은 지원하며 비밀번호·보안 필드에서는 작동하지 않습니다. 주소·URL 입력란은 Enter·Tab 제출 시에만 교정하지 않습니다.",
+                    confirmTitle: "켜기",
+                    confirm: {
+                        targetAppManager.setAutoCorrection(
+                            true, bundleID: item.bundleID, name: item.name
+                        )
+                        pendingAutoApp = nil
+                    },
+                    cancel: { pendingAutoApp = nil }
+                )
+            } else if pendingAllAppsScope {
+                confirmationCard(
+                    title: "지원하는 모든 앱에서 자동 교정을 켤까요?",
+                    message: "모든 앱·웹사이트의 지원되는 입력란에 적용됩니다. 비밀번호·보안 필드는 제외되고, 주소·URL 입력란은 Enter·Tab 제출 시에만 제외됩니다.",
+                    confirmTitle: "모든 앱에 적용",
+                    confirm: {
+                        targetAppManager.setAutoCorrectionScope(.allApps)
+                        pendingAllAppsScope = false
+                    },
+                    cancel: { pendingAllAppsScope = false }
+                )
+            } else if let item = pendingBlindApp {
+                confirmationCard(
+                    title: "강제 교정을 켤까요?",
+                    message: "\(item.name)은 접근성으로 글자를 읽을 수 없어, 화면을 확인하지 않고 지웠다 다시 쓰는 방식으로 강제 교정합니다. 드물게 글자를 잘못 지울 수 있으며 ⌘Z로 되돌릴 수 있습니다. 위험을 아는 경우에만 켜세요.",
+                    confirmTitle: "강제로 켜기",
+                    isDestructive: true,
+                    confirm: {
+                        targetAppManager.setBlindAutoCorrection(
+                            true, bundleID: item.bundleID, name: item.name
+                        )
+                        pendingBlindApp = nil
+                    },
+                    cancel: { pendingBlindApp = nil }
+                )
             }
-            Button("취소", role: .cancel) { pendingAutoApp = nil }
-        } message: { item in
-            Text("\(item.name) 전체에 적용됩니다. 브라우저라면 모든 웹사이트가 같은 설정을 씁니다. 검색 입력란은 지원하며 비밀번호·보안 필드에서는 작동하지 않습니다. 주소·URL 입력란은 Enter·Tab 제출 시에만 교정하지 않습니다.")
         }
-        .alert("지원하는 모든 앱에서 자동 교정을 켤까요?", isPresented: $pendingAllAppsScope) {
-            Button("모든 앱에 적용") {
-                targetAppManager.setAutoCorrectionScope(.allApps)
-                pendingAllAppsScope = false
+    }
+
+    /// 패널 안에 그리는 확인 카드. 별도 창을 만들지 않으므로 패널이 key를
+    /// 잃지 않고, 버튼을 눌러도 패널이 닫히지 않습니다.
+    @ViewBuilder
+    private func confirmationCard(
+        title: String,
+        message: String,
+        confirmTitle: String,
+        isDestructive: Bool = false,
+        confirm: @escaping () -> Void,
+        cancel: @escaping () -> Void
+    ) -> some View {
+        ZStack {
+            // 뒤쪽 목록을 덮어 오조작을 막습니다. 바깥을 누르면 취소입니다.
+            Color.black.opacity(0.28)
+                .contentShape(Rectangle())
+                .onTapGesture { cancel() }
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text(title)
+                    .font(.system(size: 13, weight: .semibold))
+                Text(message)
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack {
+                    Spacer()
+                    Button("취소") { cancel() }
+                        .keyboardShortcut(.cancelAction)
+                    Button(confirmTitle) { confirm() }
+                        .keyboardShortcut(.defaultAction)
+                        .tint(isDestructive ? .red : .accentColor)
+                }
+                .padding(.top, 2)
             }
-            Button("취소", role: .cancel) { pendingAllAppsScope = false }
-        } message: {
-            Text("모든 앱·웹사이트의 지원되는 입력란에 적용됩니다. 비밀번호·보안 필드는 제외되고, 주소·URL 입력란은 Enter·Tab 제출 시에만 제외됩니다.")
-        }
-        .alert(
-            "강제 교정을 켤까요?",
-            isPresented: Binding(
-                get: { pendingBlindApp != nil },
-                set: { if !$0 { pendingBlindApp = nil } }
-            ),
-            presenting: pendingBlindApp
-        ) { item in
-            Button("강제로 켜기") {
-                targetAppManager.setBlindAutoCorrection(true, bundleID: item.bundleID, name: item.name)
-                pendingBlindApp = nil
-            }
-            Button("취소", role: .cancel) { pendingBlindApp = nil }
-        } message: { item in
-            Text("\(item.name)은 접근성으로 글자를 읽을 수 없어, 화면을 확인하지 않고 지웠다 다시 쓰는 방식으로 강제 교정합니다. 드물게 글자를 잘못 지울 수 있으며 ⌘Z로 되돌릴 수 있습니다. 위험을 아는 경우에만 켜세요.")
+            .padding(16)
+            .frame(width: 300)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color(nsColor: .windowBackgroundColor))
+                    .shadow(radius: 12)
+            )
         }
     }
 
@@ -865,7 +928,9 @@ struct MackorPanel: View {
 
     @ViewBuilder
     private func appRow(_ item: PanelAppItem) -> some View {
-        let isFront = appMonitor.frontAppBundleID?.lowercased() == item.bundleID.lowercased()
+        // 목록 표시는 uiFrontAppBundleID를 씁니다 — 패널을 열면 실제 앞쪽 앱은
+        // Mackor이 되지만, 사용자가 찾는 건 직전에 쓰던 앱입니다.
+        let isFront = appMonitor.uiFrontAppBundleID?.lowercased() == item.bundleID.lowercased()
         HStack(spacing: 10) {
             appIcon(item)
                 .frame(width: 28, height: 28)
@@ -1104,7 +1169,7 @@ struct MackorPanel: View {
         let items = mergedItems.filter {
             trimmed.isEmpty || $0.name.localizedCaseInsensitiveContains(trimmed)
         }
-        let front = appMonitor.frontAppBundleID?.lowercased()
+        let front = appMonitor.uiFrontAppBundleID?.lowercased()
         return items.sorted { lhs, rhs in
             let lf = lhs.bundleID.lowercased() == front
             let rf = rhs.bundleID.lowercased() == front
