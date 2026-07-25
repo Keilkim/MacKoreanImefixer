@@ -71,7 +71,7 @@ esac
 
 [ -n "${MACKOR_UPDATE_FEED_URL:-}" ] || fail "MACKOR_UPDATE_FEED_URL이 필요합니다."
 
-for tool in gh curl xmllint shasum stat cmp; do
+for tool in gh curl xmllint shasum stat cmp python3; do
     require_command "$tool"
 done
 gh auth status > /dev/null 2>&1 || fail "gh CLI 인증이 필요합니다: gh auth login"
@@ -234,17 +234,24 @@ else
     echo "[건너뜀] SPARKLE_SIGN_UPDATE가 없어 EdDSA 재검증을 생략했습니다(구조 검증은 모두 통과)."
 fi
 
-# 이번 버전의 새 소식이 실제로 있는지 확인한다.
+# 이번 버전의 새 소식이 실제로 **게시되어** 있는지 확인한다.
 #
 # 공지는 릴리스와 별개 파일이라 아무 검사도 걸려 있지 않았고, 실제로 v1.9 를
 # 준비하면서 빠뜨릴 뻔했다. 빠져도 릴리스·appcast·다운로드는 전부 정상이라
 # 기존 7단계 중 어느 것도 잡지 못한다 — 사용자만 "새 버전이 떴는데 무엇이
 # 바뀌었는지는 어디에도 없는" 상태가 된다.
 #
+# **라이브 파일을 내려받아 본다.** 이 스크립트의 다른 검사는 전부 원격을 보는데
+# 이것만 로컬 작업 트리를 읽으면, 커밋도 push 도 안 한 항목이 통과해 "게시
+# 검증"이라는 이름값을 못 한다. 설치된 앱의 알림과 랜딩이 읽는 것도 이 URL 이다.
+#
 # 여기(final)에 두는 이유: 공지는 appcast 와 같은 커밋으로 마지막에 올라가므로
 # validate-release.sh(빌드 시점)에 두면 아직 없는 것이 정상이라 항상 실패한다.
-ANNOUNCEMENTS_PATH="$ROOT_DIR/docs/announcements.json"
-if [ -f "$ANNOUNCEMENTS_PATH" ]; then
+ANNOUNCEMENTS_URL="${LANDING_URL}announcements.json"
+ANNOUNCEMENTS_PATH="$TEMP_DIR/live-announcements.json"
+if /usr/bin/curl --fail --silent --show-error --location --proto '=https' \
+    --max-time 30 --output "$ANNOUNCEMENTS_PATH" \
+    "${ANNOUNCEMENTS_URL}?mackor-verify=$(/bin/date +%s)"; then
     /usr/bin/python3 -c '
 import json, sys
 path, version = sys.argv[1], sys.argv[2]
@@ -267,7 +274,17 @@ if len(seen) != len(set(seen)):
     sys.exit("announcements.json 에 중복된 id 가 있습니다: %s" % seen)
 ' "$ANNOUNCEMENTS_PATH" "$VERSION" \
         || fail "새 소식 확인에 실패했습니다(위 메시지 참고)."
-    echo "[확인] docs/announcements.json 에 v$VERSION 새 소식이 있습니다."
+    # 라이브가 저장소와 어긋나면 미완료 게시이거나 Pages 배포 지연이다.
+    # appcast 에 거는 것과 같은 대조를 새 소식에도 건다.
+    if [ -f "$ROOT_DIR/docs/announcements.json" ]; then
+        /usr/bin/cmp -s "$ANNOUNCEMENTS_PATH" "$ROOT_DIR/docs/announcements.json" \
+            || fail "라이브 새 소식이 저장소 docs/announcements.json 과 다릅니다. GitHub Pages 배포가 지연 중이면 몇 분 후 다시 실행하세요."
+    fi
+    echo "[확인] 라이브 새 소식에 v$VERSION 항목이 있습니다: $ANNOUNCEMENTS_URL"
+else
+    # 조용히 건너뛰지 않는다. 못 가져왔다는 것 자체가 게시 상태의 문제다 —
+    # 설치된 앱의 알림과 랜딩이 읽는 바로 그 URL 이다.
+    fail "라이브 새 소식을 내려받지 못했습니다: $ANNOUNCEMENTS_URL"
 fi
 
 echo ""
