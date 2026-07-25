@@ -294,8 +294,8 @@ MACKOR_SPARKLE_PUBLIC_ED_KEY="PUBLIC_KEY" \
 | `REQUIRE_NOTARIZATION` | `1`이면 공증 설정·승인·스테이플 검증이 없을 때 공개 빌드를 중단 |
 | `MACKOR_UPDATE_FEED_URL` | 공개 HTTPS Sparkle appcast 주소 |
 | `MACKOR_SPARKLE_PUBLIC_ED_KEY` | 업데이트 검증용 공개키; 개인키는 저장소 밖 Keychain 또는 release secret에만 보관 |
-| `VERSION` | 표시 버전; 기본값 `1.4` |
-| `BUILD_NUMBER` | `CFBundleVersion`; 기본값 `10` |
+| `VERSION` | 표시 버전; 기본값 `1.5` |
+| `BUILD_NUMBER` | `CFBundleVersion`; 기본값 `11` |
 
 `REQUIRE_NOTARIZATION=1`과 `NOTARY_PROFILE`을 함께 지정하면 앱 공증용 archive, PKG, DMG를 각각 Apple에 제출합니다. 모두 승인된 뒤 앱·PKG·DMG에 티켓을 스테이플하고, 스테이플된 앱으로 Sparkle 업데이트 ZIP을 새로 만듭니다. appcast는 업데이트 자산을 먼저 게시한 뒤 가장 마지막에 공개해야 합니다.
 
@@ -312,8 +312,8 @@ xcrun stapler validate dist/local-build/Mackor.dmg
 
 | 항목 | 내용 |
 |------|------|
-| 소스 버전 | 1.4 (build 10) |
-| 최신 공개 배포 | **v1.4** (2026-07-25, 서명·공증 완료). v1.3이 첫 공식 릴리스 |
+| 소스 버전 | 1.5 (build 11) |
+| 최신 공개 배포 | **v1.5** (2026-07-25, 서명·공증 완료). v1.3이 첫 공식 릴리스 |
 | 개발사 | Draftup |
 | 개발자 | SEONGHUN KIM / draftup@naver.com |
 

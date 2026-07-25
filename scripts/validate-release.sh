@@ -71,6 +71,63 @@ for required_file in \
     [ -s "$required_file" ] || fail "릴리스 산출물이 없거나 비어 있습니다: $required_file"
 done
 
+# 저장소 안의 버전 표기가 전부 이번 릴리스와 같은지 확인합니다.
+#
+# 산출물 검증만으로는 이걸 못 잡습니다. `build-installer.sh`는 자기 기본값을
+# xcodebuild에 MARKETING_VERSION으로 **주입**하고 자기 기본값과 다시 비교하므로,
+# 그 값이 pbxproj보다 뒤처져 있어도 자체 검사를 통과합니다. 실제로 pbxproj가
+# 1.5/11인 동안 `build-installer.sh`가 1.3/9, README가 1.4/10에 멈춰 있었고,
+# 그 직전 커밋이 같은 종류의 드리프트를 한 번 고쳤는데도 이 두 곳을 놓쳤습니다.
+# 사람이 아니라 스크립트가 세도록 남깁니다.
+check_repo_version() {
+    local label="$1"
+    local actual="$2"
+    local expected="$3"
+    [ "$actual" = "$expected" ] \
+        || fail "$label 버전 표기가 이번 릴리스와 다릅니다 (예상 $expected, 실제 ${actual:-없음})."
+}
+
+PBXPROJ_PATH="$ROOT_DIR/Mackor/Mackor.xcodeproj/project.pbxproj"
+[ -s "$PBXPROJ_PATH" ] || fail "Xcode 프로젝트 파일을 찾을 수 없습니다: $PBXPROJ_PATH"
+
+while IFS= read -r pbx_version; do
+    check_repo_version "project.pbxproj의 MARKETING_VERSION" "$pbx_version" "$VERSION"
+done < <(/usr/bin/sed -n 's/^[[:space:]]*MARKETING_VERSION = \(.*\);$/\1/p' "$PBXPROJ_PATH")
+
+# pbxproj에는 앱 타깃 외 타깃(테스트 등)의 CURRENT_PROJECT_VERSION도 있으므로
+# MARKETING_VERSION이 이번 버전인 블록의 값만 비교합니다.
+PBX_BUILD_NUMBERS="$(/usr/bin/awk -v want="$VERSION" '
+    /CURRENT_PROJECT_VERSION = /  { sub(/;$/, "", $3); build = $3 }
+    /MARKETING_VERSION = /        { sub(/;$/, "", $3); if ($3 == want) print build }
+' "$PBXPROJ_PATH")"
+[ -n "$PBX_BUILD_NUMBERS" ] \
+    || fail "project.pbxproj에 MARKETING_VERSION = $VERSION 인 타깃이 없습니다."
+while IFS= read -r pbx_build; do
+    check_repo_version "project.pbxproj의 CURRENT_PROJECT_VERSION" "$pbx_build" "$BUILD_NUMBER"
+done <<< "$PBX_BUILD_NUMBERS"
+
+for script_with_defaults in "$ROOT_DIR/install.sh" "$ROOT_DIR/build-installer.sh"; do
+    [ -s "$script_with_defaults" ] \
+        || fail "버전 기본값을 확인할 스크립트가 없습니다: $script_with_defaults"
+    check_repo_version "$(basename "$script_with_defaults")의 VERSION 기본값" \
+        "$(/usr/bin/sed -n 's/^VERSION="${VERSION:-\(.*\)}"$/\1/p' "$script_with_defaults")" \
+        "$VERSION"
+    check_repo_version "$(basename "$script_with_defaults")의 BUILD_NUMBER 기본값" \
+        "$(/usr/bin/sed -n 's/^BUILD_NUMBER="${BUILD_NUMBER:-\(.*\)}"$/\1/p' "$script_with_defaults")" \
+        "$BUILD_NUMBER"
+done
+
+README_PATH="$ROOT_DIR/README.md"
+[ -s "$README_PATH" ] || fail "README.md를 찾을 수 없습니다."
+/usr/bin/grep -qF -- "| 소스 버전 | $VERSION (build $BUILD_NUMBER) |" "$README_PATH" \
+    || fail "README.md의 '소스 버전' 행이 이번 릴리스($VERSION build $BUILD_NUMBER)와 다릅니다."
+/usr/bin/grep -qF -- "| \`VERSION\` | 표시 버전; 기본값 \`$VERSION\` |" "$README_PATH" \
+    || fail "README.md의 VERSION 기본값 표기가 이번 릴리스($VERSION)와 다릅니다."
+/usr/bin/grep -qF -- "| \`BUILD_NUMBER\` | \`CFBundleVersion\`; 기본값 \`$BUILD_NUMBER\` |" "$README_PATH" \
+    || fail "README.md의 BUILD_NUMBER 기본값 표기가 이번 릴리스($BUILD_NUMBER)와 다릅니다."
+
+echo "[확인] 저장소 버전 표기가 모두 $VERSION (build $BUILD_NUMBER)와 일치합니다."
+
 KEYCHAIN_PUBLIC_KEY="$("$SPARKLE_GENERATE_KEYS" --account "$SPARKLE_KEY_ACCOUNT" -p | /usr/bin/tr -d '\r\n')"
 [ "$KEYCHAIN_PUBLIC_KEY" = "$MACKOR_SPARKLE_PUBLIC_ED_KEY" ] \
     || fail "Keychain의 Sparkle 공개키와 앱에 넣은 공개키가 다릅니다."

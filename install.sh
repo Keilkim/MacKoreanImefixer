@@ -135,21 +135,34 @@ LOCAL_SIGN_IDENTITY="${LOCAL_SIGN_IDENTITY:-$(
         | /usr/bin/head -n 1
 )}"
 
-if [ -n "$LOCAL_SIGN_IDENTITY" ]; then
-    echo "  Developer ID로 재서명 중: $LOCAL_SIGN_IDENTITY"
-    resign_failed=0
+# 앱 번들 전체를 주어진 identity로 서명합니다.
+#
+# validate_local_app_graph가 검사하는 것과 **같은 기준**으로 서명해야 합니다.
+# 검증기는 Contents 아래의 모든 Mach-O 파일을 훑어 Team ID 일치를 요구하므로,
+# 번들 확장자(.app/.xpc/.framework)만 서명하면 Sparkle의 Autoupdate 같은
+# 단독 실행 파일이 원래 서명을 유지한 채 남아 검증에서 걸립니다.
+#
+# 되돌리기 경로도 반드시 이 함수를 써야 합니다. 한때 되돌리기만 번들 확장자를
+# 훑어, 앞선 시도에서 Developer ID로 서명된 Autoupdate가 ad-hoc 나머지와
+# Team ID가 어긋난 채 남았고 검증기가 설치를 막았습니다 — "최소한 설치는
+# 진행되게 한다"는 되돌리기의 취지가 그대로 무너졌습니다.
+#
+# 되돌리기는 ad-hoc(`-`)이라 `--options runtime`을 붙이지 않습니다. 되돌리기의
+# 목적은 "최소한 설치는 진행되게" 하는 것뿐이고, 검증기가 보는 것도
+# TeamIdentifier 일치뿐이라 hardened runtime을 새로 얹을 이유가 없습니다.
+#
+# 반환값: 중첩 Mach-O 서명이 하나라도 실패하면 1.
+sign_app_graph() {
+    local identity="$1"
+    shift
+    local failed=0
 
-    # validate_local_app_graph가 검사하는 것과 **같은 기준**으로 서명합니다.
-    # 검증기는 Contents 아래의 모든 Mach-O 파일을 훑어 Team ID 일치를 요구하므로,
-    # 번들 확장자(.app/.xpc/.framework)만 서명하면 Sparkle의 Autoupdate 같은
-    # 단독 실행 파일이 원래 서명을 유지한 채 남아 검증에서 걸립니다.
-    #
     # 경로 깊이 역순(깊은 것부터)으로 서명해야 상위 번들의 봉인이 유효해집니다.
     while IFS= read -r macho; do
-        if ! codesign --force --sign "$LOCAL_SIGN_IDENTITY" --options runtime \
+        if ! codesign --force --sign "$identity" "$@" \
             --timestamp=none "$macho" > /dev/null 2>&1; then
             echo "  [경고] 중첩 코드 서명 실패: $macho" >&2
-            resign_failed=1
+            failed=1
         fi
     done < <(
         find "$BUILT_APP/Contents" -type f \
@@ -161,10 +174,18 @@ if [ -n "$LOCAL_SIGN_IDENTITY" ]; then
 
     # 중첩 실행 파일을 다시 서명했으므로 이를 담고 있는 번들도 깊은 것부터 다시 봉인합니다.
     while IFS= read -r -d '' bundle; do
-        codesign --force --sign "$LOCAL_SIGN_IDENTITY" --options runtime \
+        codesign --force --sign "$identity" "$@" \
             --timestamp=none "$bundle" > /dev/null 2>&1 || true
     done < <(find "$BUILT_APP/Contents" \
         \( -name "*.xpc" -o -name "*.app" -o -name "*.framework" \) -depth -print0)
+
+    return "$failed"
+}
+
+if [ -n "$LOCAL_SIGN_IDENTITY" ]; then
+    echo "  Developer ID로 재서명 중: $LOCAL_SIGN_IDENTITY"
+    resign_failed=0
+    sign_app_graph "$LOCAL_SIGN_IDENTITY" --options runtime || resign_failed=1
 
     if [ "$resign_failed" -eq 0 ] \
         && codesign --force --sign "$LOCAL_SIGN_IDENTITY" --options runtime \
@@ -174,11 +195,9 @@ if [ -n "$LOCAL_SIGN_IDENTITY" ]; then
         echo "  [경고] Developer ID 재서명 실패. ad-hoc으로 되돌립니다." >&2
         echo "         재설치 시 손쉬운 사용 권한을 다시 승인해야 할 수 있습니다." >&2
         # 부분 서명 상태로 두면 검증기가 Team ID 불일치로 설치를 막습니다.
-        # 전체를 ad-hoc으로 통일해 최소한 설치는 진행되게 합니다.
-        while IFS= read -r -d '' bundle; do
-            codesign --force --sign - "$bundle" > /dev/null 2>&1 || true
-        done < <(find "$BUILT_APP/Contents" \
-            \( -name "*.xpc" -o -name "*.app" -o -name "*.framework" \) -depth -print0)
+        # 전체를 ad-hoc으로 통일해 최소한 설치는 진행되게 합니다. 되돌리기는
+        # 실패해도 계속 진행합니다 — 여기서 멈추면 남는 건 부분 서명뿐입니다.
+        sign_app_graph - || true
         codesign --force --sign - "$BUILT_APP" > /dev/null 2>&1 || true
     fi
 else
