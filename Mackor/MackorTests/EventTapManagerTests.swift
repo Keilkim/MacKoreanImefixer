@@ -3333,6 +3333,74 @@ final class EventTapManagerTests: XCTestCase {
         XCTAssertTrue(output.actions.isEmpty, "미지원 앱에서 화면을 바꿨습니다")
     }
 
+    /// **완성되지 않은 단어는 절대 관찰이 되지 않는다.**
+    ///
+    /// 이 불변식을 지금까지 두 가지 방식으로 어겼다.
+    ///
+    ///   1.9        키를 처리하는 도중 상한에 닿는 순간 세어서, 경계를 지나지 않은
+    ///              세 글자짜리 조각만으로 학습이 발화했다.
+    ///   9a83f05    `clearAutomaticCorrectionFocus()` 에서 세어서, 앱 전환 경로가
+    ///              그 자리를 지나며 발화했다. 통지 콜백은 그 시점의 최전면 앱을
+    ///              읽으므로 **넘어간 앱**이 미지원으로 찍혔다.
+    ///
+    /// 둘 다 이 테스트에서 걸린다. 관찰의 단위는 경계를 지난 단어다.
+    func testAppSwitchNeverConsumesAPendingUnsupportedObservation() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.alwaysUnsupportedRole = true
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+        var learned = 0
+        manager.onAutoCorrectionUnsupported = { learned += 1 }
+
+        // 경계를 지난 단어 둘 — 관찰 2. 아직 학습 임계(3) 아래다.
+        for _ in 0..<2 {
+            type("gksrmf", into: manager)
+            XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+            XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+        }
+        XCTAssertEqual(learned, 0, "두 단어로 학습하면 안 됩니다")
+
+        // 경계를 못 지난 세 번째 단어를 치다 말고 앱 전환.
+        type("gks", into: manager)
+        manager.resetComposition()
+
+        XCTAssertEqual(
+            learned, 0,
+            "앱 전환이 미완료 토큰의 관찰을 회수해 다른 앱을 미지원으로 찍었습니다"
+        )
+    }
+
+    /// 쳤다 지우는 것을 반복해도 관찰이 쌓이면 안 된다.
+    ///
+    /// 백스페이스로 버퍼를 비우면 `clearAutomaticCorrectionFocus()` 를 지나지만
+    /// (`EventTapManager.swift:880`) 그건 단어의 끝이 아니다. 앱 전환 경로와 달리
+    /// 이쪽은 관찰 카운터를 지우지 않으므로 **실제로 누적된다** — 한 글자 치고
+    /// 지우기를 세 번 하면 단어를 하나도 완성하지 않고 앱이 미지원으로 굳는다.
+    func testTypingAndErasingWithoutABoundaryNeverAccumulatesObservations() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        focus.alwaysUnsupportedRole = true
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+        var learned = 0
+        manager.onAutoCorrectionUnsupported = { learned += 1 }
+
+        // 한 글자 치고 백스페이스로 지우기 × 6. 경계는 한 번도 지나지 않는다.
+        for _ in 0..<6 {
+            type("g", into: manager)
+            XCTAssertNotNil(manager.handleKeyDown(keyDown(0x33)))
+            XCTAssertNotNil(manager.handleKeyUp(keyUp(0x33)))
+        }
+
+        XCTAssertEqual(
+            learned, 0,
+            "단어를 완성하지 않았는데 쳤다 지우기만으로 미지원 학습이 쌓였습니다"
+        )
+    }
+
     /// 필드 단위 거부(비밀번호·주소창)는 앱 학습 근거가 아니다.
     /// 이걸 세면 Safari가 비밀번호 칸 하나 때문에 통째로 미지원이 된다.
     func testFieldLevelRefusalNeverLearnsUnsupported() {

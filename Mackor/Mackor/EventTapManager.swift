@@ -1318,6 +1318,9 @@ class EventTapManager {
     ) -> PendingSubmitCorrection? {
         let validationDeadline = monotonicNow()
             + EventTapManager.synchronousAXTimeBudget
+        // 제출(Return·Enter·Tab)도 단어의 끝입니다. 교정 자체는 되돌릴 수 없어
+        // 막더라도, "이 앱에서 글자를 못 읽었다"는 관찰은 똑같이 유효합니다.
+        consumeUnsupportedRoleObservationAtBoundary()
         let hasEligibleToken: Bool
         let precedingBoundaryStrokes: [BoundaryStroke]
         switch tokenCaptureState {
@@ -1490,6 +1493,9 @@ class EventTapManager {
     ) -> ImmediateBoundaryDisposition {
         let fastPathDeadline = monotonicNow()
             + EventTapManager.synchronousAXTimeBudget
+        // 단어가 여기서 끝납니다. 아래 분기가 어디로 가든(blind·일반·판정 없음)
+        // 관찰은 경계당 하나여야 하므로 갈라지기 전에 한 번만 회수합니다.
+        consumeUnsupportedRoleObservationAtBoundary()
         let sequence: BoundarySequence
         let hasEligibleToken: Bool
         switch tokenCaptureState {
@@ -2683,14 +2689,37 @@ class EventTapManager {
         clearAutomaticCorrectionFocus()
     }
 
+    /// 단어가 **경계에서 끝났을 때** 미지원 관찰 하나를 회수합니다.
+    ///
+    /// 소비 지점을 경계로 좁히는 것이 핵심입니다.
+    /// `clearAutomaticCorrectionFocus()` 는 토큰 끝이 아니라 "포커스 상태 리셋"
+    /// 이고 호출부가 일곱 곳입니다 — 백스페이스로 버퍼를 비울 때, 토큰을 폐기할
+    /// 때, 그리고 **앱이 바뀔 때**도 지납니다. 거기서 세면 두 가지가 깨집니다.
+    ///
+    ///   오귀속  앱 전환 경로(`resetComposition` → `resetTransientState` →
+    ///           `resetAutomaticCorrectionState`)에서 발화하면 통지 콜백이 읽는
+    ///           최전면 앱은 이미 **새 앱**입니다. 일러스트레이터에서 관찰 둘을
+    ///           쌓아 두고 메모장으로 넘어가면 메모장이 미지원으로 찍힙니다.
+    ///
+    ///   오탐    엑셀에서 셀에 한 글자만 치고 다음 셀로 옮기면 그 토큰은 역할
+    ///           거부만 본 채 리셋됩니다. 세 셀이면 엑셀이 미지원으로 굳습니다.
+    ///           방향키 이동은 단어의 끝이 아니므로 근거가 될 수 없습니다.
+    ///
+    /// 경계에서만 세면 둘 다 사라지고, 원래 고치려던 두 경우(상한보다 짧은
+    /// 토큰, `.unavailable` 이 먼저 굳힌 토큰)는 그대로 회수됩니다. 경계를 지나지
+    /// 않은 토큰은 `clearAutomaticCorrectionFocus()` 에서 조용히 버려집니다 —
+    /// 근거로 삼지 않는 것이 맞습니다.
+    private func consumeUnsupportedRoleObservationAtBoundary() {
+        guard sawUnsupportedRoleThisToken else { return }
+        // 통지보다 **먼저** 내립니다. 콜백이 동기로 되돌아와 같은 토큰을 두 번
+        // 세는 재진입을 막습니다.
+        sawUnsupportedRoleThisToken = false
+        noteUnsupportedRoleObservation()
+    }
+
     private func clearAutomaticCorrectionFocus() {
-        // 토큰이 끝납니다. 이 토큰에서 역할 거부를 봤다면 여기서 관찰 하나를
-        // 회수합니다 — 프로브가 몇 번 돌았든, 어느 분기가 확정 거부로 굳혔든
-        // 상관없이 정확히 하나입니다. 소비 지점을 여기 한 곳으로 모아 두면
-        // "토큰 하나당 관찰 하나"가 분기 구조와 무관하게 성립합니다.
-        if sawUnsupportedRoleThisToken {
-            noteUnsupportedRoleObservation()
-        }
+        // 여기서는 **세지 않고 버립니다**. 위 함수의 주석 참고 — 이 자리는 단어의
+        // 끝이 아니라 포커스 상태 리셋이고, 앱 전환도 여기를 지납니다.
         sawUnsupportedRoleThisToken = false
         automaticCorrectionFieldAllowed = nil
         automaticCorrectionFocusToken = nil
