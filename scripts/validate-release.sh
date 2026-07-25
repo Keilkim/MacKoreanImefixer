@@ -128,9 +128,30 @@ README_PATH="$ROOT_DIR/README.md"
 
 echo "[확인] 저장소 버전 표기가 모두 $VERSION (build $BUILD_NUMBER)와 일치합니다."
 
+# 이미 배포된 앱들이 신뢰하는 Sparkle 공개키. **바꾸면 안 됩니다.**
+#
+# 기존 사용자의 앱에는 이 키가 Info.plist(`SUPublicEDKey`)에 구워져 있고,
+# Sparkle은 이 키로 appcast 서명을 검증합니다. 다른 키로 서명해 게시하면
+# 기존 사용자 전원의 자동 업데이트가 **조용히** 끊깁니다 — 앱은 피드를
+# 거부할 뿐 사용자에게 아무 것도 알리지 않습니다.
+#
+# 이 상수가 필요한 이유: 아래 대조는 "Keychain == 환경변수"만 보므로,
+# 둘 다 틀린 키로 맞춰 두면 통과합니다. 실제로 이 Mac의 Keychain에는
+# Sparkle 계정이 둘 있고(`ed25519`가 배포된 키, `mackor`는 미사용 키)
+# 앱 이름을 따라 `SPARKLE_KEY_ACCOUNT=mackor`로 두기 쉬웠습니다.
+# 그래서 "지금 배포된 것"을 코드에 못 박아 3중으로 겁니다.
+#
+# 정말로 키를 교체해야 한다면(개인키 유출 등) 이 상수를 바꾸는 것만으로는
+# 안 됩니다 — 기존 사용자는 자동 업데이트를 받을 수 없으므로 재설치를
+# 안내해야 하고, 그 결정은 RELEASING.md에 기록해야 합니다.
+PUBLISHED_SPARKLE_PUBLIC_ED_KEY="MhrNZD9losUz0voS7OaqOM3ynQ2EsdE1FZiyqSyn0lo="
+
+[ "$MACKOR_SPARKLE_PUBLIC_ED_KEY" = "$PUBLISHED_SPARKLE_PUBLIC_ED_KEY" ] \
+    || fail "Sparkle 공개키가 이미 배포된 키와 다릅니다. 이대로 게시하면 기존 사용자의 자동 업데이트가 전부 끊깁니다 (예상 $PUBLISHED_SPARKLE_PUBLIC_ED_KEY, 실제 $MACKOR_SPARKLE_PUBLIC_ED_KEY)."
+
 KEYCHAIN_PUBLIC_KEY="$("$SPARKLE_GENERATE_KEYS" --account "$SPARKLE_KEY_ACCOUNT" -p | /usr/bin/tr -d '\r\n')"
 [ "$KEYCHAIN_PUBLIC_KEY" = "$MACKOR_SPARKLE_PUBLIC_ED_KEY" ] \
-    || fail "Keychain의 Sparkle 공개키와 앱에 넣은 공개키가 다릅니다."
+    || fail "Keychain의 Sparkle 공개키와 앱에 넣은 공개키가 다릅니다 (SPARKLE_KEY_ACCOUNT=$SPARKLE_KEY_ACCOUNT)."
 
 TEMP_BASE="${TMPDIR:-/tmp}"
 TEMP_BASE="${TEMP_BASE%/}"
