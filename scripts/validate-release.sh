@@ -142,6 +142,10 @@ README_PATH="$ROOT_DIR/README.md"
     || fail "README.md의 VERSION 기본값 표기가 이번 릴리스($VERSION)와 다릅니다."
 /usr/bin/grep -qF -- "| \`BUILD_NUMBER\` | \`CFBundleVersion\`; 기본값 \`$BUILD_NUMBER\` |" "$README_PATH" \
     || fail "README.md의 BUILD_NUMBER 기본값 표기가 이번 릴리스($BUILD_NUMBER)와 다릅니다."
+# '최신 공개 배포' 행은 지금까지 가드 밖이라 릴리스마다 한 버전씩 뒤처졌다.
+# README에서 가장 눈에 띄는 버전 표기라 뒤처지면 곧장 오해로 이어진다.
+/usr/bin/grep -qF -- "| 최신 공개 배포 | **v$VERSION** (" "$README_PATH" \
+    || fail "README.md의 '최신 공개 배포' 행이 이번 릴리스(v$VERSION)와 다릅니다."
 
 echo "[확인] 저장소 버전 표기가 모두 $VERSION (build $BUILD_NUMBER)와 일치합니다."
 
