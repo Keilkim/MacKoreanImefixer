@@ -227,10 +227,23 @@ class AppCoordinator: ObservableObject {
         // 그 앱에서 텍스트 역할을 연속으로 못 본 경우 — 목록에 '미지원'으로
         // 표시해, 켜져 있는데 안 되는 상태를 사용자가 원인 모른 채 겪지 않게 합니다.
         eventTapManager.onAutoCorrectionUnsupported = { [weak self] in
+            // 대상 앱을 **지금** 붙잡습니다. 이벤트 탭은 메인 런루프에 붙어 있으므로
+            // (`CFRunLoopAddSource(CFRunLoopGetMain(), ...)`) 이 클로저는 키를 처리하는
+            // 그 턴에서 동기로 돌고, 그 시점의 최전면 앱이 관찰의 주인입니다.
+            //
+            // 아래 async 안에서 읽으면 안 됩니다. 그 사이에 앱 전환 알림이 처리되어
+            // `frontAppBundleID` 가 **넘어간 앱**으로 바뀔 수 있고, 그러면 애먼 앱이
+            // '미지원' 으로 찍힙니다. 그 판정은 UserDefaults 에 영속되고, 미지원이
+            // 되면 자판 자동이 꺼지고, 꺼지면 교정이 안 걸려 지원 관찰이 다시 쌓일
+            // 일도 없어 **자동 복구 경로가 없습니다.**
+            //
+            // 상태 변경만 다음 턴으로 미룹니다 — 키를 처리하는 도중에 @Published 를
+            // 건드리면 SwiftUI 갱신이 탭 콜백 안에서 재진입합니다.
+            let observedBundleID = self?.appMonitor.frontAppBundleID
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.targetAppManager.noteAutoCorrectionUnsupported(
-                    bundleID: self.appMonitor.frontAppBundleID
+                    bundleID: observedBundleID
                 )
             }
         }

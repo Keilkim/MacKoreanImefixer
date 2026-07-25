@@ -73,7 +73,11 @@ final class UpdaterController: ObservableObject {
 /// `NSObject` 서브클래스이고 `@MainActor` 가 아닌 이유: Sparkle 이 이 델리게이트를
 /// 자기 스케줄러에서 호출하므로 격리를 붙이면 호출 규약이 어긋난다. 대신 콜백을
 /// 메인 큐로 넘겨 발행한다.
-private final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
+/// `private` 이 아닌 이유: 테스트 타깃이 이 파일을 직접 컴파일해서, Sparkle 이
+/// 실제로 부를 셀렉터에 이 클래스가 응답하는지 확인한다. `SPUUpdaterDelegate` 는
+/// 전부 선택 메서드인 @objc 프로토콜이라 **시그니처를 잘못 써도 컴파일은 통과하고
+/// 그냥 안 불린다.** 그 죽은 메서드를 잡을 방법은 셀렉터 대조뿐이다.
+final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
     var onUpdateFound: ((String) -> Void)?
     var onNoUpdate: (() -> Void)?
     var onUserSkippedVersion: (() -> Void)?
@@ -91,20 +95,44 @@ private final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
         }
     }
 
-    /// 사용자가 업데이트 창에서 "이 버전 건너뛰기"를 골랐습니다.
+    /// 사용자가 업데이트 창에서 고른 것을 받습니다.
     ///
-    /// 이걸 받지 않으면 footer 버튼이 세션 내내 남습니다. Sparkle 은 건너뛰기를
-    /// 기록한 뒤 그대로 흐름을 중단하므로 `updaterDidNotFindUpdate(_:)` 가
-    /// 호출되지 않고, 그게 지금까지 값을 비우는 유일한 경로였습니다.
+    /// 건너뛰기를 받지 않으면 footer 버튼이 세션 내내 남습니다. Sparkle 은
+    /// 건너뛰기를 기록한 뒤 그대로 흐름을 중단하므로 `updaterDidNotFindUpdate(_:)`
+    /// 가 호출되지 않고, 그게 값을 비우는 다른 유일한 경로입니다.
     ///
     /// 남은 버튼은 그냥 거슬리는 정도가 아닙니다. 누르면 **사용자 개시** 확인이
     /// 도는데 그 경로는 건너뛰기 목록을 무시하도록 되어 있어, 방금 건너뛴 바로 그
     /// 버전이 다시 제시됩니다. 자동으로 사라지려면 백그라운드 확인이 한 번 돌아야
     /// 하는데 그 주기는 하루(`SUScheduledCheckInterval`)입니다.
     ///
-    /// "나중에 알림"은 반대로 그대로 둡니다 — 그건 업데이트가 실제로 남아 있다는
-    /// 뜻이므로 버튼도 남아 있는 것이 맞습니다.
-    func updater(_ updater: SPUUpdater, userDidSkipThisVersion item: SUAppcastItem) {
+    /// **`updater:userDidSkipThisVersion:` 을 쓰지 않는 이유.** 그쪽이 하는 일은
+    /// 같지만 deprecated 이고, 무엇보다 Sparkle 의 디스패치가 배타입니다
+    /// (`SPUUIBasedUpdateDriver.m:257-262` — 이 메서드가 있으면 저쪽은 `else if`
+    /// 라 **영영 안 불립니다**). 그래서 둘을 함께 두면 한쪽이 조용히 죽고, 나중에
+    /// deprecated 쪽만 정리하다 보면 동작이 통째로 사라집니다. 한 곳으로 모읍니다.
+    /// Swift 이름은 `userDidMake` 로 줄어듭니다(임포터가 `Choice` 를 떼어냅니다).
+    /// Obj-C 셀렉터는 그대로 `updater:userDidMakeChoice:forUpdate:state:` 이고,
+    /// Sparkle 이 보내는 것은 그쪽입니다 — 테스트가 그 문자열로 대조합니다.
+    func updater(
+        _ updater: SPUUpdater,
+        userDidMake choice: SPUUserUpdateChoice,
+        forUpdate updateItem: SUAppcastItem,
+        state: SPUUserUpdateState
+    ) {
+        handleUserChoice(choice)
+    }
+
+    /// 선택 처리의 알맹이. Sparkle 타입 없이 부를 수 있게 떼어 둡니다 —
+    /// `SPUUserUpdateState` 는 테스트가 만들 수 없어서, 이게 없으면 "건너뛰기만
+    /// 버튼을 지운다"를 검증할 방법이 없습니다.
+    func handleUserChoice(_ choice: SPUUserUpdateChoice) {
+        // 건너뛰기만 버튼을 지웁니다.
+        //
+        // dismiss("나중에 알림")는 업데이트가 실제로 남아 있다는 뜻이므로 버튼도
+        // 남아 있는 것이 맞습니다. install 은 곧 앱이 다시 뜨므로 굳이 건드리지
+        // 않습니다.
+        guard choice == .skip else { return }
         DispatchQueue.main.async { [onUserSkippedVersion] in
             onUserSkippedVersion?()
         }

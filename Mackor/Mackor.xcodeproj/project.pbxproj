@@ -25,6 +25,9 @@
 		D1000003 /* SparkleUpdateConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000002; };
 		D1000004 /* SparkleUpdateConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000003; };
 		D1000005 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = D5000001 /* Sparkle */; };
+		D1000006 /* UpdaterController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000001; };
+		D1000007 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = D5000002 /* Sparkle */; };
+		D1000008 /* UpdaterControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2000004; };
 		B1000001 /* HangulCompositionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000001; };
 		B1000002 /* HangulCompositionTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000003; };
 		B1000003 /* KeycodeToJamoMap.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000004; };
@@ -96,6 +99,7 @@
 		F2000001 /* AnnouncementCenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnouncementCenter.swift; sourceTree = "<group>"; };
 		D2000002 /* SparkleUpdateConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SparkleUpdateConfiguration.swift; sourceTree = "<group>"; };
 		D2000003 /* SparkleUpdateConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SparkleUpdateConfigurationTests.swift; sourceTree = "<group>"; };
+		D2000004 /* UpdaterControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdaterControllerTests.swift; sourceTree = "<group>"; };
 		A2000010 /* Mackor.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Mackor.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B2000001 /* HangulCompositionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HangulCompositionTests.swift; sourceTree = "<group>"; };
 		B2000002 /* MackorTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MackorTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -144,6 +148,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D1000007 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -233,6 +238,7 @@
 				E2000200 /* AnnouncementCenterTests.swift */,
 				E2000032 /* LexicalTiebreakerParityTests.swift */,
 				D2000003 /* SparkleUpdateConfigurationTests.swift */,
+				D2000004 /* UpdaterControllerTests.swift */,
 			);
 			path = MackorTests;
 			sourceTree = "<group>";
@@ -281,6 +287,9 @@
 			dependencies = (
 			);
 			name = MackorTests;
+			packageProductDependencies = (
+				D5000002 /* Sparkle */,
+			);
 			productName = MackorTests;
 			productReference = B2000002 /* MackorTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -400,6 +409,8 @@
 				E1000032 /* LexicalTiebreakerParityTests.swift in Sources */,
 				D1000003 /* SparkleUpdateConfiguration.swift in Sources */,
 				D1000004 /* SparkleUpdateConfigurationTests.swift in Sources */,
+				D1000006 /* UpdaterController.swift in Sources */,
+				D1000008 /* UpdaterControllerTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -591,6 +602,11 @@
 
 /* Begin XCSwiftPackageProductDependency section */
 		D5000001 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D4000001 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
+		D5000002 /* Sparkle */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = D4000001 /* XCRemoteSwiftPackageReference "Sparkle" */;
 			productName = Sparkle;
