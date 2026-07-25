@@ -615,9 +615,9 @@ enum FocusedInputSafety {
             return nil
         }
         let focusedElement = value as! AXUIElement
-        // 앱 요소에 건 50ms 상한은 반환된 child 요소에 자동으로 전파되지
-        // 않습니다. 경계 keyDown 안의 exact-range 조회도 이 상한 밖으로
-        // 빠져나가지 않도록 실제 요청 대상에도 같은 제한을 겁니다.
+        // 앱 요소에 건 100ms 상한(`messagingTimeout`)은 반환된 child 요소에
+        // 자동으로 전파되지 않습니다. 경계 keyDown 안의 exact-range 조회도 이
+        // 상한 밖으로 빠져나가지 않도록 실제 요청 대상에도 같은 제한을 겁니다.
         limitMessagingTime(for: focusedElement)
         return focusedElement
     }

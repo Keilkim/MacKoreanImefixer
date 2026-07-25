@@ -439,7 +439,15 @@ class TargetAppManager: ObservableObject {
             autoCorrectionOptOut.remove(normalized)
             // 지원 확인 앱은 예외 해제만으로 켜지고(엔진 파생), 미확인 앱은
             // 실제 저장값이 필요합니다.
-            if axAutoCorrectionSupport(bundleID: bundleID, name: name) != .supported {
+            //
+            // `isListable`을 함께 보는 이유: 목록에는 최전면 앱이
+            // `isCorrectionCapable`만으로 끼어들 수 있어(MackorApp의 mergedItems)
+            // 화이트리스트 밖 Apple 앱처럼 `.supported`이면서 비-listable인 앱이
+            // 토글에 보입니다. 그런 앱은 `autoCorrectionIsOn`·`isAutoCorrectionEnabled`
+            // 의 첫 분기가 `isListable`에서 걸리므로, 예외 해제만으로는 켜지지 않고
+            // 저장값이 필요합니다. 이 검사가 없으면 토글이 켜자마자 되돌아옵니다.
+            if axAutoCorrectionSupport(bundleID: bundleID, name: name) != .supported
+                || !MackorAppFilter.isListable(bundleID: bundleID, name: name) {
                 setAutoCorrection(true, bundleID: bundleID, name: name)
             }
         } else {

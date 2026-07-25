@@ -776,6 +776,40 @@ final class EventTapManagerTests: XCTestCase {
         )
     }
 
+    /// 어퍼스트로피 뒤의 Backspace는 엔진 버퍼를 건드리지 않아야 한다.
+    ///
+    /// `'`는 화면에만 찍히고 엔진·미러에는 들어가지 않는다. 그래서 이 Backspace가
+    /// 실제로 지우는 문자는 `'`인데, 한때 `.collecting` 분기가 무조건 엔진의 자모
+    /// 스트로크를 pop했다. 그러면 `apostropheBreakStrokeCount`는 그대로 남은 채
+    /// 엔진과 화면이 어긋나, `apostropheCorrection`이 화면에 없는 `'`를 끼운
+    /// original을 만들고 삭제 개수가 화면 글자 수와 맞지 않게 된다.
+    ///
+    /// Backspace 2회면 `letterStrokeCount <= 1` 분기가 상태를 스스로 비우므로
+    /// **1회**가 최소 재현이고, 그 뒤 자모를 2개 더 쳐야 `breakIndex < count`를
+    /// 통과해 실제로 어긋난 교정이 나간다.
+    func testBackspaceAfterApostropheDoesNotDesyncEngineBuffer() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .koreanTwoSet
+        manager.isAutoCorrectionEnabled = true
+
+        type("it", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(Self.apostropheKeycode)))
+        XCTAssertNotNil(
+            manager.handleKeyDown(keyDown(0x33)),
+            "어퍼스트로피를 지우는 Backspace는 앱으로 통과해야 합니다"
+        )
+        type("rk", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(
+            output.actions.isEmpty,
+            "엔진과 화면이 어긋난 채 교정이 나갔습니다: \(output.actions)"
+        )
+    }
+
     // MARK: - blind 교정 (AX 없는 앱 · 사용자 opt-in)
     //
     // 한컴처럼 AX에 텍스트를 안 내놓지만 합성 입력은 받는 앱에서, 사용자가
@@ -972,6 +1006,37 @@ final class EventTapManagerTests: XCTestCase {
         XCTAssertTrue(
             output.actions.isEmpty,
             "보호 필드에서 blind 교정이 발동했습니다: \(output.actions)"
+        )
+    }
+
+    /// 같은 토큰 안에서 `.unavailable` → `.ineligible` 순서로 프로브가 바뀌어도
+    /// blind 교정이 발동해서는 안 된다.
+    ///
+    /// `blindFieldActive`는 `.unavailable`에서도 켜지는데, 한때 `.ineligible`
+    /// 케이스가 그 플래그를 끄지 않았다. 그래서 "첫 키는 AX가 느려 실패 →
+    /// 다음 키에서 조회가 성공해 보호 필드(`AXSecureTextField`)로 판명"이라는
+    /// 순서에서 blind가 살아남아, 프로브가 방금 거부한 비밀번호 칸에서 AX 검증
+    /// 없는 삭제+재입력이 일어났다. 위 테스트는 첫 프로브부터 `.ineligible`인
+    /// 경우만 보므로 이 혼합 순서를 잡지 못한다.
+    func testBlindCorrectionCancelledWhenLaterProbeRejectsField() {
+        let output = FakeKeyboardOutput()
+        let focus = FakeFocusInspector()
+        // 첫 키가 재시도 상한(3회)을 전부 .unavailable로 소진 → blind 켜짐,
+        // 플래그는 nil 유지. 그 뒤 조회는 .ineligible(보호 필드 확정 거부).
+        focus.transientFailuresRemaining = 3
+        focus.tokenAvailable = false
+        let manager = makeManager(output: output, focus: focus)
+        manager.inputSourceKind = .supportedLatin
+        manager.isAutoCorrectionEnabled = true
+        manager.blindAutoCorrectionEnabled = true
+
+        type("gksrmf", into: manager)
+        XCTAssertNotNil(manager.handleKeyDown(keyDown(0x31)))
+        XCTAssertNotNil(manager.handleKeyUp(keyUp(0x31)))
+
+        XCTAssertTrue(
+            output.actions.isEmpty,
+            "확정 거부된 보호 필드에서 blind 교정이 발동했습니다: \(output.actions)"
         )
     }
 
