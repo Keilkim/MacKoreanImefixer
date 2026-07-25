@@ -465,7 +465,7 @@
 				CODE_SIGN_ENTITLEMENTS = Mackor/Mackor.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 13;
+				CURRENT_PROJECT_VERSION = 14;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -476,7 +476,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.7;
+				MARKETING_VERSION = 1.8;
 				MACKOR_SPARKLE_PUBLIC_ED_KEY = "";
 				MACKOR_UPDATE_FEED_URL = "";
 				PRODUCT_BUNDLE_IDENTIFIER = com.mackor.app;
@@ -493,7 +493,7 @@
 				CODE_SIGN_ENTITLEMENTS = Mackor/Mackor.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 13;
+				CURRENT_PROJECT_VERSION = 14;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_CODE_COVERAGE = NO;
 				ENABLE_DEBUG_DYLIB = NO;
@@ -506,7 +506,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.7;
+				MARKETING_VERSION = 1.8;
 				MACKOR_SPARKLE_PUBLIC_ED_KEY = "";
 				MACKOR_UPDATE_FEED_URL = "";
 				PRODUCT_BUNDLE_IDENTIFIER = com.mackor.app;
