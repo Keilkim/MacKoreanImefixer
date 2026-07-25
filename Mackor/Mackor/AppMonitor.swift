@@ -48,6 +48,12 @@ class AppMonitor: ObservableObject {
     }
 
     private static let enabledKey = "AppMonitorIsEnabled"
+    /// 지원 학습 프로브 사다리의 rung 지연(ms). 자세한 근거는
+    /// `schedulePassiveSupportProbe` 주석 참고 — 요지는 Chrome처럼 웹 AX 트리를
+    /// 비동기로 짓는 앱은 250ms 한 번으로는 절대 잡히지 않는다는 것.
+    /// (`computeActiveState`와 같은 이유로 internal — 테스트가 사다리 모양을
+    /// 고정해 one-shot으로 되돌아가는 회귀를 막습니다.)
+    static let passiveSupportProbeDelaysMs = [250, 600, 1200, 2500]
     private var workspaceObservers: [NSObjectProtocol] = []
     private var targetSettingsCancellable: AnyCancellable?
     private var frontAppName: String?
@@ -217,25 +223,44 @@ class AppMonitor: ObservableObject {
         }
     }
 
-    /// 지원 미확인 앱에서 입력란이 실제로 포커스됐는지 잠시 뒤 한 번 확인합니다.
+    /// 지원 미확인 앱에서 입력란이 실제로 포커스됐는지 잠시 뒤 확인합니다.
     /// 교정은 하지 않고 AX 적격 여부만 읽어(fail-closed 프로브와 같은 판정) 적격이면
     /// 지원으로 학습합니다. 다른 앱으로 전환하면(세대 변경) 취소됩니다.
     ///
+    /// **한 번이 아니라 사다리인 이유** — Chrome 실측:
+    ///
+    /// Chrome은 `AXManualAccessibility`도(`-25205` attributeUnsupported)
+    /// `AXEnhancedUserInterface`도(`-25208` notImplemented) 받지 않습니다. 위
+    /// `prepareLazyAccessibilityIfNeeded`가 Electron(VS Code)에서는 통하지만
+    /// Chrome에는 통하지 않는다는 뜻입니다. 대신 Chrome은 보조 기술이 트리를
+    /// 실제로 조회하면 그때부터 웹 AX 트리를 **비동기로** 짓습니다.
+    ///
+    /// 그래서 250ms 한 번짜리 프로브는 차가운 Chrome을 거의 언제나 놓쳤고,
+    /// 놓치면 `.unknown`으로 남아 다음 활성화에서 또 한 번만 봅니다. 결과적으로
+    /// Chrome은 **영영 지원으로 학습되지 않아**, 사용자가 손수 목록에 추가하지
+    /// 않는 한 자판 자동 교정이 켜지지 않았습니다.
+    ///
+    /// 사다리는 두 몫을 합니다 — 조회 자체가 Chrome의 트리 생성을 깨우는
+    /// 신호이고, 뒤쪽 rung이 그렇게 지어진 트리를 잡습니다. 간격은 웹 트리가
+    /// 서기까지의 실측 지연을 덮도록 2.5초까지 벌립니다.
+    ///
     /// 이 프로브는 탭 콜백이 아니라 asyncAfter로 메인에서 돌아 입력 경로를 직접
-    /// 막지 않으며, 미확인 앱당 활성화 1회만 돕니다. 한 번 지원으로 확정되면
-    /// 위 호출부의 `.unknown` 가드에서 걸러져 더는 돌지 않습니다.
+    /// 막지 않습니다. 한 번 지원으로 확정되면 아래 `.unknown` 가드에서 남은
+    /// rung이 전부 걸러지고, 위 호출부 가드가 다음 활성화도 막습니다.
     private func schedulePassiveSupportProbe(generation: UInt64) {
-        DispatchQueue.main.asyncAfter(
-            deadline: .now() + .milliseconds(250)
-        ) { [weak self] in
-            guard let self, self.warmGeneration == generation else { return }
-            guard let bundleID = self.frontAppBundleID,
-                  self.targetAppManager?.axAutoCorrectionSupport(
-                    bundleID: bundleID,
-                    name: self.frontAppName
-                  ) == .unknown else { return }
-            if case .eligible = FocusedInputSafety.probeAutomaticCorrectionFocus() {
-                self.targetAppManager?.noteAutoCorrectionSupported(bundleID: bundleID)
+        for delayMs in AppMonitor.passiveSupportProbeDelaysMs {
+            DispatchQueue.main.asyncAfter(
+                deadline: .now() + .milliseconds(delayMs)
+            ) { [weak self] in
+                guard let self, self.warmGeneration == generation else { return }
+                guard let bundleID = self.frontAppBundleID,
+                      self.targetAppManager?.axAutoCorrectionSupport(
+                        bundleID: bundleID,
+                        name: self.frontAppName
+                      ) == .unknown else { return }
+                if case .eligible = FocusedInputSafety.probeAutomaticCorrectionFocus() {
+                    self.targetAppManager?.noteAutoCorrectionSupported(bundleID: bundleID)
+                }
             }
         }
     }
