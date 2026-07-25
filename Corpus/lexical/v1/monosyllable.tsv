@@ -24,6 +24,7 @@ Ekf	correct	딸
 Ekg	correct	땋
 Ekq	correct	땁
 Ekr	correct	딱
+Eks	correct	딴
 Elq	correct	띱
 Eml	correct	띄
 Emlf	correct	띌
@@ -71,6 +72,7 @@ Qur	correct	뼉
 Qut	correct	뼛
 Rhkr	correct	꽉
 Rhla	correct	꾐
+Rho	correct	꽤
 Rhr	correct	꼭
 Rja	correct	껌
 Rka	correct	깜
@@ -147,6 +149,7 @@ akfr	correct	맑
 akg	correct	맣
 akq	correct	맙
 akr	correct	막
+aks	correct	만
 aksg	correct	많
 akw	correct	맞
 akx	correct	맡
@@ -179,6 +182,8 @@ apf	correct	멜
 apq	correct	멥
 apr	correct	멕
 auT	correct	몄
+auc	correct	몇
+aud	correct	명
 ayq	correct	묩
 cba	correct	츔
 ch	correct	초
@@ -252,6 +257,7 @@ dpa	correct	엠
 dpd	correct	엥
 duR	correct	엮
 duT	correct	였
+duf	correct	열
 dufq	correct	엷
 duq	correct	엽
 duqt	correct	엾
@@ -275,6 +281,7 @@ ehlf	correct	될
 ehlq	correct	됩
 ehls	correct	된
 ehlt	correct	됫
+eho	correct	돼
 ehoT	correct	됐
 ehq	correct	돕
 ehr	correct	독
@@ -309,9 +316,13 @@ ekw	correct	닺
 elT	correct	딨
 elq	correct	딥
 elw	correct	딪
+emd	correct	등
+emf	correct	들
 eml	correct	듸
 emq	correct	듭
 emr	correct	득
+ems	correct	든
+emt	correct	듯
 enj	correct	둬
 enjT	correct	뒀
 enl	correct	뒤
@@ -403,6 +414,7 @@ qnfa	correct	붊
 qns	correct	분
 qoT	correct	뱄
 qoq	correct	뱁
+qor	correct	백
 qpa	correct	벰
 qpe	correct	벧
 quT	correct	볐
@@ -416,6 +428,7 @@ qux	correct	볕
 rO	correct	걔
 rOf	correct	걜
 rOs	correct	걘
+rhe	correct	곧
 rhfa	correct	곪
 rhk	correct	과
 rhka	correct	괌
@@ -451,6 +464,7 @@ ruR	correct	겪
 ruT	correct	겼
 ruq	correct	겹
 sba	correct	늄
+sha	correct	놈
 shfa	correct	놂
 sj	correct	너
 sja	correct	넘
@@ -459,6 +473,7 @@ sjs	correct	넌
 sk	correct	나
 skfa	correct	낢
 sks	correct	난
+sla	correct	님
 slfa	correct	닒
 smf	correct	늘
 smfa	correct	늚
@@ -520,10 +535,12 @@ voq	correct	팹
 vpa	correct	펨
 vuT	correct	폈
 vuq	correct	폅
+vus	correct	편
 wO	correct	쟤
 wOf	correct	쟬
 wOs	correct	쟨
 wba	correct	쥼
+wha	correct	좀
 whfa	correct	졺
 whla	correct	죔
 whoT	correct	좼

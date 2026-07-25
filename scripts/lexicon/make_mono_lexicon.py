@@ -91,7 +91,13 @@ BIN_DIRS = ("/bin", "/usr/bin", "/sbin", "/usr/sbin")
 LOCALE_DIR = "/usr/share/locale"
 
 # 파괴 표면 상한. 올릴 때는 사유를 커밋 메시지에 남긴다.
-SURFACE_LIMIT = 600
+#
+# 600 -> 620: `ambiguousBothValid` 보류를 걷어내면서 선언된 일상 단음절 12개
+# (돼 든 들 듯 등 딴 만 명 몇 백 열 편)가 자산에 들어왔다. 그 보류는
+# LexicalTiebreaker 로 넘기는 것이었는데 그쪽 자산에 1음절이 0개(불변식 9)라
+# 넘길 곳이 없었고, 결과적으로 버려지고 있었다. 12개 전부 영어 사전·$PATH·
+# 로케일 게이트를 통과한 키열이므로 파괴 표면이 실질적으로 늘지는 않는다.
+SURFACE_LIMIT = 620
 # T2(닫혀 있지 않은 부류) 총합 상한.
 T2_LIMIT = 60
 T2_CLASSES = ("감탄사", "부사", "용언활용")
@@ -338,16 +344,22 @@ def build():
             rejected.append((word, keys, cls, reason))
             continue
 
-        action, _tier, rule, _repl = g.explain_l2k(keys)
-        if action == "correct" or rule == "weakKoreanStructure":
-            # 갈래 A(오늘 R-K4가 막던 2키) / B(오늘 무모음 가드가 막던 3키+) /
-            # K(이미 KEEP — 부류 라벨만 승격).
-            pass
-        else:
-            # `ambiguousBothValid` 는 주인이 LexicalTiebreaker 다. 건드리지 않는다.
-            rejected.append((word, keys, cls, "BRANCH:" + rule))
-            continue
-
+        # 규칙 엔진의 분기(`explain_l2k`)로 걸러내지 않는다.
+        #
+        # 한때 `ambiguousBothValid` 를 LexicalTiebreaker 에게 넘겼다. 의도는
+        # "규칙이 가르지 못한 것은 사전이 판단한다"였는데, tiebreaker 의 자산
+        # (`ko-lexicon.v1.txt`)에는 **1음절이 0개**이고 그 사실은 아래 불변식 9가
+        # 강제한다. 즉 1음절을 넘기는 것은 넘기는 게 아니라 버리는 것이었다.
+        # 실측으로 선언된 일상 단음절 12개(돼 든 들 듯 등 딴 만 명 몇 백 열 편)가
+        # 이렇게 조용히 사라지고 있었다.
+        #
+        # 안전은 위쪽 `gate()` 가 담당한다. 영어 사전 표제어·$PATH 명령·로케일
+        # 코드와 충돌하면 거기서 걸린다. 그 관문을 통과했다는 것은 "이 키열로 칠
+        # 다른 뜻이 없다"는 뜻이므로, 규칙 엔진이 갈랐는지와 무관하게 선언된
+        # 한글로 확정한다.
+        #
+        # 사례를 나열하지 않는다. 무엇이 열리는지는 `mono-source.ko.tsv` 의
+        # 선언과 `gate()` 의 자동 판정, 둘로만 정해진다.
         if keys in entries and entries[keys] != word:
             raise SystemExit(f"키열 충돌: {keys} -> {entries[keys]} / {word}")
         entries[keys] = word
@@ -442,12 +454,20 @@ def cmd_verify():
     missing = sorted(live - asset_keys)
     check(not missing, f"3 KEEP 완전성: 오늘 교정되는데 자산에 없는 키열 {len(missing)}개 {missing[:5]}")
 
-    # 4. RESCUE 분기 제한 — 보류하기로 한 분기를 건드리지 않았는가.
+    # 4. 게이트 완전성 — 자산의 모든 행이 자동 게이트를 통과했는가.
+    #
+    # 이전에는 "RESCUE 분기 제한"이었다. `ambiguousBothValid` 를 LexicalTiebreaker
+    # 에 넘긴다는 전제였는데, 불변식 9가 "ko-lexicon 에 1음절 0개"를 강제하므로
+    # 넘길 곳이 없어 선언된 일상어가 조용히 사라졌다(돼 든 들 듯 등 딴 만 명 몇
+    # 백 열 편 + admit 6개). 그래서 분기 제한을 걷어냈다.
+    #
+    # 안전은 아래 불변식 6(게이트 무충돌)이 이미 같은 검사를 하고 있으므로
+    # 여기서 중복하지 않는다. 4번 자리는 비워 두고 번호는 유지한다 — 기존
+    # 실패 메시지와 문서의 번호를 흔들지 않기 위해서다.
+
+    # 5. replacement 일치 — 자산이 엔진과 다른 음절을 주장하지 않는가.
     for keys, word, cls in rows:
-        action, _t, rule, _r = g.explain_l2k(keys)
-        if action != "correct" and rule != "weakKoreanStructure":
-            problems.append(f"4 분기: {keys}({word}) 가 {rule} 분기입니다")
-        # 5. replacement 일치 — 자산이 엔진과 다른 음절을 주장하지 않는가.
+        action, _t, _rule, _r = g.explain_l2k(keys)
         if action == "correct" and _r != word:
             problems.append(f"5 replacement: {keys} 엔진={_r} 자산={word}")
 

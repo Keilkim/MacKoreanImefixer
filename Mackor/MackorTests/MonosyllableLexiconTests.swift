@@ -178,9 +178,15 @@ final class MonosyllableLexiconTests: XCTestCase {
     /// `dha`(→옴)는 **오늘 파괴 중**이며 영어 사전 게이트가 닫는다.
     func testRepositoryAssetExcludesEnglishWords() throws {
         let lexicon = try loadLexicon()
+        // `sla`·`sha`·`rhe`·`wha` 는 mono-admit.tsv 로 **의도적으로 열었다**
+        // (1934년 웹스터의 사어·방언이라 현대 영어 문장에 단독으로 안 나온다).
+        // 아래 testAdmittedKeysAreOpenedDeliberately 가 그쪽을 고정한다.
+        //
+        // `sus` 는 열었다가 되돌렸다 — 현대 영어에서 "that's sus"로 흔히 쓰고
+        // 결과(`년`)가 욕설로 읽힐 수 있어 공개 사고 위험이 크다.
         let words = [
             "an", "sh", "th", "do", "so", "to", "en", "ao", "wo",
-            "sus", "sla", "sha", "rhe", "wha", "dha",
+            "sus", "dha",
         ]
         for keys in words {
             XCTAssertNil(lexicon.resolve(latin: keys), "\(keys) 가 자산에 있습니다 — 영어를 파괴합니다")
@@ -199,6 +205,7 @@ final class MonosyllableLexiconTests: XCTestCase {
             "eh": "도", "dl": "이", "dml": "의", "dp": "에", "sk": "나",
             "tl": "시", "ch": "초", "wp": "제", "gh": "호", "go": "해",
             "ro": "개", "di": "야", "Eh": "또", "aht": "못",
+            "sla": "님", "sha": "놈", "rhe": "곧", "wha": "좀", "Rho": "꽤",
         ]
         for (keys, hangul) in admitted {
             XCTAssertEqual(
@@ -239,10 +246,17 @@ final class MonosyllableLexiconTests: XCTestCase {
     }
 
     /// 파괴 표면의 크기 자체를 고정한다. 자산이 조용히 자라면 여기서 걸린다.
+    ///
+    /// 상한은 `make_mono_lexicon.py` 의 `SURFACE_LIMIT` 과 같은 값을 유지한다.
+    /// 600 → 620: `ambiguousBothValid` 보류를 걷어내며 선언된 일상 단음절 12개
+    /// (돼 든 들 듯 등 딴 만 명 몇 백 열 편)가 자산에 들어왔다. 그 보류는
+    /// LexicalTiebreaker 로 넘기는 것이었는데 그쪽 자산에 1음절이 0개라(바로 위
+    /// 테스트가 고정) 넘길 곳이 없어 버려지고 있었다. 12개 전부 영어 사전·
+    /// $PATH·로케일 게이트를 통과한 키열이다.
     func testRepositoryAssetSizeIsBounded() throws {
         let rows = try loadAsset()
         XCTAssertGreaterThanOrEqual(rows.count, 400)
-        XCTAssertLessThanOrEqual(rows.count, 600, "파괴 표면이 상한을 넘었습니다")
+        XCTAssertLessThanOrEqual(rows.count, 620, "파괴 표면이 상한을 넘었습니다")
         let allowed: Set<String> = [
             "keep", "조사", "대명사", "의존명사", "수관형사", "감탄사", "부사", "용언활용",
         ]

@@ -853,6 +853,20 @@ class EventTapManager {
         if EventTapManager.commitKeycodes.contains(keycode) {
             commitCompositionIfNeeded()
             resetAutomaticCorrectionToken()
+            // 이 키들은 대개 **입력란을 옮깁니다** — 스프레드시트의 셀 이동
+            // (Excel/Numbers에서 방향키·Enter·Tab), 폼의 다음 칸, 문단 이동.
+            // 새 입력란의 AX 요소는 차갑기 때문에, 옮긴 직후 첫 단어가 프로브
+            // 실패로 통째로 교정에서 빠졌습니다("셀 바꿀 때마다 처음엔 안 되고
+            // 조금 기다려야 된다"). 앱은 그대로라 AppMonitor의 앱 전환 예열
+            // 사다리는 돌지 않습니다.
+            //
+            // 마우스 클릭에는 이미 같은 예열이 있습니다(handleMouseDown).
+            // 키보드로 옮기는 경우만 빠져 있던 것을 맞춥니다. 예열은 결과를
+            // 쓰지 않고 버리므로 판정에 영향이 없고, 탭 콜백을 막지 않도록
+            // 클릭 경로와 똑같이 async로 넘깁니다.
+            if isActive || isAutoCorrectionEnabled {
+                DispatchQueue.main.async { FocusedInputSafety.warmFocusCache() }
+            }
             return event
         }
 

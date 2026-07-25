@@ -23,6 +23,7 @@ Ekf	딸	keep
 Ekg	땋	keep
 Ekq	땁	keep
 Ekr	딱	부사
+Eks	딴	수관형사
 Elq	띱	keep
 Eml	띄	keep
 Emlf	띌	keep
@@ -70,6 +71,7 @@ Qur	뼉	keep
 Qut	뼛	keep
 Rhkr	꽉	부사
 Rhla	꾐	keep
+Rho	꽤	부사
 Rhr	꼭	부사
 Rja	껌	keep
 Rka	깜	keep
@@ -146,6 +148,7 @@ akfr	맑	keep
 akg	맣	keep
 akq	맙	keep
 akr	막	부사
+aks	만	조사
 aksg	많	keep
 akw	맞	keep
 akx	맡	keep
@@ -178,6 +181,8 @@ apf	멜	keep
 apq	멥	keep
 apr	멕	keep
 auT	몄	keep
+auc	몇	수관형사
+aud	명	의존명사
 ayq	묩	keep
 cba	츔	keep
 ch	초	의존명사
@@ -251,6 +256,7 @@ dpa	엠	keep
 dpd	엥	감탄사
 duR	엮	keep
 duT	였	keep
+duf	열	수관형사
 dufq	엷	keep
 duq	엽	keep
 duqt	엾	keep
@@ -274,6 +280,7 @@ ehlf	될	keep
 ehlq	됩	keep
 ehls	된	keep
 ehlt	됫	keep
+eho	돼	용언활용
 ehoT	됐	keep
 ehq	돕	keep
 ehr	독	keep
@@ -308,9 +315,13 @@ ekw	닺	keep
 elT	딨	keep
 elq	딥	keep
 elw	딪	keep
+emd	등	의존명사
+emf	들	조사
 eml	듸	keep
 emq	듭	keep
 emr	득	keep
+ems	든	조사
+emt	듯	의존명사
 enj	둬	keep
 enjT	뒀	keep
 enl	뒤	keep
@@ -402,6 +413,7 @@ qnfa	붊	keep
 qns	분	의존명사
 qoT	뱄	keep
 qoq	뱁	keep
+qor	백	수관형사
 qpa	벰	keep
 qpe	벧	keep
 quT	볐	keep
@@ -415,6 +427,7 @@ qux	볕	keep
 rO	걔	대명사
 rOf	걜	keep
 rOs	걘	keep
+rhe	곧	부사
 rhfa	곪	keep
 rhk	과	조사
 rhka	괌	keep
@@ -450,6 +463,7 @@ ruR	겪	keep
 ruT	겼	keep
 ruq	겹	keep
 sba	늄	keep
+sha	놈	의존명사
 shfa	놂	keep
 sj	너	대명사
 sja	넘	부사
@@ -458,6 +472,7 @@ sjs	넌	대명사
 sk	나	조사
 skfa	낢	keep
 sks	난	대명사
+sla	님	의존명사
 slfa	닒	keep
 smf	늘	부사
 smfa	늚	keep
@@ -519,10 +534,12 @@ voq	팹	keep
 vpa	펨	keep
 vuT	폈	keep
 vuq	폅	keep
+vus	편	의존명사
 wO	쟤	대명사
 wOf	쟬	keep
 wOs	쟨	keep
 wba	쥼	keep
+wha	좀	부사
 whfa	졺	keep
 whla	죔	keep
 whoT	좼	keep
