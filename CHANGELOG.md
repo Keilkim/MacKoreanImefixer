@@ -6,6 +6,16 @@ Mackor의 사용자에게 보이는 변경 사항을 이 파일에 기록합니�
 
 ## [Unreleased]
 
+## [1.11] — 2026-07-26
+
+### 수정
+
+- **앱을 바꾸는 순간 엉뚱한 앱이 `미지원`으로 표시될 수 있던 문제를 해결합니다.** 교정이 안 되는 앱에서 몇 단어를 친 뒤 다른 앱으로 넘어가면, 그 판정이 아주 좁은 확률로 **넘어간 쪽** 앱에 붙을 수 있었습니다. 한 번 붙으면 그 앱의 자판 자동이 꺼지고, 꺼지면 교정이 안 걸려 스스로 되돌아올 방법이 없었습니다. 이제 판정할 때의 앱을 그 자리에서 붙잡습니다.
+
+  이미 잘못 표시된 앱이 있다면 `설정 → 앱별 설정`에서 다시 켜면 됩니다.
+
+- **업데이트 창의 선택을 받는 방식을 Sparkle의 현재 방식으로 옮겼습니다.** `이 버전 건너뛰기`·`나중에 알림`의 동작은 1.10과 같습니다. 옛 방식은 Sparkle이 더 이상 권장하지 않고, 두 방식이 함께 있으면 한쪽이 조용히 동작을 멈추는 구조여서 미리 정리했습니다.
+
 ## [1.10] — 2026-07-25
 
 ### 수정
@@ -204,7 +214,8 @@ v1.3부터 Return·숫자패드 Enter·Tab에서 흐름을 뒤집어 처리합�
 함께 표시하고, 수명을 ⌘Z 트랜잭션과 같은 6초로 맞췄습니다. 칩은 사라졌는데
 되돌리기는 아직 되는 간극이 없어집니다.
 
-[Unreleased]: https://github.com/Keilkim/MacKoreanImefixer/compare/v1.10...HEAD
+[Unreleased]: https://github.com/Keilkim/MacKoreanImefixer/compare/v1.11...HEAD
+[1.11]: https://github.com/Keilkim/MacKoreanImefixer/compare/v1.10...v1.11
 [1.10]: https://github.com/Keilkim/MacKoreanImefixer/compare/v1.9...v1.10
 [1.9]: https://github.com/Keilkim/MacKoreanImefixer/compare/v1.8...v1.9
 [1.8]: https://github.com/Keilkim/MacKoreanImefixer/compare/v1.7...v1.8

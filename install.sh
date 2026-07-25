@@ -7,8 +7,8 @@ set -Eeuo pipefail
 
 APP_NAME="Mackor"
 EXPECTED_IDENTIFIER="com.mackor.app"
-VERSION="${VERSION:-1.10}"
-BUILD_NUMBER="${BUILD_NUMBER:-16}"
+VERSION="${VERSION:-1.11}"
+BUILD_NUMBER="${BUILD_NUMBER:-17}"
 INSTALL_DIR="/Applications"
 APP_PATH="$INSTALL_DIR/$APP_NAME.app"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
